@@ -1,0 +1,18 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://alexsalerno.dev/schema/raid-repo.schema.json",
+    "title": "Raid Repository Configuration",
+    "description": "Configuration for a single repository.",
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "The name of the repository"
+        },
+        "branch": {
+            "type": "string",
+            "description": "The branch to checkout"
+        }
+    },
+    "required": ["name","branch"]
+}
