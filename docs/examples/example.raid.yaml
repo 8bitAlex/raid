@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../raid-profile.schema.json
+
+name: raid
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git

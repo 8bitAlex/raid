@@ -4,6 +4,7 @@
     "title": "Raid Repository Configuration",
     "description": "Configuration for a single repository.",
     "type": "object",
+    "additionalProperties": false,
     "properties": {
         "name": {
             "type": "string",

@@ -4,6 +4,7 @@
   "title": "Raid Profile Configuration",
   "description": "Configuration for one or more raid profiles.",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "name": {
       "type": "string",
