@@ -42,16 +42,16 @@ func TestInstallCmdFlags(t *testing.T) {
 	cmd := InstallCmd
 
 	// Test that the concurrency flag exists
-	concurrencyFlag := cmd.Flags().Lookup("concurrency")
+	concurrencyFlag := cmd.Flags().Lookup("threads")
 	if concurrencyFlag == nil {
 		t.Errorf("Expected concurrency flag to exist")
 	}
 
-	if concurrencyFlag.Name != "concurrency" {
+	if concurrencyFlag.Name != "threads" {
 		t.Errorf("Expected flag name 'concurrency', got '%s'", concurrencyFlag.Name)
 	}
 
-	if concurrencyFlag.Shorthand != "c" {
+	if concurrencyFlag.Shorthand != "t" {
 		t.Errorf("Expected flag shorthand 'c', got '%s'", concurrencyFlag.Shorthand)
 	}
 
