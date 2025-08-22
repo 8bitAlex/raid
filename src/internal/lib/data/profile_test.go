@@ -437,3 +437,223 @@ func createTempSchemaFile(t *testing.T, tempDir string) string {
 
 	return schemaFile
 }
+
+// TestProfileContent tests the ProfileContent struct
+func TestProfileContent(t *testing.T) {
+	profile := ProfileContent{
+		Name: "test-profile",
+		Repositories: []Repository{
+			{
+				Name: "repo1",
+				Path: "/path/to/repo1",
+				URL:  "https://github.com/user/repo1",
+			},
+			{
+				Name: "repo2",
+				Path: "/path/to/repo2",
+				URL:  "https://github.com/user/repo2",
+			},
+		},
+	}
+
+	if profile.Name != "test-profile" {
+		t.Errorf("Expected profile name 'test-profile', got '%s'", profile.Name)
+	}
+
+	if len(profile.Repositories) != 2 {
+		t.Errorf("Expected 2 repositories, got %d", len(profile.Repositories))
+	}
+
+	if profile.Repositories[0].Name != "repo1" {
+		t.Errorf("Expected first repository name 'repo1', got '%s'", profile.Repositories[0].Name)
+	}
+
+	if profile.Repositories[1].URL != "https://github.com/user/repo2" {
+		t.Errorf("Expected second repository URL 'https://github.com/user/repo2', got '%s'", profile.Repositories[1].URL)
+	}
+}
+
+// TestRepository tests the Repository struct
+func TestRepository(t *testing.T) {
+	repo := Repository{
+		Name: "test-repo",
+		Path: "/path/to/repo",
+		URL:  "https://github.com/user/repo",
+	}
+
+	if repo.Name != "test-repo" {
+		t.Errorf("Expected repository name 'test-repo', got '%s'", repo.Name)
+	}
+
+	if repo.Path != "/path/to/repo" {
+		t.Errorf("Expected repository path '/path/to/repo', got '%s'", repo.Path)
+	}
+
+	if repo.URL != "https://github.com/user/repo" {
+		t.Errorf("Expected repository URL 'https://github.com/user/repo', got '%s'", repo.URL)
+	}
+}
+
+// TestReadProfileFile tests reading profile files
+func TestReadProfileFile(t *testing.T) {
+	// Create temporary test files
+	tempDir := t.TempDir()
+
+	// Test YAML file
+	yamlContent := `name: test-profile
+repositories:
+  - name: repo1
+    path: /path/to/repo1
+    url: https://github.com/user/repo1
+  - name: repo2
+    path: /path/to/repo2
+    url: https://github.com/user/repo2`
+
+	yamlFile := filepath.Join(tempDir, "test.yaml")
+	err := os.WriteFile(yamlFile, []byte(yamlContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test YAML file: %v", err)
+	}
+
+	profile, err := ReadProfileFile(yamlFile)
+	if err != nil {
+		t.Errorf("Unexpected error reading YAML file: %v", err)
+	}
+
+	if profile.Name != "test-profile" {
+		t.Errorf("Expected profile name 'test-profile', got '%s'", profile.Name)
+	}
+
+	if len(profile.Repositories) != 2 {
+		t.Errorf("Expected 2 repositories, got %d", len(profile.Repositories))
+	}
+
+	// Test JSON file
+	jsonContent := `{
+		"name": "test-profile-json",
+		"repositories": [
+			{
+				"name": "repo1",
+				"path": "/path/to/repo1",
+				"url": "https://github.com/user/repo1"
+			}
+		]
+	}`
+
+	jsonFile := filepath.Join(tempDir, "test.json")
+	err = os.WriteFile(jsonFile, []byte(jsonContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test JSON file: %v", err)
+	}
+
+	profile, err = ReadProfileFile(jsonFile)
+	if err != nil {
+		t.Errorf("Unexpected error reading JSON file: %v", err)
+	}
+
+	if profile.Name != "test-profile-json" {
+		t.Errorf("Expected profile name 'test-profile-json', got '%s'", profile.Name)
+	}
+
+	if len(profile.Repositories) != 1 {
+		t.Errorf("Expected 1 repository, got %d", len(profile.Repositories))
+	}
+
+	// Test unsupported file format
+	unsupportedFile := filepath.Join(tempDir, "test.txt")
+	err = os.WriteFile(unsupportedFile, []byte("test"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	_, err = ReadProfileFile(unsupportedFile)
+	if err == nil {
+		t.Errorf("Expected error for unsupported file format")
+	}
+
+	// Test non-existent file
+	_, err = ReadProfileFile("/non/existent/file.yaml")
+	if err == nil {
+		t.Errorf("Expected error for non-existent file")
+	}
+
+	// Test invalid YAML
+	invalidYamlFile := filepath.Join(tempDir, "invalid.yaml")
+	err = os.WriteFile(invalidYamlFile, []byte("invalid: yaml: content:"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create invalid YAML file: %v", err)
+	}
+
+	_, err = ReadProfileFile(invalidYamlFile)
+	if err == nil {
+		t.Errorf("Expected error for invalid YAML")
+	}
+
+	// Test invalid JSON
+	invalidJsonFile := filepath.Join(tempDir, "invalid.json")
+	err = os.WriteFile(invalidJsonFile, []byte("{invalid json}"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create invalid JSON file: %v", err)
+	}
+
+	_, err = ReadProfileFile(invalidJsonFile)
+	if err == nil {
+		t.Errorf("Expected error for invalid JSON")
+	}
+
+	// Test missing name field
+	noNameYamlFile := filepath.Join(tempDir, "noname.yaml")
+	err = os.WriteFile(noNameYamlFile, []byte("repositories: []"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create no-name YAML file: %v", err)
+	}
+
+	_, err = ReadProfileFile(noNameYamlFile)
+	if err == nil {
+		t.Errorf("Expected error for missing name field")
+	}
+}
+
+// TestGetActiveProfileContent tests getting active profile content
+func TestGetActiveProfileContent(t *testing.T) {
+	// Setup
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	// Test with no active profile (should fail)
+	_, err := GetActiveProfileContent()
+	if err == nil {
+		t.Errorf("Expected error when no active profile is set")
+	}
+
+	// Verify the error message
+	expectedError := "no active profile set"
+	if err != nil && !contains(err.Error(), expectedError) {
+		t.Errorf("Expected error to contain '%s', got '%s'", expectedError, err.Error())
+	}
+
+	// Test with active profile but no profile file
+	SetProfile("test-profile")
+	AddProfile("test-profile", "/non/existent/profile.yaml")
+
+	_, err = GetActiveProfileContent()
+	if err == nil {
+		t.Errorf("Expected error when profile file doesn't exist")
+	}
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsSubstring(s, substr)))
+}
+
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

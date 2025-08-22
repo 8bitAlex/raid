@@ -362,3 +362,66 @@ func validateSingleProfile(filePath string, profileIndex int) error {
 
 	return nil
 }
+
+// ProfileContent represents the content of a profile file
+type ProfileContent struct {
+	Name         string       `json:"name" yaml:"name"`
+	Repositories []Repository `json:"repositories" yaml:"repositories"`
+}
+
+// Repository represents a repository in a profile
+type Repository struct {
+	Name string `json:"name" yaml:"name"`
+	Path string `json:"path" yaml:"path"`
+	URL  string `json:"url" yaml:"url"`
+}
+
+// GetActiveProfileContent reads and parses the active profile file
+func GetActiveProfileContent() (*ProfileContent, error) {
+	activeProfile := GetProfile()
+	if activeProfile == "" {
+		return nil, fmt.Errorf("no active profile set. Use 'raid profile use <profile-name>' to set an active profile")
+	}
+
+	profilePath, err := GetProfilePath(activeProfile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profile path for '%s': %w", activeProfile, err)
+	}
+
+	return ReadProfileFile(profilePath)
+}
+
+// ReadProfileFile reads and parses a profile file
+func ReadProfileFile(filePath string) (*ProfileContent, error) {
+	// Read the profile file
+	profileData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	}
+
+	// Check file extension to determine format
+	ext := strings.ToLower(filepath.Ext(filePath))
+	var profile ProfileContent
+
+	switch ext {
+	case ".yaml", ".yml":
+		// Parse YAML
+		if err := yaml.Unmarshal(profileData, &profile); err != nil {
+			return nil, fmt.Errorf("invalid YAML format: %w", err)
+		}
+	case ".json":
+		// Parse JSON
+		if err := json.Unmarshal(profileData, &profile); err != nil {
+			return nil, fmt.Errorf("invalid JSON format: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
+	}
+
+	// Validate required fields
+	if profile.Name == "" {
+		return nil, fmt.Errorf("profile file is missing required 'name' field")
+	}
+
+	return &profile, nil
+}

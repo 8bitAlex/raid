@@ -47,26 +47,102 @@ raid test       # Run tests across all repositories
 - [Commands](#commands)
 - [Profile Configuration](#profile-configuration)
 - [Repository Configuration](#repository-configuration)
+- [Multiple Profiles Support](docs/MULTIPLE_PROFILES.md) - Detailed guide for managing multiple profiles
 
 ## Commands
 
 ### `raid profile [options]`
 
-List, load, or switch profiles. If there are no non-option arguments, available profiles are listed.
+Manage raid profiles. If there are no non-option arguments, available profiles are listed.
 
-#### Options
+#### Subcommands
+
+##### `raid profile add <filepath>`
+
+Add profile(s) from a YAML (.yaml, .yml) or JSON (.json) file. The file will be validated against the raid profile schema.
+
+**Features:**
+- **Multiple Profiles Support**: Add multiple profiles from a single file using YAML document separators (`---`) or JSON arrays
+- **Auto-Activation**: If no active profile exists, the first profile is automatically set as active
+- **Duplicate Handling**: Existing profiles are detected and reported, only new profiles are added
+- **Validation**: Each profile is validated against the JSON schema
+
+**Examples:**
+```bash
+# Add a single profile
+raid profile add my-project.raid.yaml
+
+# Add multiple profiles from YAML with document separators
+raid profile add multiple-profiles.yaml
+
+# Add multiple profiles from JSON array
+raid profile add multiple-profiles.json
+```
+
+**Example Output:**
+```bash
+# Single profile (auto-activated)
+Profile 'my-project' has been successfully added from my-project.raid.yaml and set as active
+
+# Multiple profiles (first auto-activated)
+Profiles development, personal, open-source have been successfully added from multiple-profiles.yaml. Profile 'development' has been set as active
+
+# Some profiles already exist
+Profiles already exist: development
+Profiles personal, open-source have been successfully added from multiple-profiles.yaml
+```
+
+##### `raid profile list`
+
+List all available profiles and show the currently active profile.
+
+##### `raid profile use <profile-name>`
+
+Set a specific profile as the active profile.
+
+#### Legacy Options
 
 `<profile name>`
 
-The name of the profile to set as current.
+The name of the profile to set as current (legacy syntax, use `raid profile use <profile-name>` instead).
 
 `-l <path>, --load=<path>`
 
-The filepath to one or more profile configuration files. Loads all profiles found. If a profile name is provided, new profiles are loaded first then it will try and set that profile as current.
+The filepath to one or more profile configuration files. Loads all profiles found. If a profile name is provided, new profiles are loaded first then it will try and set that profile as current (legacy syntax, use `raid profile add <filepath>` instead).
 
 ### `raid install`
 
-Clones all repositories, builds dependencies, and configures the development environment.
+Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped.
+
+**Prerequisites:**
+- An active profile must be set using `raid profile use <profile-name>`
+- The active profile must contain valid repository definitions
+
+**Features:**
+- **Path Expansion**: Supports `~` for home directory and environment variables
+- **Smart Cloning**: Skips repositories that already exist
+- **Error Handling**: Provides clear error messages for missing profiles or invalid configurations
+- **Progress Feedback**: Shows cloning progress for each repository
+
+**Example:**
+```bash
+# Set an active profile first
+raid profile use my-project
+
+# Install all repositories in the active profile
+raid install
+```
+
+**Example Output:**
+```bash
+Installing profile 'my-project' with 3 repositories...
+Cloning repository 'frontend' to /Users/username/Developer/frontend...
+Successfully cloned repository 'frontend' to /Users/username/Developer/frontend
+Repository 'backend' already exists at /Users/username/Developer/backend, skipping
+Cloning repository 'shared-libs' to /Users/username/Developer/shared-libs...
+Successfully cloned repository 'shared-libs' to /Users/username/Developer/shared-libs
+Successfully installed all repositories for profile 'my-project'
+```
 
 ### `raid test`
 
@@ -80,7 +156,7 @@ Updates all managed repositories to their latest versions.
 
 A profile configuration file follows the naming pattern `*.raid.yaml` and defines the properties of a raid profile—a group of repositories and their dependencies.
 
-### Example Profile Configuration
+### Single Profile Configuration
 
 ```yaml
 name: my-project
@@ -104,6 +180,77 @@ environment:
     NODE_ENV: development
     DATABASE_URL: postgresql://localhost:5432/myproject
 ```
+
+### Multiple Profiles in a Single File
+
+You can define multiple profiles in a single file using YAML document separators (`---`) or JSON arrays.
+
+#### YAML with Document Separators
+
+```yaml
+name: development
+repositories:
+  - name: frontend
+    url: https://github.com/company/frontend
+    branch: main
+  - name: backend
+    url: https://github.com/company/backend
+    branch: master
+---
+name: personal
+repositories:
+  - name: blog
+    url: https://github.com/username/blog
+    branch: main
+  - name: dotfiles
+    url: https://github.com/username/dotfiles
+    branch: main
+---
+name: open-source
+repositories:
+  - name: raid
+    url: https://github.com/8bitAlex/raid
+    branch: main
+```
+
+#### JSON with Arrays
+
+```json
+[
+  {
+    "name": "development",
+    "repositories": [
+      {
+        "name": "frontend",
+        "url": "https://github.com/company/frontend",
+        "branch": "main"
+      },
+      {
+        "name": "backend",
+        "url": "https://github.com/company/backend",
+        "branch": "master"
+      }
+    ]
+  },
+  {
+    "name": "personal",
+    "repositories": [
+      {
+        "name": "blog",
+        "url": "https://github.com/username/blog",
+        "branch": "main"
+      }
+    ]
+  }
+]
+```
+
+### Profile Management Features
+
+- **Auto-Activation**: The first profile added is automatically set as active if no active profile exists
+- **Duplicate Detection**: Existing profiles are detected and reported when adding new profiles
+- **Schema Validation**: Each profile is validated against the JSON schema
+- **Backward Compatibility**: Single profile files continue to work as before
 
 ## Repository Configuration
 
