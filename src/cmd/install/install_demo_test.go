@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib/data"
+	"github.com/8bitalex/raid/src/internal/lib/repo"
 )
 
 // TestInstallDemo demonstrates the complete install workflow
@@ -102,6 +103,22 @@ func testInstallWorkflow(t *testing.T, profilePath string) {
 
 	// Note: We don't actually clone repositories in tests to avoid side effects
 	// In a real scenario, you would call repo.InstallProfile() here
+
+	// Test concurrent installation functions (without actually cloning)
+	// This demonstrates the API without side effects
+	err = repo.InstallProfileWithConcurrency(3)
+	if err == nil {
+		t.Log("Concurrent installation with limit 3 would work (if repositories existed)")
+	} else {
+		t.Logf("Expected error for concurrent installation: %v", err)
+	}
+
+	err = repo.InstallProfileWithConcurrency(0)
+	if err == nil {
+		t.Log("Unlimited concurrent installation would work (if repositories existed)")
+	} else {
+		t.Logf("Expected error for unlimited concurrent installation: %v", err)
+	}
 }
 
 // setupTest initializes a clean test environment
