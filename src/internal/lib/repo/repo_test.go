@@ -106,6 +106,21 @@ func TestInstallProfile(t *testing.T) {
 	}
 }
 
+// TestInstallProfileWithConcurrency tests profile installation with concurrency control
+func TestInstallProfileWithConcurrency(t *testing.T) {
+	// Test with no active profile (should fail)
+	err := InstallProfileWithConcurrency(5)
+	if err == nil {
+		t.Errorf("Expected error when no active profile is set")
+	}
+
+	// Verify the error message
+	expectedError := "no active profile set"
+	if err != nil && !contains(err.Error(), expectedError) {
+		t.Errorf("Expected error to contain '%s', got '%s'", expectedError, err.Error())
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&

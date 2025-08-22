@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/8bitalex/raid/src/internal/lib/data"
 	"github.com/8bitalex/raid/src/internal/sys"
@@ -37,7 +38,6 @@ func CloneRepository(repo data.Repository) error {
 	}
 
 	// Clone the repository
-	fmt.Printf("Cloning repository '%s' to %s...\n", repo.Name, expandedPath)
 	cmd := exec.Command("git", "clone", repo.URL, expandedPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -46,12 +46,16 @@ func CloneRepository(repo data.Repository) error {
 		return fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
 	}
 
-	fmt.Printf("Successfully cloned repository '%s' to %s\n", repo.Name, expandedPath)
 	return nil
 }
 
-// InstallProfile installs all repositories in the active profile
+// InstallProfile installs all repositories in the active profile concurrently
 func InstallProfile() error {
+	return InstallProfileWithConcurrency(0) // 0 means unlimited concurrency
+}
+
+// InstallProfileWithConcurrency installs all repositories with controlled concurrency
+func InstallProfileWithConcurrency(maxConcurrency int) error {
 	// Get the active profile content
 	profile, err := data.GetActiveProfileContent()
 	if err != nil {
@@ -65,11 +69,61 @@ func InstallProfile() error {
 		return nil
 	}
 
-	// Clone each repository
+	// Use a semaphore to limit concurrency if specified
+	var semaphore chan struct{}
+	if maxConcurrency > 0 {
+		semaphore = make(chan struct{}, maxConcurrency)
+		fmt.Printf("Using concurrency limit of %d\n", maxConcurrency)
+	}
+
+	// Use a WaitGroup to wait for all goroutines to complete
+	var wg sync.WaitGroup
+	// Use a channel to collect errors from goroutines
+	errorChan := make(chan error, len(profile.Repositories))
+	// Use a mutex to synchronize output
+	var outputMutex sync.Mutex
+
+	// Clone each repository concurrently
 	for _, repo := range profile.Repositories {
-		if err := CloneRepository(repo); err != nil {
-			return fmt.Errorf("failed to install repository '%s': %w", repo.Name, err)
-		}
+		wg.Add(1)
+		go func(repo data.Repository) {
+			defer wg.Done()
+
+			// Acquire semaphore if concurrency is limited
+			if semaphore != nil {
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+			}
+
+			// Lock output to prevent interleaved messages
+			outputMutex.Lock()
+			fmt.Printf("Starting to clone repository '%s'...\n", repo.Name)
+			outputMutex.Unlock()
+
+			if err := CloneRepository(repo); err != nil {
+				errorChan <- fmt.Errorf("failed to install repository '%s': %w", repo.Name, err)
+			} else {
+				// Lock output to prevent interleaved messages
+				outputMutex.Lock()
+				fmt.Printf("Successfully cloned repository '%s'\n", repo.Name)
+				outputMutex.Unlock()
+			}
+		}(repo)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	close(errorChan)
+
+	// Check for any errors
+	var errors []error
+	for err := range errorChan {
+		errors = append(errors, err)
+	}
+
+	// If there were any errors, return the first one
+	if len(errors) > 0 {
+		return errors[0]
 	}
 
 	fmt.Printf("Successfully installed all repositories for profile '%s'\n", profile.Name)

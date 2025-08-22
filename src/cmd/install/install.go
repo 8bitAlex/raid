@@ -8,13 +8,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	concurrency int
+)
+
+func init() {
+	InstallCmd.Flags().IntVarP(&concurrency, "threads", "t", 0, "Maximum number of concurrent repository clones (0 = unlimited)")
+}
+
 var InstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install repositories from the active profile",
-	Long:  "Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped.",
+	Long:  "Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped. Repositories are cloned concurrently for better performance.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := repo.InstallProfile(); err != nil {
+		if err := repo.InstallProfileWithConcurrency(concurrency); err != nil {
 			fmt.Printf("Installation failed: %v\n", err)
 			os.Exit(1)
 		}

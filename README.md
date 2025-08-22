@@ -112,37 +112,54 @@ The filepath to one or more profile configuration files. Loads all profiles foun
 
 ### `raid install`
 
-Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped.
+Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped. Repositories are cloned concurrently for better performance.
 
 **Prerequisites:**
 - An active profile must be set using `raid profile use <profile-name>`
 - The active profile must contain valid repository definitions
 
 **Features:**
+- **Concurrent Cloning**: All repositories are cloned simultaneously for faster installation
+- **Concurrency Control**: Limit the number of concurrent clones with `--concurrency` flag
 - **Path Expansion**: Supports `~` for home directory and environment variables
 - **Smart Cloning**: Skips repositories that already exist
 - **Error Handling**: Provides clear error messages for missing profiles or invalid configurations
 - **Progress Feedback**: Shows cloning progress for each repository
 
-**Example:**
+**Options:**
+- `--concurrency, -c`: Maximum number of concurrent repository clones (default: 0 = unlimited)
+
+**Examples:**
 ```bash
 # Set an active profile first
 raid profile use my-project
 
-# Install all repositories in the active profile
+# Install all repositories with unlimited concurrency (default)
 raid install
+
+# Install with limited concurrency (max 3 concurrent clones)
+raid install --concurrency 3
+
+# Install with limited concurrency using short flag
+raid install -c 5
 ```
 
 **Example Output:**
 ```bash
 Installing profile 'my-project' with 3 repositories...
-Cloning repository 'frontend' to /Users/username/Developer/frontend...
-Successfully cloned repository 'frontend' to /Users/username/Developer/frontend
-Repository 'backend' already exists at /Users/username/Developer/backend, skipping
-Cloning repository 'shared-libs' to /Users/username/Developer/shared-libs...
-Successfully cloned repository 'shared-libs' to /Users/username/Developer/shared-libs
+Starting to clone repository 'frontend'...
+Starting to clone repository 'backend'...
+Starting to clone repository 'shared-libs'...
+Successfully cloned repository 'frontend'
+Successfully cloned repository 'backend'
+Successfully cloned repository 'shared-libs'
 Successfully installed all repositories for profile 'my-project'
 ```
+
+**Concurrency Guidelines:**
+- **Unlimited (default)**: Best for fast networks and when you want maximum speed
+- **Limited (3-5)**: Good for slower networks or when you want to avoid overwhelming the system
+- **Very Limited (1-2)**: Useful for very slow connections or when you need to minimize resource usage
 
 ### `raid test`
 
