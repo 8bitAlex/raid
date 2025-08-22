@@ -21,23 +21,16 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "raid",
+	Use:     "raid",
 	Version: "alpha",
-	Short: "Raid is a tool for orchestrating your development environment",
-	Long:  `Raid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.`,
-	Args: cobra.NoArgs,
+	Short:   "Raid is a tool for orchestrating common tasks across your development environment(s).",
+	Long:    `Raid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.`,
+	Args:    cobra.NoArgs,
 }
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
-	}
-}
-
-func Prepare() {
-	if profile.Profile == "" {
-		fmt.Println("Profile not set")
 		os.Exit(1)
 	}
 }

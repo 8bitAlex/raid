@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # yaml-language-server: $schema=../../schemas/raid-repo.schema.json
+=======
+# yaml-language-server: $schema=../../spec/raid-repo.schema.json
+>>>>>>> 6a5ca86 (add schema validation)
 
 name: raid
 branch: main

@@ -5,7 +5,11 @@ import (
 	"os"
 	"strings"
 
+<<<<<<< HEAD
 	"github.com/8bitalex/raid/src/internal/lib"
+=======
+	"github.com/8bitalex/raid/src/internal/lib/data"
+>>>>>>> 6a5ca86 (add schema validation)
 	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/cobra"
 )
@@ -24,11 +28,16 @@ var AddProfileCmd = &cobra.Command{
 		}
 
 		// Validate the profile file against the schema
+<<<<<<< HEAD
 		if err := lib.ValidateProfileFile(profilePath); err != nil {
+=======
+		if err := data.ValidateProfileFile(profilePath); err != nil {
+>>>>>>> 6a5ca86 (add schema validation)
 			fmt.Printf("Invalid Profile: %v\n", err)
 			os.Exit(1)
 		}
 
+<<<<<<< HEAD
 		// Extract all profiles from the file
 		profiles, err := lib.ExtractProfiles(profilePath)
 		if err != nil {
@@ -80,5 +89,25 @@ var AddProfileCmd = &cobra.Command{
 				fmt.Printf("Profiles %s have been successfully added from %s", strings.Join(addedNames, ", "), profilePath)
 			}
 		}
+=======
+		// Extract the profile name from the file
+		profileName, err := data.ExtractProfileName(profilePath)
+		if err != nil {
+			fmt.Printf("Failed to extract profile name: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Check if profile already exists
+		profiles := data.GetProfilesMap()
+		if _, exists := profiles[profileName]; exists {
+			fmt.Printf("Profile '%s' already exists. Use a different name or remove the existing profile first.\n", profileName)
+			os.Exit(1)
+		}
+
+		// Add the profile with name and file path
+		data.AddProfile(profileName, profilePath)
+
+		fmt.Printf("Profile '%s' has been successfully added from %s", profileName, profilePath)
+>>>>>>> 6a5ca86 (add schema validation)
 	},
 }
