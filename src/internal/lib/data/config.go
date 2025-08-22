@@ -31,3 +31,25 @@ func getPath() string {
 	}
 	return CfgPath
 }
+
+func Get(key string) any {
+	if !viper.IsSet(key) {
+		return nil
+	}
+	return viper.Get(key)
+}
+
+func Set(key string, value any) {
+	viper.Set(key, value)
+	Write()
+}
+
+func SetLazy(key string, value any) {
+	viper.Set(key, value)
+}
+
+func Write() {
+	if err := viper.WriteConfig(); err != nil {
+		panic(err)
+	}
+}

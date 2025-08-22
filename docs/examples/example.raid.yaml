@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../raid-profile.schema.json
+# yaml-language-server: $schema=../../spec/raid-profile.schema.json
 
 name: raid
 repositories:
