@@ -3,6 +3,7 @@ package profile
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/8bitalex/raid/src/internal/lib/data"
 	"github.com/8bitalex/raid/src/internal/sys"
@@ -28,23 +29,56 @@ var AddProfileCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Extract the profile name from the file
-		profileName, err := data.ExtractProfileName(profilePath)
+		// Extract all profiles from the file
+		profiles, err := data.ExtractProfiles(profilePath)
 		if err != nil {
-			fmt.Printf("Failed to extract profile name: %v\n", err)
+			fmt.Printf("Failed to extract profiles: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Check if profile already exists
-		profiles := data.GetProfilesMap()
-		if _, exists := profiles[profileName]; exists {
-			fmt.Printf("Profile '%s' already exists. Use a different name or remove the existing profile first.\n", profileName)
-			os.Exit(1)
+		// Check for existing profiles and collect new ones
+		existingProfiles := data.GetProfilesMap()
+		var newProfiles []data.ProfileInfo
+		var existingNames []string
+
+		for _, profile := range profiles {
+			if _, exists := existingProfiles[profile.Name]; exists {
+				existingNames = append(existingNames, profile.Name)
+			} else {
+				newProfiles = append(newProfiles, profile)
+			}
 		}
 
-		// Add the profile with name and file path
-		data.AddProfile(profileName, profilePath)
+		// Report existing profiles
+		if len(existingNames) > 0 {
+			fmt.Printf("Profiles already exist: %s\n", strings.Join(existingNames, ", "))
+			if len(newProfiles) == 0 {
+				os.Exit(1)
+			}
+		}
 
-		fmt.Printf("Profile '%s' has been successfully added from %s", profileName, profilePath)
+		// Add all new profiles
+		var addedNames []string
+		for _, profile := range newProfiles {
+			data.AddProfile(profile.Name, profile.Path)
+			addedNames = append(addedNames, profile.Name)
+		}
+
+		// Check if there's an active profile, if not set the first new one as active
+		activeProfile := data.GetProfile()
+		if activeProfile == "" && len(newProfiles) > 0 {
+			data.SetProfile(newProfiles[0].Name)
+			if len(newProfiles) == 1 {
+				fmt.Printf("Profile '%s' has been successfully added from %s and set as active", newProfiles[0].Name, profilePath)
+			} else {
+				fmt.Printf("Profiles %s have been successfully added from %s. Profile '%s' has been set as active", strings.Join(addedNames, ", "), profilePath, newProfiles[0].Name)
+			}
+		} else {
+			if len(newProfiles) == 1 {
+				fmt.Printf("Profile '%s' has been successfully added from %s", newProfiles[0].Name, profilePath)
+			} else {
+				fmt.Printf("Profiles %s have been successfully added from %s", strings.Join(addedNames, ", "), profilePath)
+			}
+		}
 	},
 }
