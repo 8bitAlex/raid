@@ -1,6 +1,6 @@
 { 
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://alexsalerno.dev/schema/raid-profile.schema.json",
+  "$id": "https://json.schemastore.org/raid-profile.schema.json",
   "title": "Raid Profile Configuration",
   "description": "Configuration for one or more raid profiles.",
   "type": "object",
@@ -31,6 +31,9 @@
         },
         "required": ["name", "path", "url"]
       }
+    },
+    "environments": {
+      "$ref": "raid-defs.schema.json#/properties/environments"
     }
   },
   "required": ["name"]

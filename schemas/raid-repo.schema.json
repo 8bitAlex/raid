@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://alexsalerno.dev/schema/raid-repo.schema.json",
+    "$id": "https://json.schemastore.org/raid-repo.schema.json",
     "title": "Raid Repository Configuration",
     "description": "Configuration for a single repository.",
     "type": "object",
@@ -13,6 +13,9 @@
         "branch": {
             "type": "string",
             "description": "The branch to checkout"
+        },
+        "environments": {
+            "$ref": "raid-defs.schema.json#/properties/environments"
         }
     },
     "required": ["name","branch"]

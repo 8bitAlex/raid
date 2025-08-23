@@ -1,4 +1,12 @@
-# yaml-language-server: $schema=../../spec/raid-repo.schema.json
+# yaml-language-server: $schema=../../schemas/raid-repo.schema.json
 
 name: raid
 branch: main
+
+environments:
+  - name: dev
+    tasks:
+      - type: Shell
+        cmd: echo "Hello, world!"
+      - type: Script
+        path: ./scripts/hello.sh
