@@ -28,7 +28,7 @@ func TestProfileCmd(t *testing.T) {
 
 func TestProfileCmdArgs(t *testing.T) {
 	// Test that the command requires no arguments
-	cmd := ProfileCmd
+	cmd := Command
 
 	// Test with no args (should work)
 	err := cmd.Args(cmd, []string{})
@@ -44,14 +44,14 @@ func TestProfileCmdArgs(t *testing.T) {
 }
 
 func TestProfileCmdUse(t *testing.T) {
-	cmd := ProfileCmd
+	cmd := Command
 	if cmd.Use != "profile" {
 		t.Errorf("Expected Use to be 'profile', got '%s'", cmd.Use)
 	}
 }
 
 func TestProfileCmdShort(t *testing.T) {
-	cmd := ProfileCmd
+	cmd := Command
 	if cmd.Short != "Manage raid profiles" {
 		t.Errorf("Expected Short to be 'Manage raid profiles', got '%s'", cmd.Short)
 	}

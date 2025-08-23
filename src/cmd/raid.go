@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
+	"github.com/8bitalex/raid/src/cmd/test"
 	"github.com/8bitalex/raid/src/internal/lib/data"
 	"github.com/spf13/cobra"
 )
@@ -15,8 +17,10 @@ func init() {
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(&data.CfgPath, "config", "c", "", "config file path (default is $HOME/.raid/config.toml)")
 	// Subcommands
-	rootCmd.AddCommand(profile.ProfileCmd)
-	rootCmd.AddCommand(install.InstallCmd)
+	rootCmd.AddCommand(profile.Command)
+	rootCmd.AddCommand(install.Command)
+	rootCmd.AddCommand(env.Command)
+	rootCmd.AddCommand(test.Command)
 	// todo build custom commands
 }
 

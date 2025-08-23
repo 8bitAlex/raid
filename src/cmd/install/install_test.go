@@ -5,7 +5,7 @@ import (
 )
 
 func TestInstallCmd(t *testing.T) {
-	cmd := InstallCmd
+	cmd := Command
 
 	// Test command metadata
 	if cmd.Use != "install" {
@@ -23,7 +23,7 @@ func TestInstallCmd(t *testing.T) {
 }
 
 func TestInstallCmdArgs(t *testing.T) {
-	cmd := InstallCmd
+	cmd := Command
 
 	// Test with no args (should work)
 	err := cmd.Args(cmd, []string{})
@@ -39,7 +39,7 @@ func TestInstallCmdArgs(t *testing.T) {
 }
 
 func TestInstallCmdFlags(t *testing.T) {
-	cmd := InstallCmd
+	cmd := Command
 
 	// Test that the concurrency flag exists
 	concurrencyFlag := cmd.Flags().Lookup("threads")

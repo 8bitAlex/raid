@@ -8,12 +8,12 @@ import (
 )
 
 func init() {
-	ProfileCmd.AddCommand(AddProfileCmd)
-	ProfileCmd.AddCommand(ListProfileCmd)
-	ProfileCmd.AddCommand(UseProfileCmd)
+	Command.AddCommand(AddProfileCmd)
+	Command.AddCommand(ListProfileCmd)
+	Command.AddCommand(UseProfileCmd)
 }
 
-var ProfileCmd = &cobra.Command{
+var Command = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage raid profiles",
 	Args:  cobra.NoArgs,

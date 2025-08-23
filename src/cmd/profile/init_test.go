@@ -9,7 +9,7 @@ func TestInit(t *testing.T) {
 	// This test ensures that all subcommands are properly added to the main command
 
 	// Check that subcommands are added
-	if ProfileCmd.Commands() == nil {
+	if Command.Commands() == nil {
 		t.Errorf("Expected ProfileCmd to have subcommands")
 	}
 
@@ -17,7 +17,7 @@ func TestInit(t *testing.T) {
 	expectedSubcommands := []string{"add", "list", "use"}
 	foundSubcommands := make(map[string]bool)
 
-	for _, cmd := range ProfileCmd.Commands() {
+	for _, cmd := range Command.Commands() {
 		foundSubcommands[cmd.Name()] = true
 	}
 
