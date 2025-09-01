@@ -10,6 +10,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var rootCmd = &cobra.Command{
+	Use:     "raid",
+	Version: "1.0.0-Alpha",
+	Short:   "Raid is a tool for orchestrating common tasks across your development environment(s).",
+	Long:    `Raid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.`,
+	Args:    cobra.NoArgs,
+}
+
 func init() {
 	cobra.OnInitialize(raid.Initialize)
 	// Global Flags
@@ -19,14 +27,6 @@ func init() {
 	rootCmd.AddCommand(install.Command)
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(test.Command)
-}
-
-var rootCmd = &cobra.Command{
-	Use:     "raid",
-	Version: "1.0.0-Alpha",
-	Short:   "Raid is a tool for orchestrating common tasks across your development environment(s).",
-	Long:    `Raid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.`,
-	Args:    cobra.NoArgs,
 }
 
 func Execute() {
