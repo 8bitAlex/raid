@@ -3,7 +3,7 @@ package profile
 import (
 	"fmt"
 
-	"github.com/8bitalex/raid/src/internal/lib"
+	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 )
 
@@ -11,8 +11,8 @@ var ListProfileCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List profiles",
 	Run: func(cmd *cobra.Command, args []string) {
-		profiles := lib.GetProfilesMap()
-		activeProfile := lib.GetProfile()
+		profiles := pro.GetAll()
+		activeProfile := pro.Get()
 
 		if len(profiles) == 0 {
 			fmt.Println("No profiles found.")
@@ -20,12 +20,12 @@ var ListProfileCmd = &cobra.Command{
 		}
 
 		fmt.Println("Available profiles:")
-		for name, profile := range profiles {
+		for _, profile := range profiles {
 			activeIndicator := ""
-			if name == activeProfile {
+			if profile.Name == activeProfile.Name {
 				activeIndicator = " (active)"
 			}
-			fmt.Printf("  %s%s\n    File: %s\n", name, activeIndicator, profile.Path)
+			fmt.Printf("  %s%s\n    File: %s\n", profile.Name, activeIndicator, profile.Path)
 		}
 	},
 }

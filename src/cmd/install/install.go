@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ var Command = &cobra.Command{
 	Long:  "Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped. Repositories are cloned concurrently for better performance.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := lib.InstallProfileWithConcurrency(concurrency); err != nil {
+		if err := raid.Install(); err != nil {
 			fmt.Printf("Installation failed: %v\n", err)
 			os.Exit(1)
 		}

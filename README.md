@@ -1,44 +1,31 @@
-# raid - distributed development orchestration
+# Raid - Distributed Development Orchestration
 
-*Raid* is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
+`Raid` is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
 
-[![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
+If you have ever pulled a repo (or repos) that require days of configuration just to get a passing build,
+or have onboarded to a new team that has no documentation, or have a folder of scripts to automate your tasks but haven't
+shared them yet, then you are probably a software engineer in need of this. 
 
-Jump to [[Getting Started](#getting-started) • [Documentation](#usage--documentation)]
+`Raid` handles the pain of error-prone knowledge-dependent tasks and management of your development environment. You no longer need
+to worry about wasted time onboarding new contributors. Tribal knowledge can be codified into the repo itself. And you will
+never miss running that one test ever again.
+
+📖 For a deeper look at the goals and design of raid, see the [design proposal blog post](https://alexsalerno.dev/blog/raid-design-proposal?utm_source=chatgpt.com).
 
 ## Key Features
 
-- Portable YAML Configurations
-- Multiple *raid* Profiles
-- Automate & Manage Distributed Repositories
-- Automate & Manage Development Environment
-- Robust Self-Healing Test Runner
-- Custom Global Commands
+- **Portable YAML Configurations**: Define your development environment using simple, version-controlled YAML files
+- **Multiple Raid Profiles**: Manage different project configurations and environments with separate profiles
+- **Distributed Repository Management**: Automatically clone, update, and manage multiple repositories across your development environment
+- **Development Environment Automation**: Streamline setup, dependency installation, and environment configuration
+- **Self-Healing Test Runner**: Robust testing framework with automatic error recovery and retry mechanisms
+- **Custom Global Commands**: Extend functionality and automate common tasks with user-defined commands that work across all managed repositories
 
-# Getting Started
+## Project Status
 
-## Install
+`Raid` is currently in the **prototype stage**. Core functionality is still being explored and iterated on, so expect frequent changes and incomplete features.
 
-## Configure
+If you’d like to follow the most up-to-date work, check out the ['alpha'](https://github.com/8bitAlex/raid/tree/alpha) branch. This is where active development of the prototype is happening.
 
-## Execute
+Feedback, issues, and contributions are welcome as the project takes shape.
 
-# Usage & Documentation
-
-- [Commands](#commands)
-- [Profile Configuration File](#profile-configuration)
-- [Repo Configuration File](#repo-configuration)
-
-## Commands
-
-`Install`
-
-Clones all repos, builds any dependencies, and configures the environment.
-
-## Profile Configuration File
-
-A file with the name pattern `*.raid.yaml` that defines the properties of a raid profile (group of repositories and their dependencies).
-
-## Repo Configuration File
-
-A file with the name `raid.yaml` that defines the properties of an individual repository. Located in the root folder of a git repository.

@@ -5,80 +5,68 @@ import (
 	"os"
 	"strings"
 
-	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/internal/sys"
+	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 )
 
 var AddProfileCmd = &cobra.Command{
 	Use:   "add filepath",
 	Short: "Add profile(s) from YAML or JSON file",
-	Long:  "Add profile(s) from a YAML (.yaml, .yml) or JSON (.json) file. The file will be validated against the raid profile schema.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		profilePath := args[0]
+		path := args[0]
 
-		if !sys.FileExists(profilePath) {
-			fmt.Printf("File '%s' does not exist", profilePath)
+		if !sys.FileExists(path) {
+			fmt.Printf("File '%s' does not exist", path)
 			os.Exit(1)
 		}
 
-		// Validate the profile file against the schema
-		if err := lib.ValidateProfileFile(profilePath); err != nil {
-			fmt.Printf("Invalid Profile: %v\n", err)
+		if err := pro.Validate(path); err != nil {
+			fmt.Printf("Invalid Profile: %v", err)
 			os.Exit(1)
 		}
 
-		// Extract all profiles from the file
-		profiles, err := lib.ExtractProfiles(profilePath)
+		profiles, err := pro.Unmarshal(path)
 		if err != nil {
-			fmt.Printf("Failed to extract profiles: %v\n", err)
+			fmt.Printf("Failed to extract profiles: %v", err)
 			os.Exit(1)
 		}
 
-		// Check for existing profiles and collect new ones
-		existingProfiles := lib.GetProfilesMap()
-		var newProfiles []lib.ProfileInfo
+		var newProfiles []pro.Profile
 		var existingNames []string
-
 		for _, profile := range profiles {
-			if _, exists := existingProfiles[profile.Name]; exists {
+			if exists := pro.Contains(profile.Name); exists {
 				existingNames = append(existingNames, profile.Name)
 			} else {
 				newProfiles = append(newProfiles, profile)
 			}
 		}
 
-		// Report existing profiles
 		if len(existingNames) > 0 {
-			fmt.Printf("Profiles already exist: %s\n", strings.Join(existingNames, ", "))
-			if len(newProfiles) == 0 {
-				os.Exit(1)
-			}
+			fmt.Printf("Profiles already exist: %s\n", strings.Join(existingNames, ",\n"))
 		}
 
-		// Add all new profiles
-		var addedNames []string
-		for _, profile := range newProfiles {
-			lib.AddProfile(profile.Name, profile.Path)
-			addedNames = append(addedNames, profile.Name)
+		if len(newProfiles) == 0 {
+			fmt.Printf("No new profiles found in %s", path)
+			os.Exit(1)
 		}
 
-		// Check if there's an active profile, if not set the first new one as active
-		activeProfile := lib.GetProfile()
-		if activeProfile == "" && len(newProfiles) > 0 {
-			lib.SetProfile(newProfiles[0].Name)
-			if len(newProfiles) == 1 {
-				fmt.Printf("Profile '%s' has been successfully added from %s and set as active", newProfiles[0].Name, profilePath)
-			} else {
-				fmt.Printf("Profiles %s have been successfully added from %s. Profile '%s' has been set as active", strings.Join(addedNames, ", "), profilePath, newProfiles[0].Name)
-			}
+		pro.AddAll(newProfiles)
+
+		if pro.Get() == (pro.Profile{}) && len(newProfiles) > 0 {
+			pro.Set(newProfiles[0].Name)
+			fmt.Printf("Profile '%s' set as active", newProfiles[0].Name)
+		}
+
+		if len(newProfiles) == 1 {
+			fmt.Printf("Profile '%s' has been successfully added from %s", newProfiles[0].Name, path)
 		} else {
-			if len(newProfiles) == 1 {
-				fmt.Printf("Profile '%s' has been successfully added from %s", newProfiles[0].Name, profilePath)
-			} else {
-				fmt.Printf("Profiles %s have been successfully added from %s", strings.Join(addedNames, ", "), profilePath)
+			names := make([]string, 0, len(newProfiles))
+			for _, profile := range newProfiles {
+				names = append(names, profile.Name)
 			}
+			fmt.Printf("Profiles %s have been successfully added from %s", strings.Join(names, ", "), path)
 		}
 	},
 }
