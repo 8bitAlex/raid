@@ -1,16 +1,13 @@
-package data
+package lib
 
 import (
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/viper"
 )
 
-const ConfigFileName = "config.toml"
-const ConfigDirName = ".raid"
-
 var CfgPath string
 
-var defaultFilePath = sys.GetHomeDir() + sys.Sep + ConfigDirName + sys.Sep
+var defaultConfigPath = sys.GetHomeDir() + sys.Sep + ConfigDirName + sys.Sep
 
 func InitConfig() {
 	viper.SetConfigFile(getOrCreateConfigFile())
@@ -26,8 +23,8 @@ func getOrCreateConfigFile() string {
 }
 
 func getPath() string {
-	if (CfgPath == "") {
-		CfgPath = defaultFilePath + ConfigFileName
+	if CfgPath == "" {
+		CfgPath = defaultConfigPath + ConfigFileName
 	}
 	return CfgPath
 }

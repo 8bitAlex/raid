@@ -21,7 +21,7 @@ func GetHomeDir() string {
 }
 
 func CreateFile(filePath string) *os.File {
-	os.MkdirAll(path.Dir(filePath), os.ModeDir | 0x1ED)
+	os.MkdirAll(path.Dir(filePath), os.ModeDir|0x1ED)
 
 	file, err := os.Create(filePath)
 	if err != nil {

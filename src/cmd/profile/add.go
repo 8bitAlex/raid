@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/8bitalex/raid/src/internal/lib/data"
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/cobra"
 )
@@ -24,21 +24,21 @@ var AddProfileCmd = &cobra.Command{
 		}
 
 		// Validate the profile file against the schema
-		if err := data.ValidateProfileFile(profilePath); err != nil {
+		if err := lib.ValidateProfileFile(profilePath); err != nil {
 			fmt.Printf("Invalid Profile: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Extract all profiles from the file
-		profiles, err := data.ExtractProfiles(profilePath)
+		profiles, err := lib.ExtractProfiles(profilePath)
 		if err != nil {
 			fmt.Printf("Failed to extract profiles: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Check for existing profiles and collect new ones
-		existingProfiles := data.GetProfilesMap()
-		var newProfiles []data.ProfileInfo
+		existingProfiles := lib.GetProfilesMap()
+		var newProfiles []lib.ProfileInfo
 		var existingNames []string
 
 		for _, profile := range profiles {
@@ -60,14 +60,14 @@ var AddProfileCmd = &cobra.Command{
 		// Add all new profiles
 		var addedNames []string
 		for _, profile := range newProfiles {
-			data.AddProfile(profile.Name, profile.Path)
+			lib.AddProfile(profile.Name, profile.Path)
 			addedNames = append(addedNames, profile.Name)
 		}
 
 		// Check if there's an active profile, if not set the first new one as active
-		activeProfile := data.GetProfile()
+		activeProfile := lib.GetProfile()
 		if activeProfile == "" && len(newProfiles) > 0 {
-			data.SetProfile(newProfiles[0].Name)
+			lib.SetProfile(newProfiles[0].Name)
 			if len(newProfiles) == 1 {
 				fmt.Printf("Profile '%s' has been successfully added from %s and set as active", newProfiles[0].Name, profilePath)
 			} else {

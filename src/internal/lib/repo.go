@@ -1,4 +1,4 @@
-package repo
+package lib
 
 import (
 	"fmt"
@@ -8,12 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/8bitalex/raid/src/internal/lib/data"
 	"github.com/8bitalex/raid/src/internal/sys"
 )
 
 // CloneRepository clones a repository to the specified path
-func CloneRepository(repo data.Repository) error {
+func CloneRepository(repo Repository) error {
 	// Expand any environment variables or home directory references
 	expandedPath, err := expandPath(repo.Path)
 	if err != nil {
@@ -57,7 +56,7 @@ func InstallProfile() error {
 // InstallProfileWithConcurrency installs all repositories with controlled concurrency
 func InstallProfileWithConcurrency(maxConcurrency int) error {
 	// Get the active profile content
-	profile, err := data.GetActiveProfileContent()
+	profile, err := GetActiveProfileContent()
 	if err != nil {
 		return fmt.Errorf("failed to get active profile: %w", err)
 	}
@@ -86,7 +85,7 @@ func InstallProfileWithConcurrency(maxConcurrency int) error {
 	// Clone each repository concurrently
 	for _, repo := range profile.Repositories {
 		wg.Add(1)
-		go func(repo data.Repository) {
+		go func(repo Repository) {
 			defer wg.Done()
 
 			// Acquire semaphore if concurrency is limited

@@ -10,6 +10,13 @@ environments:
   - name: dev
     tasks:
       - type: Shell
-        cmd: echo "Hello, world!"
+        cmd: echo "Hello, world! - From profile"
       - type: Script
-        path: ./scripts/hello.sh
+        path: ./hello.sh
+    variables:
+      - name: NODE_ENV
+        value: development
+      - name: DATABASE_URL
+        value: postgresql://localhost:5432/dev_db
+      - name: API_URL
+        value: https://api.example.com

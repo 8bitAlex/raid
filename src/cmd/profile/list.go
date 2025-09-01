@@ -3,7 +3,7 @@ package profile
 import (
 	"fmt"
 
-	"github.com/8bitalex/raid/src/internal/lib/data"
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/spf13/cobra"
 )
 
@@ -11,8 +11,8 @@ var ListProfileCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List profiles",
 	Run: func(cmd *cobra.Command, args []string) {
-		profiles := data.GetProfilesMap()
-		activeProfile := data.GetProfile()
+		profiles := lib.GetProfilesMap()
+		activeProfile := lib.GetProfile()
 
 		if len(profiles) == 0 {
 			fmt.Println("No profiles found.")

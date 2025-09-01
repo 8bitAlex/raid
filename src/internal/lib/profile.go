@@ -1,4 +1,4 @@
-package data
+package lib
 
 import (
 	"encoding/json"
@@ -365,8 +365,9 @@ func validateSingleProfile(filePath string, profileIndex int) error {
 
 // ProfileContent represents the content of a profile file
 type ProfileContent struct {
-	Name         string       `json:"name" yaml:"name"`
-	Repositories []Repository `json:"repositories" yaml:"repositories"`
+	Name         string        `json:"name" yaml:"name"`
+	Repositories []Repository  `json:"repositories" yaml:"repositories"`
+	Environments []Environment `json:"environments" yaml:"environments"`
 }
 
 // Repository represents a repository in a profile
@@ -374,6 +375,26 @@ type Repository struct {
 	Name string `json:"name" yaml:"name"`
 	Path string `json:"path" yaml:"path"`
 	URL  string `json:"url" yaml:"url"`
+}
+
+// Environment represents an environment configuration
+type Environment struct {
+	Name      string                `json:"name" yaml:"name"`
+	Tasks     []Task                `json:"tasks" yaml:"tasks"`
+	Variables []EnvironmentVariable `json:"variables" yaml:"variables"`
+}
+
+// Task represents a task to be executed
+type Task struct {
+	Type string `json:"type" yaml:"type"`
+	Cmd  string `json:"cmd,omitempty" yaml:"cmd,omitempty"`
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+}
+
+// EnvironmentVariable represents an environment variable
+type EnvironmentVariable struct {
+	Name  string `json:"name" yaml:"name"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // GetActiveProfileContent reads and parses the active profile file

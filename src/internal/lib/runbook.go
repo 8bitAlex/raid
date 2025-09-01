@@ -1,4 +1,4 @@
-package runbook
+package lib
 
 func Prepare() {
 	// if profile.Profile == "" {

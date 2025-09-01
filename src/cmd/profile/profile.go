@@ -3,7 +3,7 @@ package profile
 import (
 	"fmt"
 
-	"github.com/8bitalex/raid/src/internal/lib/data"
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +18,7 @@ var Command = &cobra.Command{
 	Short: "Manage raid profiles",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		profile := data.GetProfile()
+		profile := lib.GetProfile()
 		if profile != "" {
 			fmt.Println(profile)
 		} else {
