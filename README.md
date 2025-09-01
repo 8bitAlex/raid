@@ -2,6 +2,8 @@
 
 *Raid* is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
 
+[![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
+
 Jump to [[Getting Started](#getting-started) • [Documentation](#usage--documentation)]
 
 ## Key Features
