@@ -25,7 +25,7 @@ var ListProfileCmd = &cobra.Command{
 			if profile.Name == activeProfile.Name {
 				activeIndicator = " (active)"
 			}
-			fmt.Printf("\t%s%s\t(%s)\n", profile.Name, activeIndicator, profile.Path)
+			fmt.Printf("\t%s%s\t%s\n", profile.Name, activeIndicator, profile.Path)
 		}
 		fmt.Print()
 	},

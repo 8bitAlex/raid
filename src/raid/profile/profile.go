@@ -1,5 +1,5 @@
 /*
-Manage profiles.
+Manage raid profiles.
 */
 package profile
 
@@ -27,6 +27,7 @@ func AddAll(profiles []Profile) {
 	lib.AddProfiles(profiles)
 }
 
+// Sets the active profile
 func Set(name string) error {
 	return lib.SetProfile(name)
 }
@@ -41,6 +42,7 @@ func Validate(path string) error {
 	return lib.ValidateProfile(path)
 }
 
+// Checks if a profile exists
 func Contains(name string) bool {
 	return lib.ContainsProfile(name)
 }

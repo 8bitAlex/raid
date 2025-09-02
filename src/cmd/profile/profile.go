@@ -14,9 +14,10 @@ func init() {
 }
 
 var Command = &cobra.Command{
-	Use:   "profile",
-	Short: "Manage raid profiles",
-	Args:  cobra.NoArgs,
+	Use:     "profile",
+	Aliases: []string{"p"},
+	Short:   "Manage raid profiles",
+	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		profile := pro.Get()
 		if profile != (pro.Profile{}) {
