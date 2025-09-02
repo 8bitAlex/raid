@@ -21,5 +21,6 @@ var UseProfileCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		fmt.Printf("Profile '%s' is now active.\n", name)
+		fmt.Print()
 	},
 }

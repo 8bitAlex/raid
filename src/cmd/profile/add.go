@@ -18,18 +18,18 @@ var AddProfileCmd = &cobra.Command{
 		path := args[0]
 
 		if !sys.FileExists(path) {
-			fmt.Printf("File '%s' does not exist", path)
+			fmt.Printf("File '%s' does not exist\n", path)
 			os.Exit(1)
 		}
 
 		if err := pro.Validate(path); err != nil {
-			fmt.Printf("Invalid Profile: %v", err)
+			fmt.Printf("Invalid Profile: %v\n", err)
 			os.Exit(1)
 		}
 
 		profiles, err := pro.Unmarshal(path)
 		if err != nil {
-			fmt.Printf("Failed to extract profiles: %v", err)
+			fmt.Printf("Failed to extract profiles: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -44,29 +44,30 @@ var AddProfileCmd = &cobra.Command{
 		}
 
 		if len(existingNames) > 0 {
-			fmt.Printf("Profiles already exist: %s\n", strings.Join(existingNames, ",\n"))
+			fmt.Printf("Profiles already exist with names:\n\t%s\n\n", strings.Join(existingNames, ",\n\t"))
 		}
 
 		if len(newProfiles) == 0 {
-			fmt.Printf("No new profiles found in %s", path)
-			os.Exit(1)
+			fmt.Printf("No new profiles found in %s\n", path)
+			os.Exit(0)
 		}
 
 		pro.AddAll(newProfiles)
 
-		if pro.Get() == (pro.Profile{}) && len(newProfiles) > 0 {
+		if pro.Get() == (pro.Profile{}) {
 			pro.Set(newProfiles[0].Name)
-			fmt.Printf("Profile '%s' set as active", newProfiles[0].Name)
+			fmt.Printf("Profile '%s' set as active\n", newProfiles[0].Name)
 		}
 
 		if len(newProfiles) == 1 {
-			fmt.Printf("Profile '%s' has been successfully added from %s", newProfiles[0].Name, path)
+			fmt.Printf("Profile '%s' has been successfully added from %s\n", newProfiles[0].Name, path)
 		} else {
 			names := make([]string, 0, len(newProfiles))
 			for _, profile := range newProfiles {
 				names = append(names, profile.Name)
 			}
-			fmt.Printf("Profiles %s have been successfully added from %s", strings.Join(names, ", "), path)
+			fmt.Printf("Profiles %s have been successfully added from %s\n", strings.Join(names, ", "), path)
 		}
+		fmt.Print()
 	},
 }

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -30,20 +29,21 @@ func SetProfile(name string) error {
 }
 
 func GetProfile() Profile {
-	profile := Get(ACTIVE_PROFILE_KEY)
-	if profile == nil {
-		return Profile{}
+	name := viper.GetString(ACTIVE_PROFILE_KEY)
+	paths := getProfilePaths()
+	return Profile{
+		Name: name,
+		Path: paths[name],
 	}
-	return profile.(Profile)
 }
 
 func AddProfile(profile Profile) {
-	profiles := viper.GetStringMap(ALL_PROFILES_KEY)
+	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
 	if profiles == nil {
-		profiles = make(map[string]interface{})
+		profiles = make(map[string]string)
 	}
 
-	profiles[profile.Name] = profile
+	profiles[profile.Name] = profile.Path
 	Set(ALL_PROFILES_KEY, profiles)
 }
 
@@ -54,7 +54,7 @@ func AddProfiles(profiles []Profile) {
 }
 
 func GetProfiles() []Profile {
-	profilesMap := getProfilesMap()
+	profilesMap := getProfilePaths()
 	results := make([]Profile, 0, len(profilesMap))
 	for name, path := range profilesMap {
 		results = append(results, Profile{name, path})
@@ -62,23 +62,18 @@ func GetProfiles() []Profile {
 	return results
 }
 
-func getProfilesMap() map[string]string {
-	profiles := viper.GetStringMap(ALL_PROFILES_KEY)
+func getProfilePaths() map[string]string {
+	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
 	if profiles == nil {
 		return make(map[string]string)
 	}
-
-	results := make(map[string]string)
-	for name, value := range profiles {
-		results[name] = value.(string)
-	}
-	return results
+	return profiles
 }
 
 func ExtractProfiles(path string) ([]Profile, error) {
 	profileData, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read profile from file %s: %w", path, err)
+		return nil, fmt.Errorf("failed to read profile from file %s: %w", path, err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
@@ -90,7 +85,7 @@ func ExtractProfiles(path string) ([]Profile, error) {
 	case ".json":
 		profiles, err = extractProfilesFromJSON(profileData, path)
 	default:
-		return nil, fmt.Errorf("Unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
+		return nil, fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
 	}
 
 	if err != nil {
@@ -98,7 +93,7 @@ func ExtractProfiles(path string) ([]Profile, error) {
 	}
 
 	if len(profiles) == 0 {
-		return nil, fmt.Errorf("No profiles found in file %s", path)
+		return nil, fmt.Errorf("no profiles found in file %s", path)
 	}
 
 	return profiles, nil
@@ -117,7 +112,7 @@ func extractProfilesFromYAML(data []byte, path string) ([]Profile, error) {
 
 		var profile Profile
 		if err := yaml.Unmarshal([]byte(doc), &profile); err != nil {
-			return nil, fmt.Errorf("Invalid YAML document in %s: %w", path, err)
+			return nil, fmt.Errorf("invalid YAML document in %s: %w", path, err)
 		}
 		profile.Path = path
 
@@ -137,7 +132,7 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 	}
 
 	if err := json.Unmarshal(data, &profiles); err != nil {
-		return nil, fmt.Errorf("Invalid JSON format in %s: %w", path, err)
+		return nil, fmt.Errorf("invalid JSON format in %s: %w", path, err)
 	}
 
 	results := make([]Profile, 0, len(profiles))
@@ -150,7 +145,7 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 }
 
 func ContainsProfile(name string) bool {
-	profiles := viper.GetStringMap(ALL_PROFILES_KEY)
+	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
 	if profiles == nil {
 		return false
 	}
@@ -164,116 +159,116 @@ func ValidateProfile(path string) error {
 }
 
 // validateSingleProfile validates a single profile from a file
-func validateSingleProfile(filePath string, profileIndex int) error {
-	// Read the profile file
-	profileData, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read profile file: %w", err)
-	}
+// func validateSingleProfile(filePath string, profileIndex int) error {
+// 	// Read the profile file
+// 	profileData, err := os.ReadFile(filePath)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to read profile file: %w", err)
+// 	}
 
-	// Check file extension to determine format
-	ext := strings.ToLower(filepath.Ext(filePath))
-	var profile interface{}
-	var jsonData []byte
+// 	// Check file extension to determine format
+// 	ext := strings.ToLower(filepath.Ext(filePath))
+// 	var profile interface{}
+// 	var jsonData []byte
 
-	switch ext {
-	case ".yaml", ".yml":
-		// For YAML, we need to handle multiple documents
-		documents := strings.Split(string(profileData), "---")
-		if profileIndex <= len(documents) {
-			doc := strings.TrimSpace(documents[profileIndex-1])
-			if doc == "" {
-				return fmt.Errorf("profile %d is empty", profileIndex)
-			}
+// 	switch ext {
+// 	case ".yaml", ".yml":
+// 		// For YAML, we need to handle multiple documents
+// 		documents := strings.Split(string(profileData), "---")
+// 		if profileIndex <= len(documents) {
+// 			doc := strings.TrimSpace(documents[profileIndex-1])
+// 			if doc == "" {
+// 				return fmt.Errorf("profile %d is empty", profileIndex)
+// 			}
 
-			// Parse YAML
-			if err := yaml.Unmarshal([]byte(doc), &profile); err != nil {
-				return fmt.Errorf("invalid YAML format: %w", err)
-			}
-			// Convert YAML to JSON for schema validation
-			jsonData, err = json.Marshal(profile)
-			if err != nil {
-				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
-			}
-		} else {
-			return fmt.Errorf("profile %d not found in file", profileIndex)
-		}
-	case ".json":
-		// For JSON, we need to handle arrays
-		var jsonProfiles []interface{}
-		if err := json.Unmarshal(profileData, &jsonProfiles); err == nil {
-			// It's an array
-			if profileIndex <= len(jsonProfiles) {
-				profile = jsonProfiles[profileIndex-1]
-				jsonData, err = json.Marshal(profile)
-				if err != nil {
-					return fmt.Errorf("failed to marshal profile %d: %w", profileIndex, err)
-				}
-			} else {
-				return fmt.Errorf("profile %d not found in file", profileIndex)
-			}
-		} else {
-			// Try as single object
-			if profileIndex == 1 {
-				if err := json.Unmarshal(profileData, &profile); err != nil {
-					return fmt.Errorf("invalid JSON format: %w", err)
-				}
-				jsonData = profileData
-			} else {
-				return fmt.Errorf("profile %d not found in file", profileIndex)
-			}
-		}
-	default:
-		return fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
-	}
+// 			// Parse YAML
+// 			if err := yaml.Unmarshal([]byte(doc), &profile); err != nil {
+// 				return fmt.Errorf("invalid YAML format: %w", err)
+// 			}
+// 			// Convert YAML to JSON for schema validation
+// 			jsonData, err = json.Marshal(profile)
+// 			if err != nil {
+// 				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
+// 			}
+// 		} else {
+// 			return fmt.Errorf("profile %d not found in file", profileIndex)
+// 		}
+// 	case ".json":
+// 		// For JSON, we need to handle arrays
+// 		var jsonProfiles []interface{}
+// 		if err := json.Unmarshal(profileData, &jsonProfiles); err == nil {
+// 			// It's an array
+// 			if profileIndex <= len(jsonProfiles) {
+// 				profile = jsonProfiles[profileIndex-1]
+// 				jsonData, err = json.Marshal(profile)
+// 				if err != nil {
+// 					return fmt.Errorf("failed to marshal profile %d: %w", profileIndex, err)
+// 				}
+// 			} else {
+// 				return fmt.Errorf("profile %d not found in file", profileIndex)
+// 			}
+// 		} else {
+// 			// Try as single object
+// 			if profileIndex == 1 {
+// 				if err := json.Unmarshal(profileData, &profile); err != nil {
+// 					return fmt.Errorf("invalid JSON format: %w", err)
+// 				}
+// 				jsonData = profileData
+// 			} else {
+// 				return fmt.Errorf("profile %d not found in file", profileIndex)
+// 			}
+// 		}
+// 	default:
+// 		return fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
+// 	}
 
-	// Get the schema file path relative to the project root
-	schemaPath := "spec/raid-profile.schema.json"
+// 	// Get the schema file path relative to the project root
+// 	schemaPath := "spec/raid-profile.schema.json"
 
-	// Check if schema file exists
-	if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
-		return fmt.Errorf("schema file not found at %s", schemaPath)
-	}
+// 	// Check if schema file exists
+// 	if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
+// 		return fmt.Errorf("schema file not found at %s", schemaPath)
+// 	}
 
-	// Read the schema file
-	schemaData, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return fmt.Errorf("failed to read schema file: %w", err)
-	}
+// 	// Read the schema file
+// 	schemaData, err := os.ReadFile(schemaPath)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to read schema file: %w", err)
+// 	}
 
-	// Parse the schema data
-	var schemaMap map[string]interface{}
-	if err := json.Unmarshal(schemaData, &schemaMap); err != nil {
-		return fmt.Errorf("failed to parse schema file: %w", err)
-	}
+// 	// Parse the schema data
+// 	var schemaMap map[string]interface{}
+// 	if err := json.Unmarshal(schemaData, &schemaMap); err != nil {
+// 		return fmt.Errorf("failed to parse schema file: %w", err)
+// 	}
 
-	// Create a new JSON schema compiler
-	compiler := jsonschema.NewCompiler()
+// 	// Create a new JSON schema compiler
+// 	compiler := jsonschema.NewCompiler()
 
-	// Add the schema to the compiler
-	if err := compiler.AddResource("schema.json", schemaMap); err != nil {
-		return fmt.Errorf("failed to add schema resource: %w", err)
-	}
+// 	// Add the schema to the compiler
+// 	if err := compiler.AddResource("schema.json", schemaMap); err != nil {
+// 		return fmt.Errorf("failed to add schema resource: %w", err)
+// 	}
 
-	// Compile the schema
-	schema, err := compiler.Compile("schema.json")
-	if err != nil {
-		return fmt.Errorf("failed to compile schema: %w", err)
-	}
+// 	// Compile the schema
+// 	schema, err := compiler.Compile("schema.json")
+// 	if err != nil {
+// 		return fmt.Errorf("failed to compile schema: %w", err)
+// 	}
 
-	// Parse the JSON data for validation
-	var data interface{}
-	if err := json.Unmarshal(jsonData, &data); err != nil {
-		return fmt.Errorf("failed to parse JSON data: %w", err)
-	}
+// 	// Parse the JSON data for validation
+// 	var data interface{}
+// 	if err := json.Unmarshal(jsonData, &data); err != nil {
+// 		return fmt.Errorf("failed to parse JSON data: %w", err)
+// 	}
 
-	// Validate the profile data against the schema
-	if err := schema.Validate(data); err != nil {
-		return fmt.Errorf("profile validation failed: %w", err)
-	}
+// 	// Validate the profile data against the schema
+// 	if err := schema.Validate(data); err != nil {
+// 		return fmt.Errorf("profile validation failed: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // // ProfileContent represents the content of a profile file
 // type ProfileContent struct {
