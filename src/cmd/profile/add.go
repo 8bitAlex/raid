@@ -54,7 +54,7 @@ var AddProfileCmd = &cobra.Command{
 
 		pro.AddAll(newProfiles)
 
-		if pro.Get() == (pro.Profile{}) {
+		if pro.Get().IsZero() {
 			pro.Set(newProfiles[0].Name)
 			fmt.Printf("Profile '%s' set as active\n", newProfiles[0].Name)
 		}

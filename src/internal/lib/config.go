@@ -9,9 +9,12 @@ var CfgPath string
 
 var defaultConfigPath = sys.GetHomeDir() + sys.Sep + ConfigDirName + sys.Sep
 
-func InitConfig() {
+func InitConfig() error {
 	viper.SetConfigFile(getOrCreateConfigFile())
-	viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func getOrCreateConfigFile() string {

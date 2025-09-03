@@ -30,7 +30,8 @@
           }
         },
         "required": ["name", "path", "url"]
-      }
+      },
+      "minItems": 1
     },
     "environments": {
       "$ref": "raid-defs.schema.json#/properties/environments"

@@ -1,15 +1,14 @@
 package lib
 
-// import (
-// 	"fmt"
-// 	"os"
-// 	"os/exec"
-// 	"path/filepath"
-// 	"strings"
-// 	"sync"
+type Repo struct {
+	Name string
+	Path string
+	URL  string
+}
 
-// 	"github.com/8bitalex/raid/src/internal/sys"
-// )
+func BuildRepo(repo Repo) (Repo, error) {
+	return repo, nil
+}
 
 // // CloneRepository clones a repository to the specified path
 // func CloneRepository(repo Repository) error {

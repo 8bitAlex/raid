@@ -21,7 +21,7 @@ var Command = &cobra.Command{
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		profile := pro.Get()
-		if profile != (pro.Profile{}) {
+		if !profile.IsZero() {
 			fmt.Println(profile.Name)
 		} else {
 			fmt.Println("No active profile found. Use 'raid profile use <profile>' to set one.")

@@ -15,14 +15,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Profile struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
 const ACTIVE_PROFILE_KEY = "profile"
 const ALL_PROFILES_KEY = "profiles"
 const SCHEMA_PATH = "schemas/raid-profile.schema.json"
+
+type Profile struct {
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	Repositories []Repo `json:"repositories"`
+}
+
+func (p Profile) IsZero() bool {
+	return p.Name == "" || p.Path == ""
+}
 
 func SetProfile(name string) error {
 	if !ContainsProfile(name) {
@@ -61,7 +66,7 @@ func GetProfiles() []Profile {
 	profilesMap := getProfilePaths()
 	results := make([]Profile, 0, len(profilesMap))
 	for name, path := range profilesMap {
-		results = append(results, Profile{name, path})
+		results = append(results, Profile{Name: name, Path: path})
 	}
 	return results
 }
@@ -85,6 +90,19 @@ func RemoveProfile(name string) error {
 	delete(profiles, name)
 	Set(ALL_PROFILES_KEY, profiles)
 	return nil
+}
+
+func ExtractProfile(name, path string) (Profile, error) {
+	profiles, err := ExtractProfiles(path)
+	if err != nil {
+		return Profile{}, err
+	}
+	for _, profile := range profiles {
+		if strings.EqualFold(profile.Name, name) {
+			return profile, nil
+		}
+	}
+	return Profile{}, fmt.Errorf("profile '%s' not found in %s", name, path)
 }
 
 func ExtractProfiles(path string) ([]Profile, error) {
@@ -217,6 +235,23 @@ func yamlToJSON(file io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(data)
+}
+
+func BuildProfile(profile Profile) (Profile, error) {
+	if profile.IsZero() {
+		return Profile{}, fmt.Errorf("invalid profile: %v", profile)
+	}
+	if !sys.FileExists(profile.Path) {
+		return Profile{}, fmt.Errorf("profile file not found at %s", profile.Path)
+	}
+	if err := ValidateProfile(profile.Path); err != nil {
+		return Profile{}, fmt.Errorf("invalid profile: %w", err)
+	}
+	profile, err := ExtractProfile(profile.Name, profile.Path)
+	if err != nil {
+		return Profile{}, fmt.Errorf("invalid profile: %w", err)
+	}
+	return profile, nil
 }
 
 // // ProfileContent represents the content of a profile file
