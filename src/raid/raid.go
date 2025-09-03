@@ -54,5 +54,5 @@ func ForceCompile() error {
 
 // Install the active profile
 func Install(maxThreads int) error {
-	return nil
+	return lib.Install(maxThreads)
 }

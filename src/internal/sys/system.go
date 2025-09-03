@@ -2,6 +2,7 @@ package sys
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
 
@@ -21,17 +22,18 @@ func GetHomeDir() string {
 }
 
 func CreateFile(filePath string) *os.File {
-	os.MkdirAll(path.Dir(filePath), os.ModeDir|0x1ED)
+	pathEx := os.ExpandEnv(filePath)
+	os.MkdirAll(path.Dir(pathEx), os.ModeDir|0x1ED)
 
-	file, err := os.Create(filePath)
+	file, err := os.Create(pathEx)
 	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		log.Fatalf("Failed to create file '%s': %v", pathEx, err)
 	}
 	return file
 }
 
 func FileExists(path string) bool {
+	path = os.ExpandEnv(path)
 	if _, err := os.Open(path); err != nil {
 		return false
 	}
