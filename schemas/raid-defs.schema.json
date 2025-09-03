@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://json.schemastore.org/raid-defs.schema.json",
+    "$id": "raid-defs.schema.json",
     "title": "Raid Schema Definitions",
     "description": "Shared schema definitions for raid",
     "type": "object",

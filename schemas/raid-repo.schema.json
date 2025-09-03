@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://json.schemastore.org/raid-repo.schema.json",
+    "$id": "raid-repo.schema.json",
     "title": "Raid Repository Configuration",
     "description": "Configuration for a single repository.",
     "type": "object",

@@ -66,7 +66,7 @@ var AddProfileCmd = &cobra.Command{
 			for _, profile := range newProfiles {
 				names = append(names, profile.Name)
 			}
-			fmt.Printf("Profiles %s have been successfully added from %s\n", strings.Join(names, ", "), path)
+			fmt.Printf("Profiles:\n\t%s\nhave been successfully added from %s\n", strings.Join(names, ",\n\t"), path)
 		}
 		fmt.Print()
 	},

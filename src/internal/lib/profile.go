@@ -186,12 +186,12 @@ func ValidateProfile(path string) error {
 		profile = bytes.NewReader(data)
 	}
 
-	inst, err := jsonschema.UnmarshalJSON(profile)
+	json, err := jsonschema.UnmarshalJSON(profile)
 	if err != nil {
 		return err
 	}
 
-	err = sch.Validate(inst)
+	err = sch.Validate(json)
 	if err != nil {
 		return fmt.Errorf("invalid profile format: %w", err)
 	}
@@ -204,118 +204,6 @@ func yamlToJSON(file io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(data)
-}
-
-// validateSingleProfile validates a single profile from a file
-func validateSingleProfile(filePath string, profileIndex int) error {
-	// Read the profile file
-	profileData, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read profile file: %w", err)
-	}
-
-	// Check file extension to determine format
-	ext := strings.ToLower(filepath.Ext(filePath))
-	var profile interface{}
-	var jsonData []byte
-
-	switch ext {
-	case ".yaml", ".yml":
-		// For YAML, we need to handle multiple documents
-		documents := strings.Split(string(profileData), "---")
-		if profileIndex <= len(documents) {
-			doc := strings.TrimSpace(documents[profileIndex-1])
-			if doc == "" {
-				return fmt.Errorf("profile %d is empty", profileIndex)
-			}
-
-			// Parse YAML
-			if err := yaml.Unmarshal([]byte(doc), &profile); err != nil {
-				return fmt.Errorf("invalid YAML format: %w", err)
-			}
-			// Convert YAML to JSON for schema validation
-			jsonData, err = json.Marshal(profile)
-			if err != nil {
-				return fmt.Errorf("failed to convert YAML to JSON: %w", err)
-			}
-		} else {
-			return fmt.Errorf("profile %d not found in file", profileIndex)
-		}
-	case ".json":
-		// For JSON, we need to handle arrays
-		var jsonProfiles []interface{}
-		if err := json.Unmarshal(profileData, &jsonProfiles); err == nil {
-			// It's an array
-			if profileIndex <= len(jsonProfiles) {
-				profile = jsonProfiles[profileIndex-1]
-				jsonData, err = json.Marshal(profile)
-				if err != nil {
-					return fmt.Errorf("failed to marshal profile %d: %w", profileIndex, err)
-				}
-			} else {
-				return fmt.Errorf("profile %d not found in file", profileIndex)
-			}
-		} else {
-			// Try as single object
-			if profileIndex == 1 {
-				if err := json.Unmarshal(profileData, &profile); err != nil {
-					return fmt.Errorf("invalid JSON format: %w", err)
-				}
-				jsonData = profileData
-			} else {
-				return fmt.Errorf("profile %d not found in file", profileIndex)
-			}
-		}
-	default:
-		return fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
-	}
-
-	// Get the schema file path relative to the project root
-	schemaPath := "spec/raid-profile.schema.json"
-
-	// Check if schema file exists
-	if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
-		return fmt.Errorf("schema file not found at %s", schemaPath)
-	}
-
-	// Read the schema file
-	schemaData, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return fmt.Errorf("failed to read schema file: %w", err)
-	}
-
-	// Parse the schema data
-	var schemaMap map[string]interface{}
-	if err := json.Unmarshal(schemaData, &schemaMap); err != nil {
-		return fmt.Errorf("failed to parse schema file: %w", err)
-	}
-
-	// Create a new JSON schema compiler
-	compiler := jsonschema.NewCompiler()
-
-	// Add the schema to the compiler
-	if err := compiler.AddResource("schema.json", schemaMap); err != nil {
-		return fmt.Errorf("failed to add schema resource: %w", err)
-	}
-
-	// Compile the schema
-	schema, err := compiler.Compile("schema.json")
-	if err != nil {
-		return fmt.Errorf("failed to compile schema: %w", err)
-	}
-
-	// Parse the JSON data for validation
-	var data interface{}
-	if err := json.Unmarshal(jsonData, &data); err != nil {
-		return fmt.Errorf("failed to parse JSON data: %w", err)
-	}
-
-	// Validate the profile data against the schema
-	if err := schema.Validate(data); err != nil {
-		return fmt.Errorf("profile validation failed: %w", err)
-	}
-
-	return nil
 }
 
 // // ProfileContent represents the content of a profile file

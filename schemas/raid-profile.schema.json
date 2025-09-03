@@ -1,6 +1,6 @@
 { 
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://json.schemastore.org/raid-profile.schema.json",
+  "$id": "raid-profile.schema.json",
   "title": "Raid Profile Configuration",
   "description": "Configuration for one or more raid profiles.",
   "type": "object",

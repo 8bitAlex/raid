@@ -20,3 +20,27 @@ environments:
         value: postgresql://localhost:5432/dev_db
       - name: API_URL
         value: https://api.example.com
+
+---
+
+name: example2
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git
+
+---
+
+name: example3
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git
+
+---
+
+name: example4
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git
