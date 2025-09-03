@@ -74,6 +74,19 @@ func getProfilePaths() map[string]string {
 	return profiles
 }
 
+func RemoveProfile(name string) error {
+	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
+	if profiles == nil {
+		return fmt.Errorf("no profiles found")
+	}
+	if _, exists := profiles[name]; !exists {
+		return fmt.Errorf("profile '%s' not found", name)
+	}
+	delete(profiles, name)
+	Set(ALL_PROFILES_KEY, profiles)
+	return nil
+}
+
 func ExtractProfiles(path string) ([]Profile, error) {
 	profileData, err := os.ReadFile(path)
 	if err != nil {

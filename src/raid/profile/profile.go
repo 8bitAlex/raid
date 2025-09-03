@@ -32,6 +32,11 @@ func Set(name string) error {
 	return lib.SetProfile(name)
 }
 
+// Removes a profile from the profile list
+func Remove(name string) error {
+	return lib.RemoveProfile(name)
+}
+
 // Extracts profiles from a file
 func Unmarshal(path string) ([]Profile, error) {
 	return lib.ExtractProfiles(path)

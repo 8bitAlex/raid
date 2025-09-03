@@ -11,6 +11,7 @@ func init() {
 	Command.AddCommand(AddProfileCmd)
 	Command.AddCommand(ListProfileCmd)
 	Command.AddCommand(UseProfileCmd)
+	Command.AddCommand(RemoveProfileCmd)
 }
 
 var Command = &cobra.Command{
