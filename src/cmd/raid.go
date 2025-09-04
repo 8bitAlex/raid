@@ -1,11 +1,12 @@
 package cmd
 
 import (
+	"log"
+
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
 	"github.com/8bitalex/raid/src/cmd/test"
-	"github.com/8bitalex/raid/src/internal/utils"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
 )
@@ -30,5 +31,7 @@ func init() {
 }
 
 func Execute() {
-	utils.HandleError(rootCmd.Execute())
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("Failed to execute root command: %v", err)
+	}
 }

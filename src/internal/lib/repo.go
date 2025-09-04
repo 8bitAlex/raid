@@ -15,12 +15,16 @@ type Repo struct {
 	URL  string
 }
 
+func (r Repo) IsZero() bool {
+	return r.Name == "" || r.Path == "" || r.URL == ""
+}
+
 func BuildRepo(repo Repo) (Repo, error) {
 	return repo, nil
 }
 
 func CloneRepository(repo Repo) error {
-	path := os.ExpandEnv(repo.Path)
+	path := sys.ExpandPath(repo.Path)
 
 	if sys.FileExists(path) && isGitRepository(path) {
 		fmt.Printf("Repository '%s' already exists at %s, skipping\n", repo.Name, path)

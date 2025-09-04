@@ -1,10 +1,10 @@
 package sys
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/mitchellh/go-homedir"
 )
@@ -15,15 +15,14 @@ const Sep = string(os.PathSeparator)
 func GetHomeDir() string {
 	home, err := homedir.Dir()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatalf("Failed to get home directory: %v", err)
 	}
 	return home
 }
 
 func CreateFile(filePath string) *os.File {
-	pathEx := os.ExpandEnv(filePath)
-	os.MkdirAll(path.Dir(pathEx), os.ModeDir|0x1ED)
+	pathEx := ExpandPath(filePath)
+	os.MkdirAll(path.Dir(pathEx), os.ModeDir|0755)
 
 	file, err := os.Create(pathEx)
 	if err != nil {
@@ -33,9 +32,16 @@ func CreateFile(filePath string) *os.File {
 }
 
 func FileExists(path string) bool {
-	path = os.ExpandEnv(path)
+	path = ExpandPath(path)
 	if _, err := os.Open(path); err != nil {
 		return false
 	}
 	return true
+}
+
+func ExpandPath(path string) string {
+	if strings.HasPrefix(path, "~") {
+		return strings.Replace(path, "~", GetHomeDir(), 1)
+	}
+	return os.ExpandEnv(path)
 }
