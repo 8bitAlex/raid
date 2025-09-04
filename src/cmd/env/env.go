@@ -18,17 +18,6 @@ var Command = &cobra.Command{
 	Long:  "Execute an environment by name. The environment will be searched for in the active profile and all repository configurations. Tasks are executed concurrently and environment variables are set globally.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// envName := args[0]
 
-		// // Create environment manager
-		// envManager := lib.NewEnvironmentManager(concurrency)
-
-		// // Execute the environment
-		// if err := envManager.ExecuteEnvironment(envName); err != nil {
-		// 	fmt.Printf("Failed to execute environment '%s': %v\n", envName, err)
-		// 	os.Exit(1)
-		// }
-
-		// fmt.Printf("Environment '%s' executed successfully\n", envName)
 	},
 }
