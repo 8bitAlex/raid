@@ -6,7 +6,6 @@ import (
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
-	"github.com/8bitalex/raid/src/cmd/test"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +26,6 @@ func init() {
 	rootCmd.AddCommand(profile.Command)
 	rootCmd.AddCommand(install.Command)
 	rootCmd.AddCommand(env.Command)
-	rootCmd.AddCommand(test.Command)
 }
 
 func Execute() {
