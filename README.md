@@ -1,4 +1,5 @@
 # Raid - Distributed Development Orchestration
+[![Build and Test](https://github.com/8bitAlex/raid/actions/workflows/build.yml/badge.svg)](https://github.com/8bitAlex/raid/actions/workflows/build.yml)
 [![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
 
 `Raid` is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
