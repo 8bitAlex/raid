@@ -1,0 +1,52 @@
+[
+  {
+    "name": "development",
+    "repositories": [
+      {
+        "name": "frontend",
+        "path": "~/Developer/frontend",
+        "url": "https://github.com/company/frontend.git"
+      },
+      {
+        "name": "backend",
+        "path": "~/Developer/backend",
+        "url": "https://github.com/company/backend.git"
+      },
+      {
+        "name": "shared-libs",
+        "path": "~/Developer/shared-libs",
+        "url": "https://github.com/company/shared-libs.git"
+      }
+    ]
+  },
+  {
+    "name": "personal",
+    "repositories": [
+      {
+        "name": "blog",
+        "path": "~/Developer/blog",
+        "url": "https://github.com/username/blog.git"
+      },
+      {
+        "name": "dotfiles",
+        "path": "~/Developer/dotfiles",
+        "url": "https://github.com/username/dotfiles.git"
+      }
+    ]
+  },
+  {
+    "name": "open-source",
+    "repositories": [
+      {
+        "name": "raid",
+        "path": "~/Developer/raid",
+        "url": "https://github.com/8bitAlex/raid.git"
+      },
+      {
+        "name": "other-project",
+        "path": "~/Developer/other-project",
+        "url": "https://github.com/username/other-project.git"
+      }
+    ]
+  }
+]

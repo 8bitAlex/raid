@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../schemas/raid-profile.schema.json
+
+name: raid
+repositories:
+  - name: raid
+    path: ~/Developer/raid-test
+    url: https://github.com/8bitAlex/raid.git
+  - name: raid-2
+    path: ~/Developer/raid-test-2
+    url: https://github.com/8bitAlex/raid.git
+
+environments:
+  - name: dev
+    tasks:
+      - type: Shell
+        cmd: echo "Hello, world! - From profile"
+      - type: Script
+        path: ./hello.sh
+    variables:
+      - name: NODE_ENV
+        value: development
+      - name: DATABASE_URL
+        value: postgresql://localhost:5432/dev_db
+      - name: API_URL
+        value: https://api.example.com
+
+---
+
+name: example2
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git
+
+---
+
+name: example3
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git
+
+---
+
+name: example4
+repositories:
+  - name: raid
+    path: ~/Developer/raid
+    url: https://github.com/8bitAlex/raid.git

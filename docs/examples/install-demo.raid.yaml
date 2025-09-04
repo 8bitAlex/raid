@@ -1,0 +1,14 @@
+# Example profile for demonstrating the install command
+# This profile defines repositories that can be cloned
+
+name: install-demo
+repositories:
+  - name: frontend
+    path: ~/Developer/demo-frontend
+    url: https://github.com/8bitAlex/raid.git
+  - name: backend
+    path: ~/Developer/demo-backend
+    url: https://github.com/8bitAlex/raid.git
+  - name: shared-libs
+    path: ~/Developer/demo-shared
+    url: https://github.com/8bitAlex/raid.git

@@ -1,0 +1,71 @@
+# Example profile demonstrating environment execution
+name: env-demo
+
+repositories:
+  - name: frontend
+    path: ~/Developer/env-demo-frontend
+    url: https://github.com/8bitAlex/raid.git
+  - name: backend
+    path: ~/Developer/env-demo-backend
+    url: https://github.com/8bitAlex/raid.git
+
+environments:
+  - name: dev
+    variables:
+      - name: NODE_ENV
+        value: development
+      - name: DATABASE_URL
+        value: postgresql://localhost:5432/dev_db
+      - name: API_URL
+        value: http://localhost:3000
+    tasks:
+      - type: Shell
+        cmd: echo "Setting up development environment..."
+      - type: Shell
+        cmd: echo "NODE_ENV=$NODE_ENV"
+      - type: Shell
+        cmd: echo "DATABASE_URL=$DATABASE_URL"
+      - type: Shell
+        cmd: echo "API_URL=$API_URL"
+      - type: Script
+        path: ./scripts/setup-dev.sh
+
+  - name: prod
+    variables:
+      - name: NODE_ENV
+        value: production
+      - name: DATABASE_URL
+        value: postgresql://prod-server:5432/prod_db
+      - name: API_URL
+        value: https://api.example.com
+    tasks:
+      - type: Shell
+        cmd: echo "Setting up production environment..."
+      - type: Shell
+        cmd: echo "NODE_ENV=$NODE_ENV"
+      - type: Shell
+        cmd: echo "DATABASE_URL=$DATABASE_URL"
+      - type: Shell
+        cmd: echo "API_URL=$API_URL"
+      - type: Script
+        path: ./scripts/setup-prod.sh
+
+  - name: test
+    variables:
+      - name: NODE_ENV
+        value: test
+      - name: DATABASE_URL
+        value: postgresql://localhost:5432/test_db
+      - name: API_URL
+        value: http://localhost:3001
+    tasks:
+      - type: Shell
+        cmd: echo "Setting up test environment..."
+      - type: Shell
+        cmd: echo "NODE_ENV=$NODE_ENV"
+      - type: Shell
+        cmd: echo "DATABASE_URL=$DATABASE_URL"
+      - type: Shell
+        cmd: echo "API_URL=$API_URL"
+      - type: Script
+        path: ./scripts/setup-test.sh
