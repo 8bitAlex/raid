@@ -1,4 +1,5 @@
 # Raid - Distributed Development Orchestration
+[![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
 
 `Raid` is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
 
@@ -16,24 +17,22 @@ never miss running that one test ever again.
 
 ## Key Features
 
-- **Portable YAML Configurations**: Define your development environment using simple, version-controlled YAML files
-- **Multiple Raid Profiles**: Manage different project configurations and environments with separate profiles
-- **Distributed Repository Management**: Automatically clone, update, and manage multiple repositories across your development environment
-- **Development Environment Automation**: Streamline setup, dependency installation, and environment configuration
-- **Test Runner**: Robust testing framework with automatic error recovery and retry mechanisms
-- **Configurable Global Commands**: Extend functionality and automate common tasks with user-defined commands that work across all managed repositories
-
-## Project Status
-
-`Raid` is currently in the **prototype stage**. Core functionality is still being explored and iterated on, so expect frequent changes and incomplete features.
-
-Feedback, issues, and contributions are welcome as the project takes shape.
+- **Portable YAML Configurations**: Define your development environments, tasks, and dependencies using simple, version-controlled YAML files.
+- **Multiple Profiles**: Easily switch between different project setups or team configurations with isolated profiles.
+- **Automated Task Execution**: Orchestrate shell commands, scripts, and custom tasks across multiple repositories with a single command.
+- **Environment Management**: Define, share, and execute complex development environments to ensure consistency for all contributors.
 
 | Platform | Supported |
 |----------|:---------:|
 | Linux    | ✅        |
 | Mac      | ✅        |
 | Windows  | ✅        |
+
+## Development
+
+`Raid` is currently in the **prototype stage**. Core functionality is still being explored and iterated on, so expect frequent changes and incomplete features.
+
+Feedback, issues, and contributions are welcome as the project takes shape.
 
 ## Getting Started
 
@@ -52,27 +51,29 @@ Feedback, issues, and contributions are welcome as the project takes shape.
 ### Execution
 
 ```bash
-raid install    # Clone repos and setup environment
-raid test       # Run tests across all repositories
+raid profile add my-project.raid.yaml  # Add and activate a profile
+raid install                           # Clone repos and setup environment
+raid env dev                           # Execute development environment (if configured)
 ```
 
 ## ⚠ Best Practices 
 
-- **Keep raid profiles private:** Avoid committing raid profiles to public repositories to protect sensitive configuration details.
-- **Store profiles securely:** Place raid profiles in a secure, private location separate from your public codebase.
-- **Store secrets securely:** Place sensitive information such as secrets or credentials only in private raid profiles, never in public repositories.
+- **Store profiles securely:** If your raid profile contains sensitive configuration or secrets, keep it in a secure, private location outside of your public codebase.
+- **Never commit secrets:** Always keep secrets and credentials in private raid profiles. Do not store them in public repositories.
 
 ## Usage & Documentation
 
-[Commands](#commands) • [Profile Configuration](#profile-configuration)• [Repository Configuration](#repository-configuration)
+**Note:** Raid is currently in the prototype stage. Some features may be incomplete or in development.
+
+[Commands](#commands) • [Profile Configuration](#profile-configuration) • [Repository Configuration](#repository-configuration) • [JSON Schema Specifications](#json-schema-specifications)
 
 ## Commands
 
-[profile](#raid-profile-options) • [install](#raid-install) • [test](#raid-test) • [env](#raid-env)
+[profile](#raid-profile) • [install](#raid-install) • [env](#raid-env)
 
 ### `raid profile`
 
-Manage raid profiles. If there are no non-option arguments, available profiles are listed.
+Manage raid profiles. If there are no non-option arguments, the currently active profile is displayed.
 
 #### Subcommands
 
@@ -82,8 +83,6 @@ Add profile(s) from a YAML (.yaml, .yml) or JSON (.json) file. The file will be 
 
 **Features:**
 - **Multiple Profiles Support**: Add multiple profiles from a single file using YAML document separators (`---`) or JSON arrays
-- **Auto-Activation**: If no active profile exists, the first profile is automatically set as active
-- **Duplicate Handling**: Existing profiles are detected and reported, only new profiles are added
 - **Validation**: Each profile is validated against the JSON schema
 
 **Examples:**
@@ -101,33 +100,67 @@ raid profile add multiple-profiles.json
 **Example Output:**
 ```bash
 # Single profile (auto-activated)
-Profile 'my-project' has been successfully added from my-project.raid.yaml and set as active
+Profile 'my-project' has been successfully added from my-project.raid.yaml
 
 # Multiple profiles (first auto-activated)
-Profiles development, personal, open-source have been successfully added from multiple-profiles.yaml. Profile 'development' has been set as active
+Profiles:
+	development
+	personal
+	open-source
+have been successfully added from multiple-profiles.yaml
+Profile 'development' set as active
 
 # Some profiles already exist
-Profiles already exist: development
-Profiles personal, open-source have been successfully added from multiple-profiles.yaml
+Profiles already exist with names:
+	development
+
+Profiles:
+	personal
+	open-source
+have been successfully added from multiple-profiles.yaml
 ```
 
 ##### `raid profile list`
 
 List all available profiles and show the currently active profile.
 
+**Example Output:**
+```bash
+Available profiles:
+	my-project (active)	~/.raid/profiles/my-project.raid.yaml
+	development		~/.raid/profiles/development.raid.yaml
+	personal		~/.raid/profiles/personal.raid.yaml
+```
+
 ##### `raid profile use <profile-name>`
 
 Set a specific profile as the active profile.
 
-#### Legacy Options
+**Example:**
+```bash
+raid profile use my-project
+# Output: Profile 'my-project' is now active.
+```
 
-`<profile name>`
+##### `raid profile remove <profile-name> [profile-name...]`
 
-The name of the profile to set as current (legacy syntax, use `raid profile use <profile-name>` instead).
+Remove one or more profiles. You can specify multiple profile names to remove them all at once.
 
-`-l <path>, --load=<path>`
+**Examples:**
+```bash
+# Remove a single profile
+raid profile remove old-project
 
-The filepath to one or more profile configuration files. Loads all profiles found. If a profile name is provided, new profiles are loaded first then it will try and set that profile as current (legacy syntax, use `raid profile add <filepath>` instead).
+# Remove multiple profiles
+raid profile remove project1 project2 project3
+```
+
+**Example Output:**
+```bash
+Profile 'old-project' has been removed.
+Profile 'project1' has been removed.
+Profile 'project2' has been removed.
+```
 
 ### `raid install`
 
@@ -138,15 +171,10 @@ Clones all repositories defined in the active profile to their specified paths. 
 - The active profile must contain valid repository definitions
 
 **Features:**
-- **Concurrent Cloning**: All repositories are cloned simultaneously for faster installation
-- **Concurrency Control**: Limit the number of concurrent clones with `--concurrency` flag
-- **Path Expansion**: Supports `~` for home directory and environment variables
-- **Smart Cloning**: Skips repositories that already exist
-- **Error Handling**: Provides clear error messages for missing profiles or invalid configurations
-- **Progress Feedback**: Shows cloning progress for each repository
+- **Concurrent**: All repositories are cloned simultaneously for faster installation
 
 **Options:**
-- `--concurrency, -c`: Maximum number of concurrent repository clones (default: 0 = unlimited)
+- `--threads, -t`: Maximum number of concurrent repository clones (default: 0 = unlimited)
 
 **Examples:**
 ```bash
@@ -157,22 +185,10 @@ raid profile use my-project
 raid install
 
 # Install with limited concurrency (max 3 concurrent clones)
-raid install --concurrency 3
+raid install --threads 3
 
 # Install with limited concurrency using short flag
-raid install -c 5
-```
-
-**Example Output:**
-```bash
-Installing profile 'my-project' with 3 repositories...
-Starting to clone repository 'frontend'...
-Starting to clone repository 'backend'...
-Starting to clone repository 'shared-libs'...
-Successfully cloned repository 'frontend'
-Successfully cloned repository 'backend'
-Successfully cloned repository 'shared-libs'
-Successfully installed all repositories for profile 'my-project'
+raid install -t 5
 ```
 
 **Concurrency Guidelines:**
@@ -180,73 +196,72 @@ Successfully installed all repositories for profile 'my-project'
 - **Limited (3-5)**: Good for slower networks or when you want to avoid overwhelming the system
 - **Very Limited (1-2)**: Useful for very slow connections or when you need to minimize resource usage
 
-### `raid test`
-
-Runs tests across all managed repositories with automatic error recovery and retry mechanisms.
-
-### `raid env`
-
-
-
 ## Profile Configuration
 
-A profile configuration file follows the naming pattern `*.raid.yaml` and defines the properties of a raid profile—a group of repositories and their dependencies.
+A profile configuration file follows the naming pattern `*.raid.yaml` and defines the properties of a raid profile—a group of repositories and their environments.
 
 ### Single Profile Configuration
 
 ```yaml
+# yaml-language-server: $schema=schemas/raid-profile.schema.json
+
 name: my-project
 
 repositories:
   - name: frontend
+    path: ~/Developer/frontend
     url: https://github.com/myorg/frontend
-    branch: main
     
   - name: backend
+    path: ~/Developer/backend
     url: https://github.com/myorg/backend
-    branch: master
 
-dependencies:
-  - name: database
-    type: docker
-    image: postgres:latest
-    
-environment:
-  variables:
-    NODE_ENV: development
-    DATABASE_URL: postgresql://localhost:5432/myproject
+environments:
+  - name: dev
+    variables:
+      - name: NODE_ENV
+        value: development
+      - name: DATABASE_URL
+        value: postgresql://localhost:5432/myproject
+    tasks:
+      - type: Shell
+        cmd: echo "Setting up development environment..."
+      - type: Script
+        path: ./scripts/setup-dev.sh
 ```
 
 ### Multiple Profiles in a Single File
 
-You can define multiple profiles in a single file using YAML document separators (`---`) or JSON arrays.
+You can define multiple profiles in a single file using YAML document separators (`---`) or JSON arrays. Each profile in the file is individually validated against the schema.
 
 #### YAML with Document Separators
 
 ```yaml
+# yaml-language-server: $schema=schemas/raid-profile.schema.json
+
 name: development
 repositories:
   - name: frontend
+    path: ~/Developer/company/frontend
     url: https://github.com/company/frontend
-    branch: main
   - name: backend
+    path: ~/Developer/company/backend
     url: https://github.com/company/backend
-    branch: master
 ---
 name: personal
 repositories:
   - name: blog
+    path: ~/Developer/blog
     url: https://github.com/username/blog
-    branch: main
   - name: dotfiles
+    path: ~/Developer/dotfiles
     url: https://github.com/username/dotfiles
-    branch: main
 ---
 name: open-source
 repositories:
   - name: raid
+    path: ~/Developer/raid
     url: https://github.com/8bitAlex/raid
-    branch: main
 ```
 
 #### JSON with Arrays
@@ -254,17 +269,18 @@ repositories:
 ```json
 [
   {
+    "$schema": "schemas/raid-profile.schema.json",
     "name": "development",
     "repositories": [
       {
         "name": "frontend",
-        "url": "https://github.com/company/frontend",
-        "branch": "main"
+        "path": "~/Developer/company/frontend",
+        "url": "https://github.com/company/frontend"
       },
       {
         "name": "backend",
-        "url": "https://github.com/company/backend",
-        "branch": "master"
+        "path": "~/Developer/company/backend",
+        "url": "https://github.com/company/backend"
       }
     ]
   },
@@ -273,46 +289,132 @@ repositories:
     "repositories": [
       {
         "name": "blog",
-        "url": "https://github.com/username/blog",
-        "branch": "main"
+        "path": "~/Developer/blog",
+        "url": "https://github.com/username/blog"
       }
     ]
   }
 ]
 ```
 
+
+
 ### Profile Management Features
 
-- **Auto-Activation**: The first profile added is automatically set as active if no active profile exists
-- **Duplicate Detection**: Existing profiles are detected and reported when adding new profiles
 - **Schema Validation**: Each profile is validated against the JSON schema
-- **Backward Compatibility**: Single profile files continue to work as before
+- **Multiple Format Support**: YAML and JSON files are both supported
+- **IDE Integration**: Use `$schema` references for autocomplete and validation
+
+**Note:** For detailed schema information, see the [JSON Schema Specifications](#json-schema-specifications) section.
 
 ## Repository Configuration
 
 A repository configuration file named `raid.yaml` defines the properties of an individual repository. This file should be located in the root directory of a git repository.
 
+**Note:** Repository configurations follow the `raid-repo.schema.json` schema. See the [JSON Schema Specifications](#json-schema-specifications) section for detailed schema information.
+
 ### Example Repository Configuration
 
 ```yaml
+# yaml-language-server: $schema=schemas/raid-repo.schema.json
+
 name: my-service
+branch: main
 
-build:
-  commands:
-    - npm install
-    - npm run build
-
-test:
-  commands:
-    - npm test
-  retries: 3
-  timeout: 300
-
-dependencies:
-  - name: redis
-    type: docker
-    image: redis:alpine
+environments:
+  - name: dev
+    variables:
+      - name: NODE_ENV
+        value: development
+    tasks:
+      - type: Shell
+        cmd: npm install
+      - type: Shell
+        cmd: npm run build
+      - type: Shell
+        cmd: npm test
 ```
+
+## JSON Schema Specifications
+
+Raid uses **JSON Schema Draft 2020-12** for configuration validation. The schema system consists of three main files:
+
+- **`raid-profile.schema.json`** - Main profile configuration schema
+- **`raid-defs.schema.json`** - Shared definitions for environments and tasks
+- **`raid-repo.schema.json`** - Individual repository configuration schema
+
+### Schema Validation
+
+All profile and repo configurations are validated against the **JSON Schema Draft 2020-12** specification. This ensures your configuration files have the correct structure and required fields.
+
+### IDE Integration
+
+For the best development experience, include schema references in your configuration files:
+
+```yaml
+# yaml-language-server: $schema=schemas/raid-profile.schema.json
+```
+
+This provides:
+- ✅ **Autocomplete** for field names and values
+- ✅ **Real-time validation** of your configuration
+- ✅ **Error highlighting** for invalid configurations
+- ✅ **Documentation tooltips** for each field
+
+### Schema Structure Details
+
+#### Profile Schema (`raid-profile.schema.json`)
+A raid profile configuration must contain:
+
+- **`name`** (string, required) - The name of the raid profile
+- **`repositories`** (array, required) - Array of repository configurations
+  - Each repository must have:
+    - `name` (string, required) - The name of the repository
+    - `path` (string, required) - The local path to the repository
+    - `url` (string, required) - The URL of the repository
+- **`environments`** (array, optional) - Array of environment configurations
+
+#### Repository Schema (`raid-repo.schema.json`)
+A repository configuration must contain:
+
+- **`name`** (string, required) - The name of the repository
+- **`branch`** (string, required) - The branch to checkout
+- **`environments`** (array, optional) - Array of environment configurations (follows `raid-defs.schema.json`)
+
+#### Definitions Schema (`raid-defs.schema.json`)
+Environments and tasks follow this shared schema:
+
+**Environment Schema:**
+- **`name`** (string, required) - The name of the environment
+- **`variables`** (array, optional) - Environment variables to set
+  - Each variable must have:
+    - `name` (string, required) - The name of the variable
+    - `value` (string, required) - The value of the variable
+- **`tasks`** (array, optional) - Tasks to be executed
+
+**Task Schema:**
+Tasks support two types:
+
+**Shell Tasks:**
+```yaml
+- type: Shell
+  cmd: echo "Hello World"
+  concurrent: true  # Optional: execute concurrently with other tasks
+```
+
+**Script Tasks:**
+```yaml
+- type: Script
+  path: ./scripts/setup.sh
+  concurrent: false  # Optional: execute sequentially
+```
+
+### Technical Details
+
+- **Schema Compatibility**: Fully compatible with JSON Schema Draft 2020-12
+- **Validation Engine**: Uses `github.com/santhosh-tekuri/jsonschema/v6` library for validation
+- **File Format Support**: Both YAML and JSON files are supported
+- **Multiple Profiles**: Each profile in a multi-profile file is individually validated
 
 ## Contributing
 
@@ -320,5 +422,33 @@ We welcome contributions! Please see our [Contributing Guidelines](docs/CONTRIBU
 
 ## License
 
-[License information to be added]
+This project is licensed under the **GNU General Public License v3.0** (GPL-3.0).
+
+### Key License Highlights
+
+**What you can do:**
+- ✅ **Use** the software for any purpose
+- ✅ **Study** how the software works
+- ✅ **Modify** the software to suit your needs
+- ✅ **Distribute** copies of the software
+- ✅ **Distribute** modified versions
+
+**What you must do:**
+- 📋 **License your modifications** under the same GPL-3.0 license
+- 📋 **Include source code** when distributing the software
+- 📋 **State changes** you made to the software
+- 📋 **Include the license** and copyright notices
+
+**What you cannot do:**
+- ❌ **Make the software proprietary** - modifications must remain open source
+- ❌ **Remove the license** or copyright notices
+- ❌ **Sublicense** under different terms
+
+### Full License Text
+
+The complete license text is available in the [LICENSE](LICENSE) file. For more information about the GNU GPL, visit [https://www.gnu.org/licenses/](https://www.gnu.org/licenses/).
+
+### Contributing
+
+By contributing to this project, you agree that your contributions will be licensed under the same GPL-3.0 license.
 
