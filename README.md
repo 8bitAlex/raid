@@ -450,5 +450,4 @@ The complete license text is available in the [LICENSE](LICENSE) file. For more 
 
 ### Contributing
 
-By contributing to this project, you agree that your contributions will be licensed under the same GPL-3.0 license.
-
+By contributing to this project, you agree that your contributions will be licensed under the same GPL-3.0 license
