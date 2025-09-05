@@ -23,6 +23,7 @@ type Profile struct {
 	Name         string `json:"name"`
 	Path         string `json:"path"`
 	Repositories []Repo `json:"repositories"`
+	Environments []Env  `json:"environments"`
 }
 
 func (p Profile) IsZero() bool {

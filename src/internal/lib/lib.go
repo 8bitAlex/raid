@@ -12,6 +12,7 @@ const (
 
 type Context struct {
 	Profile Profile
+	Envs    []Env
 }
 
 var context *Context
@@ -28,8 +29,10 @@ func ForceCompile() error {
 	if err != nil {
 		return err
 	}
+	envs := profile.Environments
 	context = &Context{
 		Profile: profile,
+		Envs:    envs,
 	}
 	return nil
 }
