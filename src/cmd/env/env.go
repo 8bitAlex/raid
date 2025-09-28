@@ -1,9 +1,6 @@
 package env
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/8bitalex/raid/src/raid/env"
 	"github.com/spf13/cobra"
 )
@@ -18,21 +15,25 @@ var Command = &cobra.Command{
 	Long:  "Execute an environment by name. The environment will be searched for in the active profile and all repository configurations. Tasks are executed concurrently and environment variables are set globally.",
 	Args:  cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) > 0 {
-			if err := env.Set(args[0]); err != nil {
-				log.Fatalf("Environment '%s' not found. Use 'raid env list' to see available environments.\n", args[0])
-			}
-			fmt.Printf("Setting environment to '%s'\n", args[0])
-			if err := env.Execute(); err != nil {
-				log.Fatalf("Failed to execute environment: %v", err)
-			}
-		} else {
+		if len(args) == 0 {
 			env := env.Get()
 			if env.IsZero() {
-				fmt.Println("No active environment found. Use 'raid env <environment>' to set one.")
-				return
+				cmd.PrintErrln("No active environment set.")
+			} else {
+				cmd.Println("Active environment:", env.Name)
 			}
-			fmt.Println(env.Name)
+		} else if len(args) == 1 {
+			name := args[0]
+			if !env.Contains(name) {
+				cmd.PrintErrln("Environment not found:", name)
+			} else {
+				cmd.Println("Setting up environment:", name)
+				if err := env.Set(name); err != nil {
+					cmd.PrintErrln("Failed to switch environment:", err)
+				}
+			}
+		} else {
+			cmd.PrintErrln("Invalid number of arguments.")
 		}
 	},
 }

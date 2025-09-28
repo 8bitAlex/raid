@@ -18,7 +18,7 @@ var ListEnvCmd = &cobra.Command{
 		}
 		fmt.Println("Available environments:")
 		for _, env := range envs {
-			fmt.Printf("\t%s\n", env.Name)
+			fmt.Printf("\t%s\n", env)
 		}
 		fmt.Print()
 	},

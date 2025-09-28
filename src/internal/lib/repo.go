@@ -10,13 +10,23 @@ import (
 )
 
 type Repo struct {
-	Name string
-	Path string
-	URL  string
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	URL          string `json:"url"`
+	Environments []Env  `json:"environments"`
 }
 
 func (r Repo) IsZero() bool {
 	return r.Name == "" || r.Path == "" || r.URL == ""
+}
+
+func (r Repo) getEnv(name string) Env {
+	for _, env := range r.Environments {
+		if env.Name == name {
+			return env
+		}
+	}
+	return Env{}
 }
 
 func BuildRepo(repo Repo) (Repo, error) {

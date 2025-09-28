@@ -20,15 +20,14 @@ func GetHomeDir() string {
 	return home
 }
 
-func CreateFile(filePath string) *os.File {
+func CreateFile(filePath string) (*os.File, error) {
 	pathEx := ExpandPath(filePath)
-	os.MkdirAll(path.Dir(pathEx), os.ModeDir|0755)
-
-	file, err := os.Create(pathEx)
-	if err != nil {
-		log.Fatalf("Failed to create file '%s': %v", pathEx, err)
+	if FileExists(pathEx) {
+		return os.Open(pathEx)
 	}
-	return file
+
+	os.MkdirAll(path.Dir(pathEx), os.ModeDir|0755)
+	return os.Create(pathEx)
 }
 
 func FileExists(path string) bool {
