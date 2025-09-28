@@ -5,6 +5,15 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	ConfigDirName       = ".raid"
+	ConfigFileName      = "config.toml"
+	ConfigPathDefault   = "~" + sys.Sep + ConfigDirName + sys.Sep + ConfigFileName
+	ConfigPathFlag      = "config"
+	ConfigPathFlagShort = "c"
+	ConfigPathFlagDesc  = "configuration file path (default is " + ConfigPathDefault + ")"
+)
+
 var CfgPath string
 
 var defaultConfigPath = sys.GetHomeDir() + sys.Sep + ConfigDirName + sys.Sep
