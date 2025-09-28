@@ -11,7 +11,7 @@ var ListEnvCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List environments",
 	Run: func(cmd *cobra.Command, args []string) {
-		envs := env.GetAll()
+		envs := env.ListAll()
 		if len(envs) == 0 {
 			fmt.Println("No environments found.")
 			return

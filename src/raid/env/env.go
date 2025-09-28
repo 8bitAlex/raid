@@ -13,14 +13,14 @@ func Get() Env {
 	return lib.GetEnv()
 }
 
-func GetAll() []string {
-	return lib.GetEnvs()
+func ListAll() []string {
+	return lib.ListEnvs()
 }
 
 func Contains(name string) bool {
 	return lib.ContainsEnv(name)
 }
 
-// func Execute(name string) error {
-// 	return lib.ExecuteEnv(name)
-// }
+func Execute(env Env) error {
+	return lib.ExecuteEnv(env)
+}

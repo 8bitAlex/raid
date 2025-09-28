@@ -78,7 +78,7 @@ func AddProfiles(profiles []Profile) {
 	}
 }
 
-func GetProfiles() []Profile {
+func ListProfiles() []Profile {
 	profilesMap := getProfilePaths()
 	results := make([]Profile, 0, len(profilesMap))
 	for name, path := range profilesMap {
@@ -253,7 +253,7 @@ func yamlToJSON(file io.Reader) ([]byte, error) {
 	return json.Marshal(data)
 }
 
-func BuildProfile(profile Profile) (Profile, error) {
+func buildProfile(profile Profile) (Profile, error) {
 	if profile.IsZero() {
 		return Profile{}, fmt.Errorf("invalid profile: %v", profile)
 	}

@@ -11,7 +11,7 @@ var ListProfileCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List profiles",
 	Run: func(cmd *cobra.Command, args []string) {
-		profiles := pro.GetAll()
+		profiles := pro.ListAll()
 		activeProfile := pro.Get()
 
 		if len(profiles) == 0 {

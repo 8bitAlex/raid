@@ -1,6 +1,7 @@
 package env
 
 import (
+	"github.com/8bitalex/raid/src/raid"
 	"github.com/8bitalex/raid/src/raid/env"
 	"github.com/spf13/cobra"
 )
@@ -30,6 +31,12 @@ var Command = &cobra.Command{
 				cmd.Println("Setting up environment:", name)
 				if err := env.Set(name); err != nil {
 					cmd.PrintErrln("Failed to switch environment:", err)
+				}
+				raid.ForceLoad()
+				if err := env.Execute(env.Get()); err != nil {
+					cmd.PrintErrln("Failed to execute environment:", err)
+				} else {
+					cmd.Println("Environment executed successfully.")
 				}
 			}
 		} else {

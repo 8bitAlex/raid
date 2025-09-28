@@ -3,6 +3,8 @@ package lib
 import (
 	"fmt"
 
+	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -21,12 +23,13 @@ func (e Env) IsZero() bool {
 }
 
 type EnvVar struct {
-	Key   string
+	Name  string
 	Value string
 }
 
 type RepoEnv struct {
-	RepoName  string
+	Name      string
+	Path      string
 	Variables []EnvVar
 }
 
@@ -50,7 +53,7 @@ func GetEnv() Env {
 	}
 }
 
-func GetEnvs() []string {
+func ListEnvs() []string {
 	if context == nil || len(context.Profile.Environments) == 0 {
 		return []string{}
 	}
@@ -63,7 +66,7 @@ func GetEnvs() []string {
 }
 
 func ContainsEnv(name string) bool {
-	for _, envName := range GetEnvs() {
+	for _, envName := range ListEnvs() {
 		if envName == name {
 			return true
 		}
@@ -71,33 +74,77 @@ func ContainsEnv(name string) bool {
 	return false
 }
 
-// func ExecuteEnv(name string) error {
-// 	profileEnv := context.Profile.getEnv(name)
-// 	for _, repo := range context.Profile.Repositories {
-// 		path := repo.Path + sys.Sep + ".env"
-// 		file, err := sys.CreateFile(path)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		file.Close()
+func buildEnv(profile Profile, name string) (Env, error) {
+	if name == "" {
+		return Env{}, fmt.Errorf("invalid environment name")
+	}
+	if profile.IsZero() {
+		return Env{}, fmt.Errorf("invalid profile")
+	}
 
-// 		godotenv.Load(path)
-// 	}
-// 	return nil
-// }
+	repoEnvs := make([]RepoEnv, 0, len(profile.Repositories))
+	for _, repo := range profile.Repositories {
+		re := RepoEnv{
+			Name: repo.Name,
+			Path: repo.Path,
+		}
+		repoEnvs = append(repoEnvs, re)
+	}
 
-// func getRepoEnv(name string) Env {
-// 	for _, repo := range context.Profile.Repositories {
-// 		if repo.Name == name {
-// 			return repo.Envs
-// 		}
-// 	}
-// 	return Env{}
-// }
+	env := Env{
+		Name:      name,
+		Variables: profile.getEnv(name).Variables,
+		Repos:     repoEnvs,
+	}
+	return env, nil
+}
 
-// func setEnvVars(env Env) error {
-// 	for _, v := range env.Variables {
-// 		godotenv.Overload(v.Key, v.Value)
-// 	}
-// 	return nil
-// }
+func ExecuteEnv(env Env) error {
+	for _, repo := range env.Repos {
+		fmt.Printf("Setting up environment for repo: %s\n", repo.Name)
+
+		path, err := buildEnvPath(repo.Path)
+		if err != nil {
+			return fmt.Errorf("invalid repo path for env '%s': %w", repo.Name, err)
+		}
+
+		err = setEnvVariables(env.Variables, repo.Variables, path)
+		if err != nil {
+			return fmt.Errorf("failed to set env variables for repo '%s': %w", repo.Name, err)
+		}
+	}
+	return nil
+}
+
+func buildEnvPath(path string) (string, error) {
+	filepath := sys.ExpandPath(path) + sys.Sep + ".env"
+	// create file if it does not exist
+	file, err := sys.CreateFile(filepath)
+	if err != nil {
+		return "", err
+	}
+	file.Close()
+	return filepath, nil
+}
+
+func setEnvVariables(envVars []EnvVar, repoVars []EnvVar, path string) error {
+		envMap, err := godotenv.Read(path)
+		if err != nil {
+			return err
+		}
+
+		for _, v := range envVars {
+			envMap[v.Name] = v.Value
+		}
+
+		for _, v := range repoVars {
+			envMap[v.Name] = v.Value
+		}
+
+		err = godotenv.Write(envMap, path)
+		if err != nil {
+			return err
+		}
+		return nil
+}
+

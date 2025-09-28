@@ -17,20 +17,27 @@ type Context struct {
 
 var context *Context
 
-func Compile() error {
+func Load() error {
 	if context == nil {
-		return ForceCompile()
+		return ForceLoad()
 	}
 	return nil
 }
 
-func ForceCompile() error {
-	profile, err := BuildProfile(GetProfile())
+func ForceLoad() error {
+	profile, err := buildProfile(GetProfile())
 	if err != nil {
 		return err
 	}
+
+	env, err := buildEnv(profile, GetEnv().Name)
+	if err != nil {
+		return err
+	}
+
 	context = &Context{
 		Profile: profile,
+		Env:     env,
 	}
 	return nil
 }
