@@ -9,7 +9,7 @@ func Set(name string) error {
 	return lib.SetEnv(name)
 }
 
-func Get() Env {
+func Get() string {
 	return lib.GetEnv()
 }
 
@@ -21,6 +21,6 @@ func Contains(name string) bool {
 	return lib.ContainsEnv(name)
 }
 
-func Execute(env Env) error {
+func Execute(env string) error {
 	return lib.ExecuteEnv(env)
 }

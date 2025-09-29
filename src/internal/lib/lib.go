@@ -12,7 +12,7 @@ const (
 
 type Context struct {
 	Profile Profile
-	Env     Env
+	Env     string
 }
 
 var context *Context
@@ -30,14 +30,9 @@ func ForceLoad() error {
 		return err
 	}
 
-	env, err := buildEnv(profile, GetEnv().Name)
-	if err != nil {
-		return err
-	}
-
 	context = &Context{
 		Profile: profile,
-		Env:     env,
+		Env:     GetEnv(),
 	}
 	return nil
 }

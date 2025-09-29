@@ -29,7 +29,7 @@ func (r Repo) getEnv(name string) Env {
 	return Env{}
 }
 
-func BuildRepo(repo Repo) (Repo, error) {
+func buildRepo(repo Repo) (Repo, error) {
 	return repo, nil
 }
 

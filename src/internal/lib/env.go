@@ -13,9 +13,8 @@ const (
 )
 
 type Env struct {
-	Name      string
-	Variables []EnvVar
-	Repos     []RepoEnv
+	Name      string 	`json:"name"`
+	Variables []EnvVar 	`json:"variables"`
 }
 
 func (e Env) IsZero() bool {
@@ -23,14 +22,8 @@ func (e Env) IsZero() bool {
 }
 
 type EnvVar struct {
-	Name  string
-	Value string
-}
-
-type RepoEnv struct {
-	Name      string
-	Path      string
-	Variables []EnvVar
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 func SetEnv(name string) error {
@@ -42,15 +35,8 @@ func SetEnv(name string) error {
 	return nil
 }
 
-func GetEnv() Env {
-	if context != nil && !context.Env.IsZero() {
-		return context.Env
-	}
-
-	name := viper.GetString(ACTIVE_ENV_KEY)
-	return Env{
-		Name: name,
-	}
+func GetEnv() string {
+	return viper.GetString(ACTIVE_ENV_KEY)
 }
 
 func ListEnvs() []string {
@@ -74,41 +60,19 @@ func ContainsEnv(name string) bool {
 	return false
 }
 
-func buildEnv(profile Profile, name string) (Env, error) {
-	if name == "" {
-		return Env{}, fmt.Errorf("invalid environment name")
-	}
-	if profile.IsZero() {
-		return Env{}, fmt.Errorf("invalid profile")
-	}
-
-	repoEnvs := make([]RepoEnv, 0, len(profile.Repositories))
-	for _, repo := range profile.Repositories {
-		re := RepoEnv{
-			Name: repo.Name,
-			Path: repo.Path,
-		}
-		repoEnvs = append(repoEnvs, re)
-	}
-
-	env := Env{
-		Name:      name,
-		Variables: profile.getEnv(name).Variables,
-		Repos:     repoEnvs,
-	}
-	return env, nil
-}
-
-func ExecuteEnv(env Env) error {
-	for _, repo := range env.Repos {
+func ExecuteEnv(name string) error {
+	for _, repo := range context.Profile.Repositories {
 		fmt.Printf("Setting up environment for repo: %s\n", repo.Name)
 
 		path, err := buildEnvPath(repo.Path)
 		if err != nil {
-			return fmt.Errorf("invalid repo path for env '%s': %w", repo.Name, err)
+			return fmt.Errorf("invalid path for repo '%s': %w", repo.Name, err)
 		}
 
-		err = setEnvVariables(env.Variables, repo.Variables, path)
+		pEnv := context.Profile.getEnv(name)
+		rEnv := repo.getEnv(name)
+
+		err = setEnvVariables(pEnv.Variables, rEnv.Variables, path)
 		if err != nil {
 			return fmt.Errorf("failed to set env variables for repo '%s': %w", repo.Name, err)
 		}
@@ -127,17 +91,18 @@ func buildEnvPath(path string) (string, error) {
 	return filepath, nil
 }
 
-func setEnvVariables(envVars []EnvVar, repoVars []EnvVar, path string) error {
+func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
 		envMap, err := godotenv.Read(path)
 		if err != nil {
 			return err
 		}
 
-		for _, v := range envVars {
+		for _, v := range profVars {
 			envMap[v.Name] = v.Value
 		}
 
 		for _, v := range repoVars {
+			fmt.Printf("Setting variable %s=%s\n", v.Name, v.Value)
 			envMap[v.Name] = v.Value
 		}
 

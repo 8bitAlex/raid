@@ -18,10 +18,10 @@ var Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			env := env.Get()
-			if env.IsZero() {
+			if env == "" {
 				cmd.PrintErrln("No active environment set.")
 			} else {
-				cmd.Println("Active environment:", env.Name)
+				cmd.Println("Active environment:", env)
 			}
 		} else if len(args) == 1 {
 			name := args[0]
