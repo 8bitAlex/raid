@@ -92,24 +92,24 @@ func buildEnvPath(path string) (string, error) {
 }
 
 func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
-		envMap, err := godotenv.Read(path)
-		if err != nil {
-			return err
-		}
+	envMap, err := godotenv.Read(path)
+	if err != nil {
+		return err
+	}
 
-		for _, v := range profVars {
-			envMap[v.Name] = v.Value
-		}
+	for _, v := range profVars {
+		envMap[v.Name] = v.Value
+	}
 
-		for _, v := range repoVars {
-			fmt.Printf("Setting variable %s=%s\n", v.Name, v.Value)
-			envMap[v.Name] = v.Value
-		}
+	for _, v := range repoVars {
+		fmt.Printf("Setting variable %s=%s\n", v.Name, v.Value)
+		envMap[v.Name] = v.Value
+	}
 
-		err = godotenv.Write(envMap, path)
-		if err != nil {
-			return err
-		}
-		return nil
+	err = godotenv.Write(envMap, path)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
