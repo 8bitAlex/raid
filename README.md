@@ -1,5 +1,6 @@
 [![Build and Test](https://github.com/8bitAlex/raid/actions/workflows/build.yml/badge.svg)](https://github.com/8bitAlex/raid/actions/workflows/build.yml)
 [![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
+[![Go Report Card](https://goreportcard.com/badge/github.com/8bitAlex/raid)](https://goreportcard.com/report/github.com/8bitAlex/raid◊)
 
 # Raid - Distributed Development Orchestration
 ![Windows](https://img.shields.io/badge/Windows-Yes-blue?logo=windows)
