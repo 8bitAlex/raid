@@ -1,12 +1,17 @@
-# Raid - Distributed Development Orchestration
 [![Build and Test](https://github.com/8bitAlex/raid/actions/workflows/build.yml/badge.svg)](https://github.com/8bitAlex/raid/actions/workflows/build.yml)
 [![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
+
+# Raid - Distributed Development Orchestration
+![Windows](https://img.shields.io/badge/Windows-Yes-blue?logo=windows)
+![macOS](https://img.shields.io/badge/macOS-Yes-lightgrey?logo=apple)
+![Linux](https://img.shields.io/badge/Linux-Yes-yellow?logo=linux)
+
 
 `Raid` is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
 
 If you have ever pulled a repo (or repos) that require days of configuration just to get a passing build,
 or have onboarded to a new team that has no documentation, or have a folder of scripts to automate your tasks but haven't
-shared them yet, then you are probably a software engineer in need of this. 
+shared them yet, then you are probably in need of this. 
 
 `Raid` handles the pain of error-prone knowledge-dependent tasks and management of your development environment. You no longer need
 to worry about wasted time onboarding new contributors. Tribal knowledge can be codified into the repo itself. And you will
@@ -14,20 +19,12 @@ never miss running that one test ever again.
 
 📖 For a deeper look at the goals and design of raid, see the [design proposal blog post](https://alexsalerno.dev/blog/raid-design-proposal?utm_source=chatgpt.com).
 
-[Getting Started](#getting-started) • [Best Practices](#⚠-best-practices) • [Documentation](#usage--documentation)
-
 ## Key Features
 
-- **Portable YAML Configurations**: Define your development environments, tasks, and dependencies using simple, version-controlled YAML files.
+- **Portable YAML Configurations**: Define your development environments, tasks, and dependencies using simple, version-controlled YAML files. Your configurations live alongside your code, making them easy to share and maintain.
 - **Multiple Profiles**: Easily switch between different project setups or team configurations with isolated profiles.
 - **Automated Task Execution**: Orchestrate shell commands, scripts, and custom tasks across multiple repositories with a single command.
 - **Environment Management**: Define, share, and execute complex development environments to ensure consistency for all contributors.
-
-| Platform | Supported |
-|----------|:---------:|
-| Linux    | ✅        |
-| Mac      | ✅        |
-| Windows  | ✅        |
 
 ## Development
 
@@ -35,12 +32,32 @@ never miss running that one test ever again.
 
 Feedback, issues, and contributions are welcome as the project takes shape.
 
+---
+
+[Getting Started](#getting-started) • [Best Practices](#best-practices) • [Documentation](#usage--documentation)
+
+---
+
 ## Getting Started
 
 ### Installation
 
+#### MacOS
+
 ```bash
-# Installation instructions will be added here
+brew install raid # coming soon
+```
+
+#### Linux
+
+```bash
+# coming soon
+```
+
+#### Windows
+
+```bash
+# coming soon
 ```
 
 ### Configuration
@@ -57,10 +74,15 @@ raid install                           # Clone repos and setup environment
 raid env dev                           # Execute development environment (if configured)
 ```
 
-## ⚠ Best Practices 
+## Best Practices 
 
-- **Store profiles securely:** If your raid profile contains sensitive configuration or secrets, keep it in a secure, private location outside of your public codebase.
-- **Never commit secrets:** Always keep secrets and credentials in private raid profiles. Do not store them in public repositories.
+  ### Store sensitive profiles securely
+
+  If your raid profile contains sensitive configuration or secrets, keep it in a secure, private location outside of your public codebase.
+  
+  ### Never commit secrets
+
+  Always keep secrets and credentials in private raid profiles. Do not store them in public repositories.
 
 ## Usage & Documentation
 
