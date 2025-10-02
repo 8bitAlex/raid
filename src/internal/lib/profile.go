@@ -50,7 +50,7 @@ func SetProfile(name string) error {
 }
 
 func GetProfile() Profile {
-	if(context != nil && !context.Profile.IsZero()) {
+	if context != nil && !context.Profile.IsZero() {
 		return context.Profile
 	}
 	
