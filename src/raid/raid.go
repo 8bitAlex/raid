@@ -37,19 +37,19 @@ func Initialize() {
 	if err := lib.InitConfig(); err != nil {
 		log.Fatalf("Failed to initialize configuration: %v", err)
 	}
-	if err := Compile(); err != nil {
+	if err := Load(); err != nil {
 		log.Fatalf("Failed to compile configurations: %v", err)
 	}
 }
 
-// Compile the raid configurations for execution. Uses cached results if available.
-func Compile() error {
-	return lib.Compile()
+// Load the raid configurations for execution. Uses cached results if available.
+func Load() error {
+	return lib.Load()
 }
 
-// Force compile the raid configurations for execution. Ignores cache.
-func ForceCompile() error {
-	return lib.ForceCompile()
+// Force load the raid configurations for execution. Ignores cache.
+func ForceLoad() error {
+	return lib.ForceLoad()
 }
 
 // Install the active profile

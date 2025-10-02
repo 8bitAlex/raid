@@ -1,126 +1,115 @@
 package lib
 
-// import (
-// 	"fmt"
-// 	"os"
-// 	"path/filepath"
-// 	"strings"
-// )
+import (
+	"fmt"
 
-// // EnvironmentManager handles environment execution
-// type EnvironmentManager struct {
-// 	taskRunner *TaskRunner
-// }
+	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
+)
 
-// // NewEnvironmentManager creates a new environment manager
-// func NewEnvironmentManager(concurrency int) *EnvironmentManager {
-// 	return &EnvironmentManager{
-// 		taskRunner: NewTaskRunner(concurrency),
-// 	}
-// }
+const (
+	ACTIVE_ENV_KEY = "env"
+)
 
-// // ExecuteEnvironment executes an environment by name
-// func (em *EnvironmentManager) ExecuteEnvironment(envName string) error {
-// 	// Get the active profile
-// 	profile, err := GetActiveProfileContent()
-// 	if err != nil {
-// 		return fmt.Errorf("failed to get active profile: %w", err)
-// 	}
+type Env struct {
+	Name      string 	`json:"name"`
+	Variables []EnvVar 	`json:"variables"`
+}
 
-// 	fmt.Printf("Executing environment '%s' for profile '%s'\n", envName, profile.Name)
+func (e Env) IsZero() bool {
+	return e.Name == ""
+}
 
-// 	// Find and execute environment from profile first
-// 	profileEnv, found := em.findEnvironmentInProfile(profile, envName)
-// 	if found {
-// 		fmt.Println("Found environment in profile, executing...")
-// 		if err := em.executeEnvironment(profileEnv); err != nil {
-// 			return fmt.Errorf("failed to execute profile environment: %w", err)
-// 		}
-// 	}
+type EnvVar struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
 
-// 	// Find and execute environments from repositories
-// 	for _, repo := range profile.Repositories {
-// 		fmt.Printf("Checking repository '%s' for environment '%s'\n", repo.Name, envName)
+func SetEnv(name string) error {
+	if name == "" || !ContainsEnv(name) {
+		return fmt.Errorf("environment '%s' not found", name)
+	}
 
-// 		repoEnv, found := em.findEnvironmentInRepository(repo, envName)
-// 		if found {
-// 			fmt.Printf("Found environment in repository '%s', executing...\n", repo.Name)
-// 			if err := em.executeEnvironment(repoEnv); err != nil {
-// 				return fmt.Errorf("failed to execute repository environment '%s': %w", repo.Name, err)
-// 			}
-// 		}
-// 	}
+	Set(ACTIVE_ENV_KEY, name)
+	return nil
+}
 
-// 	return nil
-// }
+func GetEnv() string {
+	return viper.GetString(ACTIVE_ENV_KEY)
+}
 
-// // findEnvironmentInProfile finds an environment in the profile
-// func (em *EnvironmentManager) findEnvironmentInProfile(profile *ProfileContent, envName string) (*Environment, bool) {
-// 	for _, env := range profile.Environments {
-// 		if strings.EqualFold(env.Name, envName) {
-// 			return &env, true
-// 		}
-// 	}
-// 	return nil, false
-// }
+func ListEnvs() []string {
+	if context == nil || len(context.Profile.Environments) == 0 {
+		return []string{}
+	}
 
-// // findEnvironmentInRepository finds an environment in a repository
-// func (em *EnvironmentManager) findEnvironmentInRepository(repo Repository, envName string) (*Environment, bool) {
-// 	// Read the repository configuration file
-// 	repoConfigPath := filepath.Join(repo.Path, "raid.yaml")
-// 	if _, err := os.Stat(repoConfigPath); os.IsNotExist(err) {
-// 		// Try raid.yml
-// 		repoConfigPath = filepath.Join(repo.Path, "raid.yml")
-// 		if _, err := os.Stat(repoConfigPath); os.IsNotExist(err) {
-// 			// Try raid.json
-// 			repoConfigPath = filepath.Join(repo.Path, "raid.json")
-// 			if _, err := os.Stat(repoConfigPath); os.IsNotExist(err) {
-// 				return nil, false
-// 			}
-// 		}
-// 	}
+	names := make([]string, 0, len(context.Profile.Environments))
+	for _, env := range context.Profile.Environments {
+		names = append(names, env.Name)
+	}
+	return names
+}
 
-// 	// Read and parse the repository configuration
-// 	repoProfile, err := ReadProfileFile(repoConfigPath)
-// 	if err != nil {
-// 		fmt.Printf("Warning: failed to read repository config %s: %v\n", repoConfigPath, err)
-// 		return nil, false
-// 	}
+func ContainsEnv(name string) bool {
+	for _, envName := range ListEnvs() {
+		if envName == name {
+			return true
+		}
+	}
+	return false
+}
 
-// 	// Look for the environment in the repository
-// 	for _, env := range repoProfile.Environments {
-// 		if strings.EqualFold(env.Name, envName) {
-// 			return &env, true
-// 		}
-// 	}
+func ExecuteEnv(name string) error {
+	for _, repo := range context.Profile.Repositories {
+		fmt.Printf("Setting up environment for repo: %s\n", repo.Name)
 
-// 	return nil, false
-// }
+		path, err := buildEnvPath(repo.Path)
+		if err != nil {
+			return fmt.Errorf("invalid path for repo '%s': %w", repo.Name, err)
+		}
 
-// // executeEnvironment executes an environment
-// func (em *EnvironmentManager) executeEnvironment(env *Environment) error {
-// 	fmt.Printf("Executing environment '%s'\n", env.Name)
+		pEnv := context.Profile.getEnv(name)
+		rEnv := repo.getEnv(name)
 
-// 	// Set environment variables first
-// 	if err := em.setEnvironmentVariables(env.Variables); err != nil {
-// 		return fmt.Errorf("failed to set environment variables: %w", err)
-// 	}
+		err = setEnvVariables(pEnv.Variables, rEnv.Variables, path)
+		if err != nil {
+			return fmt.Errorf("failed to set env variables for repo '%s': %w", repo.Name, err)
+		}
+	}
+	return nil
+}
 
-// 	// Execute tasks
-// 	if err := em.taskRunner.ExecuteTasks(env.Tasks); err != nil {
-// 		return fmt.Errorf("failed to execute tasks: %w", err)
-// 	}
+func buildEnvPath(path string) (string, error) {
+	filepath := sys.ExpandPath(path) + sys.Sep + ".env"
+	// create file if it does not exist
+	file, err := sys.CreateFile(filepath)
+	if err != nil {
+		return "", err
+	}
+	file.Close()
+	return filepath, nil
+}
 
-// 	return nil
-// }
+func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
+	envMap, err := godotenv.Read(path)
+	if err != nil {
+		return err
+	}
 
-// // setEnvironmentVariables sets the environment variables globally
-// func (em *EnvironmentManager) setEnvironmentVariables(vars []EnvironmentVariable) error {
-// 	for _, v := range vars {
-// 		fmt.Printf("Setting environment variable: %s=%s\n", v.Name, v.Value)
-// 		if err := os.Setenv(v.Name, v.Value); err != nil {
-// 			return fmt.Errorf("failed to set environment variable %s: %w", v.Name, err)
-// 		}
-// 	}
-// 	return nil
-// }
+	for _, v := range profVars {
+		envMap[v.Name] = v.Value
+	}
+
+	for _, v := range repoVars {
+		fmt.Printf("Setting variable %s=%s\n", v.Name, v.Value)
+		envMap[v.Name] = v.Value
+	}
+
+	err = godotenv.Write(envMap, path)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+

@@ -1,6 +1,4 @@
-/*
-Manage raid profiles.
-*/
+// Manage raid profiles.
 package profile
 
 import "github.com/8bitalex/raid/src/internal/lib"
@@ -13,8 +11,8 @@ func Get() Profile {
 }
 
 // Returns a slice of all added profiles
-func GetAll() []Profile {
-	return lib.GetProfiles()
+func ListAll() []Profile {
+	return lib.ListProfiles()
 }
 
 // Adds a profile to the available profile list

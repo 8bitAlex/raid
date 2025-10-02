@@ -15,18 +15,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const ACTIVE_PROFILE_KEY = "profile"
-const ALL_PROFILES_KEY = "profiles"
-const SCHEMA_PATH = "schemas/raid-profile.schema.json"
+const (
+	ACTIVE_PROFILE_KEY   = "profile"
+	ALL_PROFILES_KEY     = "profiles"
+	PROFILE_SCHEMA_PATH  = "schemas/raid-profile.schema.json"
+)
 
 type Profile struct {
 	Name         string `json:"name"`
 	Path         string `json:"path"`
 	Repositories []Repo `json:"repositories"`
+	Environments []Env  `json:"environments"`
 }
 
 func (p Profile) IsZero() bool {
 	return p.Name == "" || p.Path == ""
+}
+
+func (p Profile) getEnv(name string) Env {
+	for _, env := range p.Environments {
+		if env.Name == name {
+			return env
+		}
+	}
+	return Env{}
 }
 
 func SetProfile(name string) error {
@@ -38,6 +50,10 @@ func SetProfile(name string) error {
 }
 
 func GetProfile() Profile {
+	if context != nil && !context.Profile.IsZero() {
+		return context.Profile
+	}
+	
 	name := viper.GetString(ACTIVE_PROFILE_KEY)
 	paths := getProfilePaths()
 	return Profile{
@@ -62,7 +78,7 @@ func AddProfiles(profiles []Profile) {
 	}
 }
 
-func GetProfiles() []Profile {
+func ListProfiles() []Profile {
 	profilesMap := getProfilePaths()
 	results := make([]Profile, 0, len(profilesMap))
 	for name, path := range profilesMap {
@@ -195,7 +211,7 @@ func ValidateProfile(path string) error {
 	}
 
 	c := jsonschema.NewCompiler()
-	sch, err := c.Compile(SCHEMA_PATH)
+	sch, err := c.Compile(PROFILE_SCHEMA_PATH)
 	if err != nil {
 		return err
 	}
@@ -237,7 +253,7 @@ func yamlToJSON(file io.Reader) ([]byte, error) {
 	return json.Marshal(data)
 }
 
-func BuildProfile(profile Profile) (Profile, error) {
+func buildProfile(profile Profile) (Profile, error) {
 	if profile.IsZero() {
 		return Profile{}, fmt.Errorf("invalid profile: %v", profile)
 	}
@@ -253,87 +269,3 @@ func BuildProfile(profile Profile) (Profile, error) {
 	}
 	return profile, nil
 }
-
-// // ProfileContent represents the content of a profile file
-// type ProfileContent struct {
-// 	Name         string        `json:"name" yaml:"name"`
-// 	Repositories []Repository  `json:"repositories" yaml:"repositories"`
-// 	Environments []Environment `json:"environments" yaml:"environments"`
-// }
-
-// // Repository represents a repository in a profile
-// type Repository struct {
-// 	Name string `json:"name" yaml:"name"`
-// 	Path string `json:"path" yaml:"path"`
-// 	URL  string `json:"url" yaml:"url"`
-// }
-
-// // Environment represents an environment configuration
-// type Environment struct {
-// 	Name      string                `json:"name" yaml:"name"`
-// 	Tasks     []Task                `json:"tasks" yaml:"tasks"`
-// 	Variables []EnvironmentVariable `json:"variables" yaml:"variables"`
-// }
-
-// // Task represents a task to be executed
-// type Task struct {
-// 	Type string `json:"type" yaml:"type"`
-// 	Cmd  string `json:"cmd,omitempty" yaml:"cmd,omitempty"`
-// 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
-// }
-
-// // EnvironmentVariable represents an environment variable
-// type EnvironmentVariable struct {
-// 	Name  string `json:"name" yaml:"name"`
-// 	Value string `json:"value" yaml:"value"`
-// }
-
-// // GetActiveProfileContent reads and parses the active profile file
-// func GetActiveProfileContent() (*ProfileContent, error) {
-// 	activeProfile := GetProfile()
-// 	if activeProfile == "" {
-// 		return nil, fmt.Errorf("no active profile set. Use 'raid profile use <profile-name>' to set an active profile")
-// 	}
-
-// 	profilePath, err := GetProfilePath(activeProfile)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to get profile path for '%s': %w", activeProfile, err)
-// 	}
-
-// 	return ReadProfileFile(profilePath)
-// }
-
-// // ReadProfileFile reads and parses a profile file
-// func ReadProfileFile(filePath string) (*ProfileContent, error) {
-// 	// Read the profile file
-// 	profileData, err := os.ReadFile(filePath)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to read profile file: %w", err)
-// 	}
-
-// 	// Check file extension to determine format
-// 	ext := strings.ToLower(filepath.Ext(filePath))
-// 	var profile ProfileContent
-
-// 	switch ext {
-// 	case ".yaml", ".yml":
-// 		// Parse YAML
-// 		if err := yaml.Unmarshal(profileData, &profile); err != nil {
-// 			return nil, fmt.Errorf("invalid YAML format: %w", err)
-// 		}
-// 	case ".json":
-// 		// Parse JSON
-// 		if err := json.Unmarshal(profileData, &profile); err != nil {
-// 			return nil, fmt.Errorf("invalid JSON format: %w", err)
-// 		}
-// 	default:
-// 		return nil, fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
-// 	}
-
-// 	// Validate required fields
-// 	if profile.Name == "" {
-// 		return nil, fmt.Errorf("profile file is missing required 'name' field")
-// 	}
-
-// 	return &profile, nil
-// }

@@ -12,24 +12,27 @@ const (
 
 type Context struct {
 	Profile Profile
+	Env     string
 }
 
 var context *Context
 
-func Compile() error {
+func Load() error {
 	if context == nil {
-		return ForceCompile()
+		return ForceLoad()
 	}
 	return nil
 }
 
-func ForceCompile() error {
-	profile, err := BuildProfile(GetProfile())
+func ForceLoad() error {
+	profile, err := buildProfile(GetProfile())
 	if err != nil {
 		return err
 	}
+
 	context = &Context{
 		Profile: profile,
+		Env:     GetEnv(),
 	}
 	return nil
 }

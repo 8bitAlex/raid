@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-raid
+/raid
 
 # Test binary, built with `go test -c`
 *.test

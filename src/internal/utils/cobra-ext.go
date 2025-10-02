@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -17,18 +15,6 @@ func MatchOne(pargs ...cobra.PositionalArgs) cobra.PositionalArgs {
 				errors = append(errors, err)
 			}
 		}
-		return mergeErr(errors)
+		return MergeErr(errors)
 	}
-}
-
-func mergeErr(errs []error) error {
-	var result string
-	for _, err := range errs {
-		if len(result) == 0 {
-			result = err.Error()
-		} else {
-			result = result + ", " + err.Error()
-		}
-	}
-	return fmt.Errorf("%s", result)
 }
