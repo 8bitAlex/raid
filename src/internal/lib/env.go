@@ -15,6 +15,7 @@ const (
 type Env struct {
 	Name      string 	`json:"name"`
 	Variables []EnvVar 	`json:"variables"`
+	Tasks     []Task 	`json:"tasks"`
 }
 
 func (e Env) IsZero() bool {
@@ -61,6 +62,20 @@ func ContainsEnv(name string) bool {
 }
 
 func ExecuteEnv(name string) error {
+	err := setEnvVariablesForRepos(name)
+	if err != nil {
+		return fmt.Errorf("failed to set env variables: %w", err)
+	}
+
+	err = runTasksForEnv(name)
+	if err != nil {
+		return fmt.Errorf("failed to run env tasks: %w", err)
+	}
+
+	return nil
+}
+
+func setEnvVariablesForRepos(name string) error {
 	for _, repo := range context.Profile.Repositories {
 		fmt.Printf("Setting up environment for repo: %s\n", repo.Name)
 
@@ -109,6 +124,21 @@ func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
 	err = godotenv.Write(envMap, path)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func runTasksForEnv(name string) error {
+	env := context.Profile.getEnv(name)
+	if env.IsZero() || len(env.Tasks) == 0 {
+		return nil
+	}
+
+	for _, task := range env.Tasks {
+		err := ExecuteTask(task)
+		if err != nil {
+			return fmt.Errorf("failed to execute task '%s': %w", task.Cmd, err)
+		}
 	}
 	return nil
 }

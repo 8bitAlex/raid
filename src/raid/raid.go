@@ -40,6 +40,7 @@ func Initialize() {
 	if err := Load(); err != nil {
 		log.Fatalf("Failed to compile configurations: %v", err)
 	}
+	// todo load env
 }
 
 // Load the raid configurations for execution. Uses cached results if available.
