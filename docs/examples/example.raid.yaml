@@ -15,9 +15,12 @@ environments:
       - type: Shell
         cmd: echo "Hello, world! - From profile"
       - type: Shell
-        cmd: ls
+        literal: false
+        cmd: echo $NODE_ENV
       - type: Script
         path: ~/Developer/raid/docs/examples/hello.sh
+        runner: /bin/bash
+        concurrent: false
     variables:
       - name: NODE_ENV
         value: development

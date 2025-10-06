@@ -9,26 +9,6 @@ import (
 	"github.com/8bitalex/raid/src/internal/sys"
 )
 
-type Task struct {
-	Type TaskType `json:"type"`
-	Cmd  string   `json:"cmd"`
-	Path string   `json:"path"`
-}
-
-type TaskType string
-const (
-	Shell  TaskType = "shell"
-	Script TaskType = "script"
-)
-
-func (t Task) IsZero() bool {
-	return t.Cmd == "" && t.Path == "" && t.Type == ""
-}
-
-func (t TaskType) ToLower() TaskType {
-	return TaskType(strings.ToLower(string(t)))
-}
-
 func ExecuteTask(task Task) error {
 	if task.IsZero() {
 		return nil
@@ -45,12 +25,17 @@ func ExecuteTask(task Task) error {
 }
 
 func execShell(task Task) error {
+	if !task.Literal {
+		task = task.Expand()
+	}
+	
 	args := strings.Split(task.Cmd, " ")
-	cmd := exec.Command(args[0], args[1:]...)
+	if len(args) == 0 {
+		return fmt.Errorf("no command provided for task")
+	}
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	cmd := exec.Command(args[0], args[1:]...)
+	setCmdOutput(cmd)
 
 	err := cmd.Run()
 	if err != nil {
@@ -61,20 +46,31 @@ func execShell(task Task) error {
 }
 
 func execScript(task Task) error {
-	path := sys.ExpandPath(task.Path)
-	if !sys.FileExists(path) {
-		return fmt.Errorf("script file does not exist: %s", path)
+	task = task.Expand()
+	
+	if !sys.FileExists(task.Path) {
+		return fmt.Errorf("file does not exist: %s", task.Path)
 	}
 
-	cmd := exec.Command(path)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	var cmd *exec.Cmd
+	if task.Runner != "" {
+		cmd = exec.Command(task.Runner, task.Path)
+	} else {
+		cmd = exec.Command(task.Path)
+	}
+	
+	setCmdOutput(cmd)
 
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to execute script '%s': %w", path, err)
+		return fmt.Errorf("failed to execute script '%s': %w", task.Path, err)
 	}
 
 	return nil
+}
+
+func setCmdOutput(cmd *exec.Cmd) {
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 }

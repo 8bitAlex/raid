@@ -18,14 +18,19 @@
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["Shell"]
-                            },
-                            "cmd": {
-                                "type": "string",
-                                "description": "Shell command to execute"
+                                "const": "Shell"
                             },
                             "concurrent": {
                                 "ref": "#/concurrent"
+                            },
+                            "cmd": {
+                                "type": "string",
+                                "description": "Command to execute"
+                            },
+                            "literal": {
+                                "type": "boolean",
+                                "description": "Whether to execute the command as a literal string (without shell interpretation)",
+                                "default": false
                             }
                         },
                         "required": ["type", "cmd"],
@@ -36,14 +41,19 @@
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["Script"]
-                            },
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the script file"
+                                "const": "Script"
                             },
                             "concurrent": {
                                 "ref": "#/concurrent"
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "Absolute path to the script file"
+                            },
+                            "runner": {
+                                "type": "string",
+                                "enum": ["/bin/bash", "/bin/sh", "/bin/zsh", "python", "python2", "python3", "node", "powershell"],
+                                "description": "Optional runner to execute the script (e.g., bash, python)"
                             }
                         },
                         "required": ["type", "path"],

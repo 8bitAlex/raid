@@ -137,7 +137,7 @@ func runTasksForEnv(name string) error {
 	for _, task := range env.Tasks {
 		err := ExecuteTask(task)
 		if err != nil {
-			return fmt.Errorf("failed to execute task '%s': %w", task.Cmd, err)
+			return fmt.Errorf("failed to execute task '%s': %w", task.Type, err)
 		}
 	}
 	return nil
