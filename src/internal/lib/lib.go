@@ -38,6 +38,8 @@ func ForceLoad() error {
 }
 
 func Install(maxThreads int) error {
+
+	// todo migrate to task runner
 	profile := context.Profile
 	if profile.IsZero() {
 		return fmt.Errorf("profile not found")

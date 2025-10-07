@@ -14,13 +14,17 @@ environments:
     tasks:
       - type: Shell
         cmd: echo "Hello, world! - From profile"
+        shell: bash
       - type: Shell
         literal: false
         cmd: echo $NODE_ENV
       - type: Script
         path: ~/Developer/raid/docs/examples/hello.sh
-        runner: /bin/bash
+        runner: bash
         concurrent: false
+      - type: Shell
+        cmd: touch ~/testfile.txt && echo "Created testfile.txt"
+        concurrent: true
     variables:
       - name: NODE_ENV
         value: development

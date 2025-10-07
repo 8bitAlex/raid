@@ -13,9 +13,9 @@ const (
 )
 
 type Env struct {
-	Name      string 	`json:"name"`
-	Variables []EnvVar 	`json:"variables"`
-	Tasks     []Task 	`json:"tasks"`
+	Name      string   `json:"name"`
+	Variables []EnvVar `json:"variables"`
+	Tasks     []Task   `json:"tasks"`
 }
 
 func (e Env) IsZero() bool {
@@ -134,12 +134,9 @@ func runTasksForEnv(name string) error {
 		return nil
 	}
 
-	for _, task := range env.Tasks {
-		err := ExecuteTask(task)
-		if err != nil {
-			return fmt.Errorf("failed to execute task '%s': %w", task.Type, err)
-		}
+	err := ExecuteTasks(env.Tasks)
+	if err != nil {
+		return err
 	}
 	return nil
 }
-
