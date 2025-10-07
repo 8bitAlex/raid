@@ -15,6 +15,7 @@ Related packages:
 package raid
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/8bitalex/raid/src/internal/lib"
@@ -40,7 +41,9 @@ func Initialize() {
 	if err := Load(); err != nil {
 		log.Fatalf("Failed to compile configurations: %v", err)
 	}
-	// todo load env
+	if err := lib.LoadEnv(); err != nil {
+		fmt.Printf("Failed to load environment variables: %v", err)
+	}
 }
 
 // Load the raid configurations for execution. Uses cached results if available.

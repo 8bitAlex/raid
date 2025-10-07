@@ -6,6 +6,7 @@ import (
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
+	"github.com/thoas/go-funk"
 )
 
 const (
@@ -137,6 +138,23 @@ func runTasksForEnv(name string) error {
 	err := ExecuteTasks(env.Tasks)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func LoadEnv() error {
+	if context == nil {
+		return fmt.Errorf("context not initialized")
+	}
+
+	repos := context.Profile.Repositories
+	paths := funk.Map(repos, func(r Repo) string {
+		return sys.ExpandPath(r.Path) + sys.Sep + ".env"
+	}).([]string)
+
+	err := godotenv.Load(paths...)
+	if err != nil {
+		return fmt.Errorf("failed to load env files: %w", err)
 	}
 	return nil
 }
