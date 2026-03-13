@@ -1,6 +1,9 @@
 package lib
 
 import (
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -346,6 +349,290 @@ func TestExecuteTasks_errorMentionsTaskType(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "shell") {
 		t.Errorf("error %q should mention the task type", err.Error())
+	}
+}
+
+// --- HTTP tasks ---
+
+func TestExecuteTask_http(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("downloaded content"))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "output.txt")
+
+	tests := []struct {
+		name    string
+		task    Task
+		wantErr bool
+	}{
+		{
+			name:    "successful download writes file",
+			task:    Task{Type: HTTP, URL: srv.URL, Dest: dest},
+			wantErr: false,
+		},
+		{
+			name:    "missing url",
+			task:    Task{Type: HTTP, Dest: dest},
+			wantErr: true,
+		},
+		{
+			name:    "missing dest",
+			task:    Task{Type: HTTP, URL: srv.URL},
+			wantErr: true,
+		},
+		{
+			name:    "unreachable url",
+			task:    Task{Type: HTTP, URL: "http://localhost:0/no", Dest: dest},
+			wantErr: true,
+		},
+		{
+			name:    "type is case-insensitive",
+			task:    Task{Type: "HTTP", URL: srv.URL, Dest: dest},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteTask(tt.task)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExecuteTask_http_writesCorrectContent(t *testing.T) {
+	const body = "hello from server"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.txt")
+	if err := ExecuteTask(Task{Type: HTTP, URL: srv.URL, Dest: dest}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+	if string(got) != body {
+		t.Errorf("file content = %q, want %q", got, body)
+	}
+}
+
+func TestExecuteTask_http_createsDestDirectory(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "a", "b", "c", "out.txt")
+	if err := ExecuteTask(Task{Type: HTTP, URL: srv.URL, Dest: dest}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Errorf("expected dest file to exist: %v", err)
+	}
+}
+
+func TestExecuteTask_http_nonSuccessStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.txt")
+	err := ExecuteTask(Task{Type: HTTP, URL: srv.URL, Dest: dest})
+	if err == nil {
+		t.Fatal("expected error for non-2xx status, got nil")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("error %q should mention the status code", err.Error())
+	}
+}
+
+// --- Wait tasks ---
+
+func TestExecuteTask_wait_http(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	tests := []struct {
+		name    string
+		task    Task
+		wantErr bool
+	}{
+		{
+			name:    "http url responds immediately",
+			task:    Task{Type: Wait, URL: srv.URL, Timeout: "5s"},
+			wantErr: false,
+		},
+		{
+			name:    "default timeout used when not specified",
+			task:    Task{Type: Wait, URL: srv.URL},
+			wantErr: false,
+		},
+		{
+			name:    "missing url",
+			task:    Task{Type: Wait},
+			wantErr: true,
+		},
+		{
+			name:    "invalid timeout",
+			task:    Task{Type: Wait, URL: srv.URL, Timeout: "not-a-duration"},
+			wantErr: true,
+		},
+		{
+			name:    "type is case-insensitive",
+			task:    Task{Type: "WAIT", URL: srv.URL, Timeout: "5s"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteTask(tt.task)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExecuteTask_wait_tcp(t *testing.T) {
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	task := Task{Type: Wait, URL: ln.Addr().String(), Timeout: "5s"}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("unexpected error waiting for TCP: %v", err)
+	}
+}
+
+func TestExecuteTask_wait_timeout(t *testing.T) {
+	// Nothing is listening — must time out.
+	task := Task{Type: Wait, URL: "localhost:19234", Timeout: "1s"}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("error %q should mention timeout", err.Error())
+	}
+}
+
+// --- Template tasks ---
+
+func TestExecuteTask_template(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "tmpl.txt")
+	dest := filepath.Join(dir, "out.txt")
+	os.WriteFile(src, []byte("hello $TMPL_TEST_VAR"), 0644)
+
+	tests := []struct {
+		name    string
+		task    Task
+		wantErr bool
+	}{
+		{
+			name:    "successful render",
+			task:    Task{Type: Template, Src: src, Dest: dest},
+			wantErr: false,
+		},
+		{
+			name:    "missing src",
+			task:    Task{Type: Template, Dest: dest},
+			wantErr: true,
+		},
+		{
+			name:    "missing dest",
+			task:    Task{Type: Template, Src: src},
+			wantErr: true,
+		},
+		{
+			name:    "src file does not exist",
+			task:    Task{Type: Template, Src: "/nonexistent/tmpl.txt", Dest: dest},
+			wantErr: true,
+		},
+		{
+			name:    "type is case-insensitive",
+			task:    Task{Type: "TEMPLATE", Src: src, Dest: dest},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteTask(tt.task)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExecuteTask_template_expandsEnvVars(t *testing.T) {
+	os.Setenv("TMPL_TEST_VAR", "world")
+	defer os.Unsetenv("TMPL_TEST_VAR")
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "tmpl.txt")
+	dest := filepath.Join(dir, "out.txt")
+	os.WriteFile(src, []byte("hello $TMPL_TEST_VAR and ${TMPL_TEST_VAR}"), 0644)
+
+	if err := ExecuteTask(Task{Type: Template, Src: src, Dest: dest}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+	const want = "hello world and world"
+	if string(got) != want {
+		t.Errorf("rendered content = %q, want %q", got, want)
+	}
+}
+
+func TestExecuteTask_template_createsDestDirectory(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "tmpl.txt")
+	dest := filepath.Join(dir, "a", "b", "out.txt")
+	os.WriteFile(src, []byte("content"), 0644)
+
+	if err := ExecuteTask(Task{Type: Template, Src: src, Dest: dest}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Errorf("expected dest file to exist: %v", err)
+	}
+}
+
+func TestExecuteTask_template_unsetVarExpandsToEmpty(t *testing.T) {
+	os.Unsetenv("TMPL_UNSET_VAR")
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "tmpl.txt")
+	dest := filepath.Join(dir, "out.txt")
+	os.WriteFile(src, []byte("value=$TMPL_UNSET_VAR"), 0644)
+
+	if err := ExecuteTask(Task{Type: Template, Src: src, Dest: dest}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, _ := os.ReadFile(dest)
+	if string(got) != "value=" {
+		t.Errorf("rendered content = %q, want %q", got, "value=")
 	}
 }
 

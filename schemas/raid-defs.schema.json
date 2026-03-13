@@ -63,6 +63,72 @@
                         },
                         "required": ["type", "path"],
                         "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "const": "HTTP"
+                            },
+                            "concurrent": {
+                                "ref": "#/concurrent"
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "URL to download from"
+                            },
+                            "dest": {
+                                "type": "string",
+                                "description": "Local path to write the downloaded file to"
+                            }
+                        },
+                        "required": ["type", "url", "dest"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "const": "Wait"
+                            },
+                            "concurrent": {
+                                "ref": "#/concurrent"
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "HTTP(S) URL or TCP host:port to poll until ready"
+                            },
+                            "timeout": {
+                                "type": "string",
+                                "description": "How long to wait before failing (e.g. 30s, 1m). Defaults to 30s."
+                            }
+                        },
+                        "required": ["type", "url"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "const": "Template"
+                            },
+                            "concurrent": {
+                                "ref": "#/concurrent"
+                            },
+                            "src": {
+                                "type": "string",
+                                "description": "Path to the template file. Supports $VAR and ${VAR} substitution from the current environment."
+                            },
+                            "dest": {
+                                "type": "string",
+                                "description": "Path to write the rendered output file to"
+                            }
+                        },
+                        "required": ["type", "src", "dest"],
+                        "additionalProperties": false
                     }
                 ]
             }
