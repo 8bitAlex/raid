@@ -17,6 +17,7 @@ type Repo struct {
 	Name         string    `json:"name"`
 	Path         string    `json:"path"`
 	URL          string    `json:"url"`
+	Branch       string    `json:"branch"`
 	Environments []Env     `json:"environments"`
 	Install      OnInstall `json:"install"`
 	Commands     []Command `json:"commands"`
@@ -79,7 +80,7 @@ func CloneRepository(repo Repo) error {
 		return fmt.Errorf("failed to create directory '%s': %w", path, err)
 	}
 
-	if err := clone(path, repo.URL); err != nil {
+	if err := clone(path, repo.URL, repo.Branch); err != nil {
 		return fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
 	}
 
@@ -96,8 +97,12 @@ func isGitInstalled() bool {
 	return cmd.Run() == nil
 }
 
-func clone(path string, url string) error {
-	cmd := exec.Command("git", "clone", url, path)
+func clone(path string, url string, branch string) error {
+	args := []string{"clone", url, path}
+	if branch != "" {
+		args = append(args, "--branch", branch)
+	}
+	cmd := exec.Command("git", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

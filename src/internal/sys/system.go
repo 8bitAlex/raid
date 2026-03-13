@@ -43,12 +43,15 @@ func CreateFile(filePath string) (*os.File, error) {
 }
 
 // FileExists reports whether the file or directory at path exists.
+// Permission errors are treated as the path existing to avoid silently
+// overwriting or recreating inaccessible files.
 func FileExists(path string) bool {
 	path = ExpandPath(path)
-	if _, err := os.Stat(path); err != nil {
-		return false
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
 	}
-	return true
+	return os.IsPermission(err)
 }
 
 // Expand expands environment variables and home directory references in each whitespace-delimited

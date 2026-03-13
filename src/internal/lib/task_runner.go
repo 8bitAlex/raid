@@ -222,7 +222,8 @@ func execHTTP(task Task) error {
 		return fmt.Errorf("dest is required for HTTP task")
 	}
 
-	resp, err := http.Get(task.URL)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(task.URL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch '%s': %w", task.URL, err)
 	}
@@ -265,7 +266,7 @@ func execWait(task Task) error {
 		timeout = d
 	}
 
-	fmt.Printf("Waiting for %s (timeout: %s)...\n", task.URL, timeout)
+	fmt.Fprintf(commandStdout, "Waiting for %s (timeout: %s)...\n", task.URL, timeout)
 
 	check := checkHTTP
 	if !strings.HasPrefix(task.URL, "http://") && !strings.HasPrefix(task.URL, "https://") {
@@ -416,7 +417,7 @@ func execPrompt(task Task) error {
 	if message == "" {
 		message = fmt.Sprintf("Enter value for %s:", task.Var)
 	}
-	fmt.Print(message + " ")
+	fmt.Fprint(commandStdout, message+" ")
 
 	reader := bufio.NewReader(os.Stdin)
 	value, err := reader.ReadString('\n')
@@ -438,7 +439,7 @@ func execConfirm(task Task) error {
 	if message == "" {
 		message = "Continue?"
 	}
-	fmt.Print(message + " [y/N] ")
+	fmt.Fprint(commandStdout, message+" [y/N] ")
 
 	reader := bufio.NewReader(os.Stdin)
 	answer, err := reader.ReadString('\n')
@@ -483,12 +484,12 @@ func execPrint(task Task) error {
 
 	if task.Color != "" {
 		if code, ok := colorCodes[strings.ToLower(task.Color)]; ok {
-			fmt.Printf("%s%s%s\n", code, msg, colorCodes["reset"])
+			fmt.Fprintf(commandStdout, "%s%s%s\n", code, msg, colorCodes["reset"])
 			return nil
 		}
 	}
 
-	fmt.Println(msg)
+	fmt.Fprintln(commandStdout, msg)
 	return nil
 }
 
@@ -522,7 +523,7 @@ func execRetry(task Task) error {
 	var lastErr error
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			fmt.Printf("Retrying... (attempt %d/%d)\n", i+1, attempts)
+			fmt.Fprintf(commandStdout, "Retrying... (attempt %d/%d)\n", i+1, attempts)
 			time.Sleep(delay)
 		}
 		if err := ExecuteTasks(tasks); err != nil {

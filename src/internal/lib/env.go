@@ -69,6 +69,9 @@ func ContainsEnv(name string) bool {
 
 // ExecuteEnv writes environment variables to each repo's .env file and runs the environment's tasks.
 func ExecuteEnv(name string) error {
+	if context == nil {
+		return fmt.Errorf("raid context is not initialized")
+	}
 	if err := setEnvVariablesForRepos(name); err != nil {
 		return fmt.Errorf("failed to set env variables: %w", err)
 	}
