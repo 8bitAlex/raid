@@ -381,3 +381,43 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 		t.Fatal("Install() expected error from failing repo install task")
 	}
 }
+
+func TestForceLoad_mergesRepoCommands(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "myrepo")
+	os.MkdirAll(filepath.Join(repoDir, ".git"), 0755)
+
+	// repo raid.yaml defines a command "repo-cmd" alongside the required fields.
+	repoYAML := "name: myrepo\nbranch: main\ncommands:\n  - name: repo-cmd\n    tasks:\n      - type: Shell\n        cmd: exit 0\n"
+	os.WriteFile(filepath.Join(repoDir, RaidConfigFileName), []byte(repoYAML), 0644)
+
+	profileContent := "name: mergetest\nrepositories:\n  - name: myrepo\n    path: " + repoDir + "\n    url: http://example.com/repo.git\ncommands:\n  - name: profile-cmd\n    tasks:\n      - type: Shell\n        cmd: exit 0\n"
+	profilePath := filepath.Join(dir, "profile.yaml")
+	os.WriteFile(profilePath, []byte(profileContent), 0644)
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	AddProfile(Profile{Name: "mergetest", Path: profilePath})
+	SetProfile("mergetest")
+
+	if err := ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad() error: %v", err)
+	}
+
+	cmds := GetCommands()
+	names := make(map[string]bool, len(cmds))
+	for _, c := range cmds {
+		names[c.Name] = true
+	}
+	if !names["profile-cmd"] {
+		t.Error("GetCommands() missing 'profile-cmd' from profile")
+	}
+	if !names["repo-cmd"] {
+		t.Error("GetCommands() missing 'repo-cmd' merged from repo")
+	}
+}

@@ -57,6 +57,7 @@ func buildRepo(repo *Repo) error {
 
 	repo.Environments = append(repo.Environments, repoConfig.Environments...)
 	repo.Install.Tasks = append(repo.Install.Tasks, repoConfig.Install.Tasks...)
+	repo.Commands = append(repo.Commands, repoConfig.Commands...)
 
 	return nil
 }
