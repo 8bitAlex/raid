@@ -29,6 +29,10 @@
                                 "type": "boolean",
                                 "description": "Pass the command to the shell without prior env var expansion",
                                 "default": false
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "Working directory for the command. Defaults to ~ for profile tasks, the repo directory for repo tasks."
                             }
                         },
                         "required": ["type", "cmd"],
@@ -109,7 +113,7 @@
                                 "description": "Git operation to perform"
                             },
                             "branch": { "type": "string", "description": "Target branch (required for checkout, optional for others)" },
-                            "dir": { "type": "string", "description": "Path to the git repository. Defaults to the current working directory." }
+                            "path": { "type": "string", "description": "Path to the git repository. Defaults to the current working directory." }
                         },
                         "required": ["type", "op"],
                         "additionalProperties": false

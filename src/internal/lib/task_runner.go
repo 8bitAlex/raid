@@ -142,6 +142,9 @@ func execShell(task Task) error {
 
 	shell := getShell(task.Shell)
 	cmd := exec.Command(shell[0], append(shell[1:], task.Cmd)...)
+	if task.Path != "" {
+		cmd.Dir = sys.ExpandPath(task.Path)
+	}
 	if !task.Concurrent {
 		setCmdOutput(cmd)
 	}
@@ -356,7 +359,7 @@ func execGit(task Task) error {
 		return fmt.Errorf("op is required for Git task")
 	}
 
-	dir := task.Dir
+	dir := task.Path
 	if dir == "" {
 		var err error
 		dir, err = os.Getwd()
@@ -534,4 +537,21 @@ func execRetry(task Task) error {
 	}
 
 	return fmt.Errorf("all %d attempts failed: %w", attempts, lastErr)
+}
+
+// withDefaultDir returns a copy of tasks with path set to dir on any Shell task
+// that does not already have an explicit path. Used to apply profile-level (home)
+// and repository-level (repo path) defaults without modifying the original slice.
+func withDefaultDir(tasks []Task, dir string) []Task {
+	if dir == "" || len(tasks) == 0 {
+		return tasks
+	}
+	result := make([]Task, len(tasks))
+	for i, t := range tasks {
+		if t.Type.ToLower() == Shell && t.Path == "" {
+			t.Path = dir
+		}
+		result[i] = t
+	}
+	return result
 }

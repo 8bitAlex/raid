@@ -124,7 +124,7 @@ func runTasksForEnv(name string) error {
 	if env.IsZero() || len(env.Tasks) == 0 {
 		return nil
 	}
-	return ExecuteTasks(env.Tasks)
+	return ExecuteTasks(withDefaultDir(env.Tasks, sys.GetHomeDir()))
 }
 
 // LoadEnv loads .env files from all repositories in the active profile into the process environment.

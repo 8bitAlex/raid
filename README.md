@@ -19,7 +19,7 @@ Tribal knowledge codified into the repo itself — onboarding becomes a single c
 - **Multiple Profiles** — switch between project setups or team configurations with isolated profiles.
 - **Rich Task Runner** — 12 built-in task types covering shell commands, scripts, HTTP downloads, service health checks, git operations, template rendering, user prompts, and more.
 - **Environment Management** — define and apply consistent development environments for all contributors.
-- **Custom Commands** — codify repeated operational tasks (patch, proxy, verify, deploy) as first-class raid commands runnable from anywhere.
+- **Custom Commands** — codify repeated operational tasks (patch, proxy, verify, deploy) as first-class `raid <name>` subcommands that live alongside your configuration.
 
 ## Development Status
 
@@ -69,6 +69,17 @@ Clone all repositories in the active profile and run any configured install task
 - `raid env <name>` — apply a named environment: writes `.env` files into each repo and runs environment tasks
 - `raid env` — show the currently active environment
 - `raid env list` — list available environments
+
+### `raid <command>`
+
+Run a custom command defined in the active profile or any of its repositories.
+
+```bash
+raid build        # run the "build" command
+raid deploy       # run the "deploy" command
+```
+
+Custom commands appear alongside built-in commands in `raid --help`. Commands defined in a profile take priority over same-named commands from repositories.
 
 ---
 
@@ -123,6 +134,19 @@ groups:
     - type: Wait
       url: localhost:5432
       timeout: 10s
+
+commands:
+  - name: sync
+    usage: "Pull latest on all repos and restart services"
+    tasks:
+      - type: Git
+        op: pull
+        path: ~/Developer/frontend
+      - type: Git
+        op: pull
+        path: ~/Developer/backend
+      - type: Shell
+        cmd: docker compose restart
 ```
 
 Multiple profiles can be defined in a single file using YAML document separators (`---`) or a JSON array.
@@ -144,6 +168,13 @@ environments:
         cmd: npm install
       - type: Shell
         cmd: npm run build
+
+commands:
+  - name: test
+    usage: "Run the test suite"
+    tasks:
+      - type: Shell
+        cmd: npm test
 ```
 
 ---
@@ -169,6 +200,7 @@ Run a command string in a configurable shell.
   cmd: echo "hello $USER"
   shell: bash      # optional: bash (default), sh, zsh, powershell, cmd
   literal: false   # optional: skip env var expansion before passing to shell
+  path: ~/project  # optional: working directory. Defaults to ~ for profile tasks, repo dir for repo tasks
 ```
 
 ### Script
@@ -237,7 +269,7 @@ Perform a git operation in a repository directory.
 - type: Git
   op: pull          # pull, checkout, fetch, reset
   branch: main      # required for checkout; optional for pull, fetch, reset
-  dir: ~/Developer/myrepo  # optional, defaults to current directory
+  path: ~/Developer/myrepo  # optional, defaults to current directory
 ```
 
 ### Print
@@ -284,11 +316,45 @@ Re-run a group of tasks on failure, up to a configurable number of attempts.
 
 ---
 
+## Commands Configuration
+
+Custom commands are defined in the `commands` array of a profile or repository `raid.yaml`. They become first-class `raid <name>` subcommands at runtime.
+
+```yaml
+commands:
+  - name: deploy
+    usage: "Build and deploy all services"   # shown in raid --help
+    tasks:
+      - type: Confirm
+        message: "Deploy to production?"
+      - type: Shell
+        cmd: make deploy
+    out:                   # optional — defaults to full stdout+stderr when omitted
+      stdout: true
+      stderr: false
+      file: $DEPLOY_LOG    # also write all output here; supports $VAR expansion
+```
+
+**`name`** (required) — the subcommand name; e.g. `name: deploy` is invoked as `raid deploy`. Cannot shadow built-in names (`profile`, `install`, `env`).
+
+**`usage`** (optional) — short description shown next to the command in `raid --help`.
+
+**`tasks`** (required) — the task sequence to run. All standard task types are supported.
+
+**`out`** (optional) — controls output handling. When omitted, stdout and stderr behave normally. When present:
+- `stdout` — show task stdout (default: `true` when `out` is omitted; set explicitly when using `out`)
+- `stderr` — show task stderr (default: `true` when `out` is omitted; set explicitly when using `out`)
+- `file` — additionally write all output to this path; supports `$VAR` expansion
+
+**Priority** — when a profile and one of its repositories define a command with the same name, the profile's definition wins.
+
+---
+
 ## Best Practices
 
 **Commit `raid.yaml` to each repo.** This is how setup knowledge gets shared — anyone with raid can run `raid install` and get a working environment without reading a wiki.
 
-**Use `groups` to build custom commands.** Define reusable task sequences under `groups` and reference them with `Group`, `Parallel`, or `Retry`. This lets teams codify repeated workflows (patch, proxy, verify, deploy) that anyone can run with a single command.
+**Use `commands` to codify team workflows.** Repeated operational tasks — patching, proxying, deploying, verifying — belong in `commands`, not in Slack messages or shared scripts. Anyone on the team can run `raid deploy` without knowing the steps. Use `groups` for reusable internal sequences that commands and other tasks compose from.
 
 **Gate destructive steps with `Confirm`.** Any task sequence that resets data, force-pushes, or modifies production should begin with a `Confirm` task to prevent accidental runs.
 

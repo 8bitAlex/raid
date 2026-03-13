@@ -42,7 +42,6 @@ type Task struct {
 	// Git
 	Op     string `json:"op,omitempty"`
 	Branch string `json:"branch,omitempty"`
-	Dir    string `json:"dir,omitempty"`
 	// Prompt / Confirm / Print
 	Message string `json:"message,omitempty"`
 	// Prompt
@@ -78,7 +77,6 @@ func (t Task) Expand() Task {
 		Ref:        t.Ref,
 		Op:         t.Op,
 		Branch:     sys.Expand(t.Branch),
-		Dir:        sys.Expand(t.Dir),
 		Message:    sys.Expand(t.Message),
 		Var:        t.Var,
 		Default:    sys.Expand(t.Default),

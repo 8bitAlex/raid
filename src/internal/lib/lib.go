@@ -54,11 +54,21 @@ func ForceLoad() error {
 		return err
 	}
 
+	homeDir := sys.GetHomeDir()
+	for i := range profile.Commands {
+		profile.Commands[i].Tasks = withDefaultDir(profile.Commands[i].Tasks, homeDir)
+	}
+
 	for i := range profile.Repositories {
 		if err := buildRepo(&profile.Repositories[i]); err != nil {
 			return err
 		}
-		profile.Commands = mergeCommands(profile.Commands, profile.Repositories[i].Commands)
+		repo := &profile.Repositories[i]
+		repoDir := sys.ExpandPath(repo.Path)
+		for j := range repo.Commands {
+			repo.Commands[j].Tasks = withDefaultDir(repo.Commands[j].Tasks, repoDir)
+		}
+		profile.Commands = mergeCommands(profile.Commands, repo.Commands)
 	}
 
 	context = &Context{
@@ -111,13 +121,13 @@ func Install(maxThreads int) error {
 		return fmt.Errorf("some repositories failed to install: %v", errors)
 	}
 
-	if err := ExecuteTasks(profile.Install.Tasks); err != nil {
+	if err := ExecuteTasks(withDefaultDir(profile.Install.Tasks, sys.GetHomeDir())); err != nil {
 		return fmt.Errorf("failed to execute install tasks: %w", err)
 	}
 
 	var repoTasks []Task
 	for _, r := range profile.Repositories {
-		repoTasks = append(repoTasks, r.Install.Tasks...)
+		repoTasks = append(repoTasks, withDefaultDir(r.Install.Tasks, sys.ExpandPath(r.Path))...)
 	}
 	if err := ExecuteTasks(repoTasks); err != nil {
 		return fmt.Errorf("failed to execute repository install tasks: %w", err)

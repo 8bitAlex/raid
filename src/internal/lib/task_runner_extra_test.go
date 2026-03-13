@@ -104,7 +104,7 @@ func TestExecuteTask_retry_groupNotFound(t *testing.T) {
 
 func TestExecuteTask_git_checkoutNoBranch(t *testing.T) {
 	dir := t.TempDir()
-	task := Task{Type: Git, Op: "checkout", Dir: dir}
+	task := Task{Type: Git, Op: "checkout", Path: dir}
 	err := ExecuteTask(task)
 	if err == nil {
 		t.Fatal("expected error for checkout without branch")
@@ -118,12 +118,12 @@ func TestExecuteTask_git_pullWithBranch(t *testing.T) {
 	// Exercises the `args = append(args, "origin", task.Branch)` branch.
 	// Git will fail (not a real repo), but the code path is covered.
 	dir := t.TempDir()
-	_ = ExecuteTask(Task{Type: Git, Op: "pull", Branch: "main", Dir: dir})
+	_ = ExecuteTask(Task{Type: Git, Op: "pull", Branch: "main", Path: dir})
 }
 
 func TestExecuteTask_git_fetchWithBranch(t *testing.T) {
 	dir := t.TempDir()
-	_ = ExecuteTask(Task{Type: Git, Op: "fetch", Branch: "main", Dir: dir})
+	_ = ExecuteTask(Task{Type: Git, Op: "fetch", Branch: "main", Path: dir})
 }
 
 // --- execHTTP error paths ---

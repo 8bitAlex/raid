@@ -830,37 +830,37 @@ func TestExecuteTask_git(t *testing.T) {
 	}{
 		{
 			name:    "missing op",
-			task:    Task{Type: Git, Dir: dir},
+			task:    Task{Type: Git, Path: dir},
 			wantErr: true,
 		},
 		{
 			name:    "invalid op",
-			task:    Task{Type: Git, Op: "push", Dir: dir},
+			task:    Task{Type: Git, Op: "push", Path: dir},
 			wantErr: true,
 		},
 		{
-			name:    "dir does not exist",
-			task:    Task{Type: Git, Op: "pull", Dir: "/nonexistent/path"},
+			name:    "path does not exist",
+			task:    Task{Type: Git, Op: "pull", Path: "/nonexistent/path"},
 			wantErr: true,
 		},
 		{
 			name:    "fetch with no remote succeeds",
-			task:    Task{Type: Git, Op: "fetch", Dir: dir},
+			task:    Task{Type: Git, Op: "fetch", Path: dir},
 			wantErr: false,
 		},
 		{
 			name:    "checkout nonexistent branch fails",
-			task:    Task{Type: Git, Op: "checkout", Branch: "nonexistent-branch-xyz", Dir: dir},
+			task:    Task{Type: Git, Op: "checkout", Branch: "nonexistent-branch-xyz", Path: dir},
 			wantErr: true,
 		},
 		{
 			name:    "reset hard HEAD succeeds",
-			task:    Task{Type: Git, Op: "reset", Branch: "HEAD", Dir: dir},
+			task:    Task{Type: Git, Op: "reset", Branch: "HEAD", Path: dir},
 			wantErr: false,
 		},
 		{
 			name:    "type is case-insensitive",
-			task:    Task{Type: "GIT", Op: "fetch", Dir: dir},
+			task:    Task{Type: "GIT", Op: "fetch", Path: dir},
 			wantErr: false,
 		},
 	}
