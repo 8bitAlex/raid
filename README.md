@@ -17,8 +17,9 @@ Tribal knowledge codified into the repo itself — onboarding becomes a single c
 
 - **Portable YAML Configurations** — define environments, tasks, and dependencies in version-controlled YAML files that live alongside your code.
 - **Multiple Profiles** — switch between project setups or team configurations with isolated profiles.
-- **Automated Task Execution** — orchestrate shell commands and scripts across multiple repositories with a single command.
+- **Rich Task Runner** — 12 built-in task types covering shell commands, scripts, HTTP downloads, service health checks, git operations, template rendering, user prompts, and more.
 - **Environment Management** — define and apply consistent development environments for all contributors.
+- **Custom Commands** — codify repeated operational tasks (patch, proxy, verify, deploy) as first-class raid commands runnable from anywhere.
 
 ## Development Status
 
@@ -56,7 +57,7 @@ Manage profiles. A profile is a named collection of repositories and environment
 
 - `raid profile add <file>` — register profiles from a YAML or JSON file; the first added profile is set as active automatically
 - `raid profile list` — list all registered profiles
-- `raid profile <name>` — pass a profile name as an argument to switch the active profile
+- `raid profile <name>` — switch the active profile
 - `raid profile remove <name>` — remove a profile
 
 ### `raid install`
@@ -73,11 +74,11 @@ Clone all repositories in the active profile and run any configured install task
 
 ## Configuration
 
-Tasks can be defined under `install` or within any environment, in both profile and repo configs.
+Tasks can be defined under `install`, within any environment, or in named `groups` — in both profile and repo configs.
 
 ### Profile (`*.raid.yaml`)
 
-A profile defines the repositories and environments for a project. The `$schema` annotation enables autocomplete and validation in editors like VS Code.
+A profile defines the repositories, environments, and reusable task groups for a project. The `$schema` annotation enables autocomplete and validation in editors like VS Code.
 
 ```yaml
 # yaml-language-server: $schema=schemas/raid-profile.schema.json
@@ -100,16 +101,28 @@ environments:
       - name: DATABASE_URL
         value: postgresql://localhost:5432/myproject
     tasks:
+      - type: Print
+        message: "Applying dev environment..."
+        color: green
       - type: Shell
-        cmd: echo "dev environment ready"
-      - type: Script
-        path: ./scripts/setup-dev.sh
-        runner: bash
+        cmd: docker compose up -d
+      - type: Wait
+        url: localhost:5432
+        timeout: 30s
 
 install:
   tasks:
     - type: Shell
-      cmd: echo "installing..."
+      cmd: brew install node
+
+groups:
+  verify-services:
+    - type: Wait
+      url: http://localhost:3000
+      timeout: 10s
+    - type: Wait
+      url: localhost:5432
+      timeout: 10s
 ```
 
 Multiple profiles can be defined in a single file using YAML document separators (`---`) or a JSON array.
@@ -130,28 +143,143 @@ environments:
       - type: Shell
         cmd: npm install
       - type: Shell
-        cmd: npm test
+        cmd: npm run build
 ```
 
-### Tasks
+---
 
-Two task types are supported:
+## Tasks
 
-**Shell** — run a command string in a configurable shell:
+All task types support two optional modifiers:
+
+```yaml
+concurrent: true   # run in parallel with other concurrent tasks
+condition:         # skip this task unless all conditions are met
+  platform: darwin # only on this OS (darwin, linux, windows)
+  exists: ~/.config/myapp  # only if this path exists
+  cmd: which docker        # only if this command exits 0
+```
+
+### Shell
+
+Run a command string in a configurable shell.
+
 ```yaml
 - type: Shell
-  cmd: echo "hello"
-  shell: bash        # optional: bash (default), sh, zsh, powershell
-  literal: false     # optional: skip env var expansion before passing to shell
-  concurrent: true   # optional: run concurrently with other tasks
+  cmd: echo "hello $USER"
+  shell: bash      # optional: bash (default), sh, zsh, powershell, cmd
+  literal: false   # optional: skip env var expansion before passing to shell
 ```
 
-**Script** — execute a script file:
+### Script
+
+Execute a script file directly.
+
 ```yaml
 - type: Script
   path: ./scripts/setup.sh
-  runner: bash       # optional: interpreter to use
-  concurrent: false
+  runner: bash     # optional: bash, sh, zsh, python, python3, node, powershell
+```
+
+### HTTP
+
+Download a file from a URL.
+
+```yaml
+- type: HTTP
+  url: https://example.com/config.json
+  dest: ~/.config/myapp/config.json
+```
+
+### Wait
+
+Poll an HTTP(S) URL or TCP address until it responds, then continue.
+
+```yaml
+- type: Wait
+  url: http://localhost:8080/health  # or TCP: localhost:5432
+  timeout: 60s                       # optional, default: 30s
+```
+
+### Template
+
+Render a file by substituting `$VAR` and `${VAR}` references with environment variable values.
+
+```yaml
+- type: Template
+  src: ./config/app.env.template
+  dest: ~/.config/myapp/app.env
+```
+
+### Group
+
+Execute a named group of tasks defined in the profile's top-level `groups` map.
+
+```yaml
+- type: Group
+  ref: verify-services
+```
+
+### Parallel
+
+Like `Group`, but forces all tasks in the group to run concurrently, then waits for all to finish before continuing.
+
+```yaml
+- type: Parallel
+  ref: start-services
+```
+
+### Git
+
+Perform a git operation in a repository directory.
+
+```yaml
+- type: Git
+  op: pull          # pull, checkout, fetch, reset
+  branch: main      # required for checkout; optional for pull, fetch, reset
+  dir: ~/Developer/myrepo  # optional, defaults to current directory
+```
+
+### Print
+
+Print a formatted message to stdout. Useful for labelling steps in long task sequences.
+
+```yaml
+- type: Print
+  message: "Deploying $APP_VERSION to production..."
+  color: yellow    # optional: red, green, yellow, blue, cyan, white
+  literal: false   # optional: skip env var expansion
+```
+
+### Prompt
+
+Ask the user for input and store the result in an environment variable for use by downstream tasks.
+
+```yaml
+- type: Prompt
+  var: TARGET_ENV
+  message: "Which environment? (dev/staging/prod)"
+  default: dev     # optional: used when user presses enter with no input
+```
+
+### Confirm
+
+Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful before destructive operations.
+
+```yaml
+- type: Confirm
+  message: "This will reset the production database. Continue?"
+```
+
+### Retry
+
+Re-run a group of tasks on failure, up to a configurable number of attempts.
+
+```yaml
+- type: Retry
+  ref: run-migrations
+  attempts: 3      # optional, default: 3
+  delay: 5s        # optional, default: 1s
 ```
 
 ---
@@ -159,6 +287,12 @@ Two task types are supported:
 ## Best Practices
 
 **Commit `raid.yaml` to each repo.** This is how setup knowledge gets shared — anyone with raid can run `raid install` and get a working environment without reading a wiki.
+
+**Use `groups` to build custom commands.** Define reusable task sequences under `groups` and reference them with `Group`, `Parallel`, or `Retry`. This lets teams codify repeated workflows (patch, proxy, verify, deploy) that anyone can run with a single command.
+
+**Gate destructive steps with `Confirm`.** Any task sequence that resets data, force-pushes, or modifies production should begin with a `Confirm` task to prevent accidental runs.
+
+**Use `Print` to structure long sequences.** Clear section headers make install and deploy output readable at a glance, especially for new team members.
 
 **Keep profiles in a dotfiles repo.** Profile files reference your repos and environments. Storing them in a private dotfiles repo keeps them version-controlled and accessible across machines.
 

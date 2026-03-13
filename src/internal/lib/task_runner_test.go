@@ -885,6 +885,301 @@ func TestExecuteTask_git_defaultsToWorkingDir(t *testing.T) {
 	}
 }
 
+// --- Print tasks ---
+
+func TestExecuteTask_print(t *testing.T) {
+	os.Setenv("PRINT_TEST_VAR", "world")
+	defer os.Unsetenv("PRINT_TEST_VAR")
+
+	tests := []struct {
+		name    string
+		task    Task
+		wantErr bool
+	}{
+		{
+			name:    "basic message",
+			task:    Task{Type: Print, Message: "hello"},
+			wantErr: false,
+		},
+		{
+			name:    "expands env vars",
+			task:    Task{Type: Print, Message: "hello $PRINT_TEST_VAR"},
+			wantErr: false,
+		},
+		{
+			name:    "literal skips expansion",
+			task:    Task{Type: Print, Message: "hello $PRINT_TEST_VAR", Literal: true},
+			wantErr: false,
+		},
+		{
+			name:    "with valid color",
+			task:    Task{Type: Print, Message: "colored", Color: "green"},
+			wantErr: false,
+		},
+		{
+			name:    "with unknown color falls back gracefully",
+			task:    Task{Type: Print, Message: "msg", Color: "magenta"},
+			wantErr: false,
+		},
+		{
+			name:    "type is case-insensitive",
+			task:    Task{Type: "PRINT", Message: "hello"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteTask(tt.task)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// --- Prompt tasks ---
+
+func TestExecuteTask_prompt_missingVar(t *testing.T) {
+	task := Task{Type: Prompt}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error for missing var, got nil")
+	}
+}
+
+func TestExecuteTask_prompt_setsEnvVar(t *testing.T) {
+	os.Unsetenv("RAID_PROMPT_TEST")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString("myvalue\n")
+	w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_TEST", Message: "Enter:"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := os.Getenv("RAID_PROMPT_TEST"); got != "myvalue" {
+		t.Errorf("env var RAID_PROMPT_TEST = %q, want %q", got, "myvalue")
+	}
+	os.Unsetenv("RAID_PROMPT_TEST")
+}
+
+func TestExecuteTask_prompt_usesDefault(t *testing.T) {
+	os.Unsetenv("RAID_PROMPT_DEFAULT_TEST")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString("\n") // empty input
+	w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_DEFAULT_TEST", Default: "fallback"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := os.Getenv("RAID_PROMPT_DEFAULT_TEST"); got != "fallback" {
+		t.Errorf("env var = %q, want %q", got, "fallback")
+	}
+	os.Unsetenv("RAID_PROMPT_DEFAULT_TEST")
+}
+
+// --- Confirm tasks ---
+
+func TestExecuteTask_confirm_yes(t *testing.T) {
+	for _, answer := range []string{"y\n", "yes\n", "Y\n", "YES\n"} {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.WriteString(answer)
+		w.Close()
+
+		origStdin := os.Stdin
+		os.Stdin = r
+
+		task := Task{Type: Confirm, Message: "Proceed?"}
+		err = ExecuteTask(task)
+		os.Stdin = origStdin
+
+		if err != nil {
+			t.Errorf("answer %q: unexpected error: %v", answer, err)
+		}
+	}
+}
+
+func TestExecuteTask_confirm_no(t *testing.T) {
+	for _, answer := range []string{"n\n", "no\n", "\n", "maybe\n"} {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.WriteString(answer)
+		w.Close()
+
+		origStdin := os.Stdin
+		os.Stdin = r
+
+		task := Task{Type: Confirm, Message: "Proceed?"}
+		err = ExecuteTask(task)
+		os.Stdin = origStdin
+
+		if err == nil {
+			t.Errorf("answer %q: expected error (aborted), got nil", answer)
+		}
+		if err != nil && !strings.Contains(err.Error(), "aborted") {
+			t.Errorf("answer %q: error %q should mention 'aborted'", answer, err.Error())
+		}
+	}
+}
+
+// --- Parallel tasks ---
+
+func TestExecuteTask_parallel_noContext(t *testing.T) {
+	context = nil
+	task := Task{Type: Parallel, Ref: "mygroup"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error when context is nil, got nil")
+	}
+}
+
+func TestExecuteTask_parallel_missingRef(t *testing.T) {
+	task := Task{Type: Parallel, Ref: ""}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error for empty ref, got nil")
+	}
+}
+
+func TestExecuteTask_parallel_success(t *testing.T) {
+	markerA := filepath.Join(t.TempDir(), "a")
+	markerB := filepath.Join(t.TempDir(), "b")
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"workers": {
+					{Type: Shell, Cmd: "touch " + markerA},
+					{Type: Shell, Cmd: "touch " + markerB},
+				},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Parallel, Ref: "workers"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, m := range []string{markerA, markerB} {
+		if _, err := os.Stat(m); err != nil {
+			t.Errorf("expected marker %s to exist", m)
+		}
+	}
+}
+
+func TestExecuteTask_parallel_propagatesFailure(t *testing.T) {
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"broken": {
+					{Type: Shell, Cmd: "exit 1"},
+				},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Parallel, Ref: "broken"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error from failing parallel task, got nil")
+	}
+}
+
+// --- Retry tasks ---
+
+func TestExecuteTask_retry_missingRef(t *testing.T) {
+	task := Task{Type: Retry, Ref: ""}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error for empty ref, got nil")
+	}
+}
+
+func TestExecuteTask_retry_noContext(t *testing.T) {
+	context = nil
+	task := Task{Type: Retry, Ref: "mygroup"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error when context is nil, got nil")
+	}
+}
+
+func TestExecuteTask_retry_succeedsOnFirstAttempt(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"work": {{Type: Shell, Cmd: "touch " + marker}},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Retry, Ref: "work", Attempts: 3}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Error("expected marker to exist after successful retry task")
+	}
+}
+
+func TestExecuteTask_retry_exhaustsAllAttempts(t *testing.T) {
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"always-fail": {{Type: Shell, Cmd: "exit 1"}},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Retry, Ref: "always-fail", Attempts: 2, Delay: "1ms"}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("expected error after all retries exhausted, got nil")
+	}
+	if !strings.Contains(err.Error(), "2 attempts") {
+		t.Errorf("error %q should mention attempt count", err.Error())
+	}
+}
+
+func TestExecuteTask_retry_invalidDelay(t *testing.T) {
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"work": {{Type: Shell, Cmd: "exit 0"}},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Retry, Ref: "work", Delay: "not-a-duration"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error for invalid delay, got nil")
+	}
+}
+
 // --- helpers ---
 
 func writeTempScript(t *testing.T, content string) string {

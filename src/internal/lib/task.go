@@ -36,12 +36,22 @@ type Task struct {
 	Timeout string `json:"timeout,omitempty"`
 	// Template
 	Src string `json:"src,omitempty"`
-	// Group
+	// Group / Parallel / Retry
 	Ref string `json:"ref,omitempty"`
 	// Git
 	Op     string `json:"op,omitempty"`
 	Branch string `json:"branch,omitempty"`
 	Dir    string `json:"dir,omitempty"`
+	// Prompt / Confirm / Print
+	Message string `json:"message,omitempty"`
+	// Prompt
+	Var     string `json:"var,omitempty"`
+	Default string `json:"default,omitempty"`
+	// Print
+	Color string `json:"color,omitempty"`
+	// Retry
+	Attempts int    `json:"attempts,omitempty"`
+	Delay    string `json:"delay,omitempty"`
 }
 
 func (t Task) IsZero() bool {
@@ -66,6 +76,12 @@ func (t Task) Expand() Task {
 		Op:         t.Op,
 		Branch:     sys.Expand(t.Branch),
 		Dir:        sys.Expand(t.Dir),
+		Message:    sys.Expand(t.Message),
+		Var:        t.Var,
+		Default:    sys.Expand(t.Default),
+		Color:      t.Color,
+		Attempts:   t.Attempts,
+		Delay:      t.Delay,
 	}
 }
 
@@ -79,6 +95,11 @@ const (
 	Template TaskType = "template"
 	Group    TaskType = "group"
 	Git      TaskType = "git"
+	Prompt   TaskType = "prompt"
+	Confirm  TaskType = "confirm"
+	Parallel TaskType = "parallel"
+	Print    TaskType = "print"
+	Retry    TaskType = "retry"
 )
 
 func (t TaskType) ToLower() TaskType {

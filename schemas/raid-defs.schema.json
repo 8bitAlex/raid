@@ -113,6 +113,79 @@
                         },
                         "required": ["type", "op"],
                         "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Prompt" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "var": { "type": "string", "description": "Environment variable name to set with the user's input" },
+                            "message": { "type": "string", "description": "Message to display to the user" },
+                            "default": { "type": "string", "description": "Default value if the user provides no input" }
+                        },
+                        "required": ["type", "var"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Confirm" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "message": { "type": "string", "description": "Confirmation prompt to display to the user" }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Parallel" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "ref": { "type": "string", "description": "Name of the group whose tasks will all be executed concurrently" }
+                        },
+                        "required": ["type", "ref"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Print" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "message": { "type": "string", "description": "Message to print. Supports $VAR substitution unless literal is true." },
+                            "color": {
+                                "type": "string",
+                                "enum": ["red", "green", "yellow", "blue", "cyan", "white"],
+                                "description": "Optional terminal color for the output"
+                            },
+                            "literal": {
+                                "type": "boolean",
+                                "description": "Skip environment variable expansion in the message",
+                                "default": false
+                            }
+                        },
+                        "required": ["type", "message"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Retry" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "ref": { "type": "string", "description": "Name of the group to retry on failure" },
+                            "attempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Maximum number of attempts (default: 3)"
+                            },
+                            "delay": { "type": "string", "description": "Duration to wait between attempts (e.g. 1s, 500ms). Default: 1s." }
+                        },
+                        "required": ["type", "ref"],
+                        "additionalProperties": false
                     }
                 ]
             }

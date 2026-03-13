@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,16 @@ import (
 
 	"github.com/8bitalex/raid/src/internal/sys"
 )
+
+var colorCodes = map[string]string{
+	"red":    "\033[31m",
+	"green":  "\033[32m",
+	"yellow": "\033[33m",
+	"blue":   "\033[34m",
+	"cyan":   "\033[36m",
+	"white":  "\033[37m",
+	"reset":  "\033[0m",
+}
 
 func evaluateCondition(c *Condition) bool {
 	if c.Platform != "" {
@@ -102,6 +113,16 @@ func ExecuteTask(task Task) error {
 		return execGroup(task)
 	case Git:
 		return execGit(task)
+	case Prompt:
+		return execPrompt(task)
+	case Confirm:
+		return execConfirm(task)
+	case Parallel:
+		return execParallel(task)
+	case Print:
+		return execPrint(task)
+	case Retry:
+		return execRetry(task)
 	default:
 		return fmt.Errorf("invalid task type: %s", task.Type)
 	}
@@ -378,4 +399,132 @@ func execGit(task Task) error {
 	}
 
 	return nil
+}
+
+func execPrompt(task Task) error {
+	if task.Var == "" {
+		return fmt.Errorf("var is required for Prompt task")
+	}
+
+	message := task.Message
+	if message == "" {
+		message = fmt.Sprintf("Enter value for %s:", task.Var)
+	}
+	fmt.Print(message + " ")
+
+	reader := bufio.NewReader(os.Stdin)
+	value, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	value = strings.TrimRight(value, "\r\n")
+
+	if value == "" && task.Default != "" {
+		value = task.Default
+	}
+
+	os.Setenv(task.Var, value)
+	return nil
+}
+
+func execConfirm(task Task) error {
+	message := task.Message
+	if message == "" {
+		message = "Continue?"
+	}
+	fmt.Print(message + " [y/N] ")
+
+	reader := bufio.NewReader(os.Stdin)
+	answer, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	answer = strings.TrimSpace(strings.ToLower(answer))
+
+	if answer != "y" && answer != "yes" {
+		return fmt.Errorf("aborted by user")
+	}
+	return nil
+}
+
+func execParallel(task Task) error {
+	if task.Ref == "" {
+		return fmt.Errorf("ref is required for Parallel task")
+	}
+	if context == nil || context.Profile.Groups == nil {
+		return fmt.Errorf("no groups defined in the active profile")
+	}
+
+	tasks, ok := context.Profile.Groups[task.Ref]
+	if !ok {
+		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+	}
+
+	concurrent := make([]Task, len(tasks))
+	for i, t := range tasks {
+		t.Concurrent = true
+		concurrent[i] = t
+	}
+
+	return ExecuteTasks(concurrent)
+}
+
+func execPrint(task Task) error {
+	msg := task.Message
+	if !task.Literal {
+		msg = os.ExpandEnv(msg)
+	}
+
+	if task.Color != "" {
+		if code, ok := colorCodes[strings.ToLower(task.Color)]; ok {
+			fmt.Printf("%s%s%s\n", code, msg, colorCodes["reset"])
+			return nil
+		}
+	}
+
+	fmt.Println(msg)
+	return nil
+}
+
+func execRetry(task Task) error {
+	if task.Ref == "" {
+		return fmt.Errorf("ref is required for Retry task")
+	}
+	if context == nil || context.Profile.Groups == nil {
+		return fmt.Errorf("no groups defined in the active profile")
+	}
+
+	tasks, ok := context.Profile.Groups[task.Ref]
+	if !ok {
+		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+	}
+
+	attempts := task.Attempts
+	if attempts <= 0 {
+		attempts = 3
+	}
+
+	delay := time.Second
+	if task.Delay != "" {
+		d, err := time.ParseDuration(task.Delay)
+		if err != nil {
+			return fmt.Errorf("invalid delay '%s': %w", task.Delay, err)
+		}
+		delay = d
+	}
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			fmt.Printf("Retrying... (attempt %d/%d)\n", i+1, attempts)
+			time.Sleep(delay)
+		}
+		if err := ExecuteTasks(tasks); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+
+	return fmt.Errorf("all %d attempts failed: %w", attempts, lastErr)
 }
