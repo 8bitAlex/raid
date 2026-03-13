@@ -31,7 +31,9 @@ func InitConfig() error {
 func getOrCreateConfigFile() string {
 	path := getPath()
 	if !sys.FileExists(path) {
-		sys.CreateFile(path)
+		if f, err := sys.CreateFile(path); err == nil {
+			f.Close()
+		}
 	}
 	return path
 }
