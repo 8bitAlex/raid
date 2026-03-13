@@ -13,11 +13,12 @@ type Condition struct {
 	Cmd      string `json:"cmd,omitempty"`
 }
 
+// IsZero reports whether no condition fields are set.
 func (c Condition) IsZero() bool {
 	return c.Platform == "" && c.Exists == "" && c.Cmd == ""
 }
 
-// There has to be a better way to do this... todo
+// Task represents a single unit of work in a task sequence.
 type Task struct {
 	Type       TaskType   `json:"type"`
 	Concurrent bool       `json:"concurrent,omitempty"`
@@ -54,10 +55,12 @@ type Task struct {
 	Delay    string `json:"delay,omitempty"`
 }
 
+// IsZero reports whether the task has no type set.
 func (t Task) IsZero() bool {
 	return t.Type == ""
 }
 
+// Expand returns a copy of the task with all string fields passed through environment variable expansion.
 func (t Task) Expand() Task {
 	return Task{
 		Type:       t.Type,
@@ -85,6 +88,7 @@ func (t Task) Expand() Task {
 	}
 }
 
+// TaskType identifies which task executor to dispatch to.
 type TaskType string
 
 const (
@@ -102,6 +106,7 @@ const (
 	Retry    TaskType = "retry"
 )
 
+// ToLower returns the task type normalized to lowercase for case-insensitive comparisons.
 func (t TaskType) ToLower() TaskType {
 	return TaskType(strings.ToLower(string(t)))
 }

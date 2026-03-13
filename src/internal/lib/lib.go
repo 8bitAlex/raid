@@ -13,26 +13,27 @@ import (
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/internal/utils"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"github.com/thoas/go-funk"
 )
 
 const (
-	YAML_SEP           = "---"
+	yamlSep            = "---"
 	RaidConfigFileName = "raid.yaml"
 )
 
+// Context holds the active profile and environment for the current raid session.
 type Context struct {
 	Profile Profile
 	Env     string
-	// Options Options
 }
 
+// OnInstall holds the tasks to run during profile installation.
 type OnInstall struct {
 	Tasks []Task `json:"tasks"`
 }
 
 var context *Context
 
+// Load initializes the context from the active profile, using cached results if available.
 func Load() error {
 	if context == nil {
 		return ForceLoad()
@@ -40,6 +41,7 @@ func Load() error {
 	return nil
 }
 
+// ForceLoad rebuilds the context from the active profile, ignoring any cached state.
 func ForceLoad() error {
 	p := GetProfile()
 	if p.IsZero() {
@@ -65,9 +67,8 @@ func ForceLoad() error {
 	return nil
 }
 
+// Install clones all repositories in the active profile and runs install tasks.
 func Install(maxThreads int) error {
-
-	// todo migrate to task runner
 	profile := context.Profile
 	if profile.IsZero() {
 		return fmt.Errorf("profile not found")
@@ -109,29 +110,30 @@ func Install(maxThreads int) error {
 		return fmt.Errorf("some repositories failed to install: %v", errors)
 	}
 
-	pts := profile.Install.Tasks
-	if err := ExecuteTasks(pts); err != nil {
+	if err := ExecuteTasks(profile.Install.Tasks); err != nil {
 		return fmt.Errorf("failed to execute install tasks: %w", err)
 	}
 
-	rts := funk.FlatMap(profile.Repositories, func(r Repo) []Task {
-		return r.Install.Tasks
-	}).([]Task)
-	if err := ExecuteTasks(rts); err != nil {
+	var repoTasks []Task
+	for _, r := range profile.Repositories {
+		repoTasks = append(repoTasks, r.Install.Tasks...)
+	}
+	if err := ExecuteTasks(repoTasks); err != nil {
 		return fmt.Errorf("failed to execute repository install tasks: %w", err)
 	}
 
 	return nil
 }
 
+// ValidateSchema validates the file at path against the JSON schema at schemaPath.
 func ValidateSchema(path string, schemaPath string) error {
 	path = sys.ExpandPath(path)
 	schemaPath = sys.ExpandPath(schemaPath)
 
-	if !sys.FileExists(path) || path == "" {
+	if path == "" || !sys.FileExists(path) {
 		return fmt.Errorf("file not found at %s", path)
 	}
-	if !sys.FileExists(schemaPath) || schemaPath == "" {
+	if schemaPath == "" || !sys.FileExists(schemaPath) {
 		return fmt.Errorf("file not found at %s", schemaPath)
 	}
 
@@ -147,24 +149,22 @@ func ValidateSchema(path string, schemaPath string) error {
 	}
 	defer f.Close()
 
-	contents := io.Reader(f)
-
+	var reader io.Reader = f
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".yaml" || ext == ".yml" {
 		data, err := utils.YAMLToJSON(f)
 		if err != nil {
 			return err
 		}
-		contents = bytes.NewReader(data)
+		reader = bytes.NewReader(data)
 	}
 
-	json, err := jsonschema.UnmarshalJSON(contents)
+	doc, err := jsonschema.UnmarshalJSON(reader)
 	if err != nil {
 		return err
 	}
 
-	err = sch.Validate(json)
-	if err != nil {
+	if err := sch.Validate(doc); err != nil {
 		return fmt.Errorf("invalid format: %w", err)
 	}
 	return nil

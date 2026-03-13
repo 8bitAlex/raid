@@ -10,10 +10,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	REPO_SCHEMA_PATH = "schemas/raid-repo.schema.json"
-)
+const repoSchemaPath = "schemas/raid-repo.schema.json"
 
+// Repo represents a single repository entry in a profile.
 type Repo struct {
 	Name         string    `json:"name"`
 	Path         string    `json:"path"`
@@ -22,6 +21,7 @@ type Repo struct {
 	Install      OnInstall `json:"install"`
 }
 
+// IsZero reports whether the repo is uninitialized.
 func (r Repo) IsZero() bool {
 	return r.Name == "" || r.Path == "" || r.URL == ""
 }
@@ -60,6 +60,7 @@ func buildRepo(repo *Repo) error {
 	return nil
 }
 
+// CloneRepository clones a repository to its configured path. Skips if it already exists.
 func CloneRepository(repo Repo) error {
 	path := sys.ExpandPath(repo.Path)
 
@@ -100,8 +101,9 @@ func clone(path string, url string) error {
 	return cmd.Run()
 }
 
+// ValidateRepo validates the repo config file at path against the repo JSON schema.
 func ValidateRepo(path string) error {
-	return ValidateSchema(path, REPO_SCHEMA_PATH)
+	return ValidateSchema(path, repoSchemaPath)
 }
 
 // ExtractRepo reads and parses the raid.yaml from the given repository directory.

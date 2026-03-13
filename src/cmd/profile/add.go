@@ -68,6 +68,5 @@ var AddProfileCmd = &cobra.Command{
 			}
 			fmt.Printf("Profiles:\n\t%s\nhave been successfully added from %s\n", strings.Join(names, ",\n\t"), path)
 		}
-		fmt.Print()
 	},
 }

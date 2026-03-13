@@ -7,9 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	maxThreads int = 0
-)
+var maxThreads int
 
 func init() {
 	Command.Flags().IntVarP(&maxThreads, "threads", "t", 0, "Maximum number of concurrent threads (0 = unlimited)")

@@ -1,6 +1,7 @@
 package sys
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path"
@@ -8,12 +9,12 @@ import (
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
-	"github.com/thoas/go-funk"
 )
 
-// Path Separator as a string
+// Sep is the OS path separator as a string.
 const Sep = string(os.PathSeparator)
 
+// Platform identifies the host operating system.
 type Platform string
 
 const (
@@ -23,6 +24,7 @@ const (
 	Other   Platform = "other"
 )
 
+// GetHomeDir returns the current user's home directory, fatally logging on failure.
 func GetHomeDir() string {
 	home, err := homedir.Dir()
 	if err != nil {
@@ -31,16 +33,20 @@ func GetHomeDir() string {
 	return home
 }
 
+// CreateFile opens the file at filePath if it exists, or creates it (including parent directories).
 func CreateFile(filePath string) (*os.File, error) {
 	pathEx := ExpandPath(filePath)
 	if FileExists(pathEx) {
 		return os.Open(pathEx)
 	}
 
-	os.MkdirAll(path.Dir(pathEx), os.ModeDir|0755)
+	if err := os.MkdirAll(path.Dir(pathEx), os.ModeDir|0755); err != nil {
+		return nil, fmt.Errorf("failed to create directories for '%s': %w", filePath, err)
+	}
 	return os.Create(pathEx)
 }
 
+// FileExists reports whether the file or directory at path exists.
 func FileExists(path string) bool {
 	path = ExpandPath(path)
 	if _, err := os.Stat(path); err != nil {
@@ -49,17 +55,20 @@ func FileExists(path string) bool {
 	return true
 }
 
+// Expand expands environment variables and home directory references in each whitespace-delimited
+// token of input, then rejoins them with spaces.
 func Expand(input string) string {
 	if input == "" {
 		return input
 	}
-
-	i := funk.Map(SplitInput(input), func(x string) string {
-		return ExpandPath(x)
-	}).([]string)
-	return strings.Join(i, " ")
+	parts := SplitInput(input)
+	for i, p := range parts {
+		parts[i] = ExpandPath(p)
+	}
+	return strings.Join(parts, " ")
 }
 
+// ExpandPath expands environment variables and a leading ~ in the given path.
 func ExpandPath(input string) string {
 	if input == "" {
 		return input
@@ -71,42 +80,41 @@ func ExpandPath(input string) string {
 	return input
 }
 
-// this is a mess — todo
+// SplitInput splits a command string into tokens, respecting double-quoted segments.
+// todo: replace with a proper shell-quoting parser
 func SplitInput(input string) []string {
-	out := []string{}
-	quote := false
-	ignore := false
-	b := strings.Builder{}
-	for _, s := range input {
-		if s == '"' {
-			quote = !quote
-		}
-		if s == ' ' && !quote {
-			if ignore {
-				continue
-			}
-			ignore = true
-			if b.Len() > 0 {
+	var out []string
+	var b strings.Builder
+	inQuote := false
+	skipSpace := false
+
+	for _, ch := range input {
+		switch {
+		case ch == '"':
+			inQuote = !inQuote
+			if !inQuote && b.Len() > 0 {
 				out = append(out, b.String())
 				b.Reset()
 			}
-		} else if s == '"' && quote {
-			ignore = false
-			if b.Len() > 0 {
+			skipSpace = false
+		case ch == ' ' && !inQuote:
+			if !skipSpace && b.Len() > 0 {
 				out = append(out, b.String())
 				b.Reset()
 			}
-			b.WriteRune(s)
-		} else {
-			ignore = false
-			b.WriteRune(s)
+			skipSpace = true
+		default:
+			skipSpace = false
+			b.WriteRune(ch)
 		}
 	}
-	out = append(out, b.String())
+	if b.Len() > 0 {
+		out = append(out, b.String())
+	}
 	return out
 }
 
-// todo platform dependent files?
+// GetPlatform returns the current operating system as a Platform value.
 func GetPlatform() Platform {
 	switch runtime.GOOS {
 	case "windows":

@@ -20,6 +20,5 @@ var ListEnvCmd = &cobra.Command{
 		for _, env := range envs {
 			fmt.Printf("\t%s\n", env)
 		}
-		fmt.Print()
 	},
 }

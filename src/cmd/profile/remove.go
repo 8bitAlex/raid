@@ -21,7 +21,5 @@ var RemoveProfileCmd = &cobra.Command{
 				fmt.Printf("Profile '%s' has been removed.\n", name)
 			}
 		}
-
-		fmt.Print()
 	},
 }

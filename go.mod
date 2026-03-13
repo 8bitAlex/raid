@@ -9,7 +9,6 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	gopkg.in/yaml.v3 v3.0.1
-	github.com/thoas/go-funk v0.9.3
 )
 
 require (
