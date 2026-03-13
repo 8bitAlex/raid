@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	RaidConfigFileName  = lib.RaidConfigFileName
 	ConfigPathFlag      = lib.ConfigPathFlag
 	ConfigPathFlagDesc  = lib.ConfigPathFlagDesc
 	ConfigPathFlagShort = lib.ConfigPathFlagShort
@@ -36,13 +37,13 @@ var ConfigPath = &lib.CfgPath
 // Initialize the raid environment, including loading configurations and initializing data storage.
 func Initialize() {
 	if err := lib.InitConfig(); err != nil {
-		log.Fatalf("Failed to initialize configuration: %v", err)
+		log.Fatalf("%v\n", err)
 	}
 	if err := Load(); err != nil {
-		log.Fatalf("Failed to compile configurations: %v", err)
+		log.Fatalf("%v\n", err)
 	}
 	if err := lib.LoadEnv(); err != nil {
-		fmt.Printf("Failed to load environment variables: %v", err)
+		fmt.Printf("%v\n", err)
 	}
 }
 

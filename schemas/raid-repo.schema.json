@@ -16,6 +16,9 @@
         },
         "environments": {
             "$ref": "raid-defs.schema.json#/properties/environments"
+        },
+        "install": {
+            "$ref": "raid-defs.schema.json#/properties/install"
         }
     },
     "required": ["name","branch"]

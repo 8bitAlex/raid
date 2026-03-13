@@ -7,13 +7,19 @@ import (
 	"path/filepath"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	REPO_SCHEMA_PATH = "schemas/raid-repo.schema.json"
 )
 
 type Repo struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	URL          string `json:"url"`
-	Environments []Env  `json:"environments"`
+	Name         string    `json:"name"`
+	Path         string    `json:"path"`
+	URL          string    `json:"url"`
+	Environments []Env     `json:"environments"`
+	Install      OnInstall `json:"install"`
 }
 
 func (r Repo) IsZero() bool {
@@ -29,8 +35,29 @@ func (r Repo) getEnv(name string) Env {
 	return Env{}
 }
 
-func buildRepo(repo Repo) (Repo, error) {
-	return repo, nil
+func buildRepo(repo *Repo) error {
+	if repo.IsZero() {
+		return fmt.Errorf("invalid repository: %v", repo)
+	}
+
+	raidFile := filepath.Join(sys.ExpandPath(repo.Path), RaidConfigFileName)
+	if !sys.FileExists(raidFile) {
+		return nil
+	}
+
+	if err := ValidateRepo(raidFile); err != nil {
+		return fmt.Errorf("invalid raid configuration for '%s': %w", repo.Name, err)
+	}
+
+	repoConfig, err := ExtractRepo(repo.Path)
+	if err != nil {
+		return fmt.Errorf("failed to read config for '%s': %w", repo.Name, err)
+	}
+
+	repo.Environments = append(repo.Environments, repoConfig.Environments...)
+	repo.Install.Tasks = append(repo.Install.Tasks, repoConfig.Install.Tasks...)
+
+	return nil
 }
 
 func CloneRepository(repo Repo) error {
@@ -71,4 +98,24 @@ func clone(path string, url string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func ValidateRepo(path string) error {
+	return ValidateSchema(path, REPO_SCHEMA_PATH)
+}
+
+// ExtractRepo reads and parses the raid.yaml from the given repository directory.
+func ExtractRepo(path string) (Repo, error) {
+	filePath := filepath.Join(sys.ExpandPath(path), RaidConfigFileName)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return Repo{}, fmt.Errorf("failed to read %s: %w", filePath, err)
+	}
+
+	var repo Repo
+	if err := yaml.Unmarshal(data, &repo); err != nil {
+		return Repo{}, fmt.Errorf("failed to parse %s: %w", filePath, err)
+	}
+
+	return repo, nil
 }

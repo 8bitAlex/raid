@@ -33,7 +33,7 @@ environments:
       - name: API_URL
         value: https://api.example.com
 
-# install:
-#   - tasks:
-#     - type: Shell
-#       cmd: echo "Installing dependencies..."
+install:
+  tasks:
+    - type: Shell
+      cmd: echo "Installing dependencies..."

@@ -2,17 +2,33 @@
 package lib
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
+
+	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/internal/utils"
+	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/thoas/go-funk"
 )
 
 const (
-	YAML_SEP = "---"
+	YAML_SEP           = "---"
+	RaidConfigFileName = "raid.yaml"
 )
 
 type Context struct {
 	Profile Profile
 	Env     string
+	// Options Options
+}
+
+type OnInstall struct {
+	Tasks []Task `json:"tasks"`
 }
 
 var context *Context
@@ -28,6 +44,12 @@ func ForceLoad() error {
 	profile, err := buildProfile(GetProfile())
 	if err != nil {
 		return err
+	}
+
+	for i := range profile.Repositories {
+		if err := buildRepo(&profile.Repositories[i]); err != nil {
+			return err
+		}
 	}
 
 	context = &Context{
@@ -81,5 +103,63 @@ func Install(maxThreads int) error {
 		return fmt.Errorf("some repositories failed to install: %v", errors)
 	}
 
+	pts := profile.Install.Tasks
+	if err := ExecuteTasks(pts); err != nil {
+		return fmt.Errorf("failed to execute install tasks: %w", err)
+	}
+
+	rts := funk.FlatMap(profile.Repositories, func(r Repo) []Task {
+		return r.Install.Tasks
+	}).([]Task)
+	if err := ExecuteTasks(rts); err != nil {
+		return fmt.Errorf("failed to execute repository install tasks: %w", err)
+	}
+
+	return nil
+}
+
+func ValidateSchema(path string, schemaPath string) error {
+	path = sys.ExpandPath(path)
+	schemaPath = sys.ExpandPath(schemaPath)
+
+	if !sys.FileExists(path) || path == "" {
+		return fmt.Errorf("file not found at %s", path)
+	}
+	if !sys.FileExists(schemaPath) || schemaPath == "" {
+		return fmt.Errorf("file not found at %s", schemaPath)
+	}
+
+	c := jsonschema.NewCompiler()
+	sch, err := c.Compile(schemaPath)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	contents := io.Reader(f)
+
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".yaml" || ext == ".yml" {
+		data, err := utils.YAMLToJSON(f)
+		if err != nil {
+			return err
+		}
+		contents = bytes.NewReader(data)
+	}
+
+	json, err := jsonschema.UnmarshalJSON(contents)
+	if err != nil {
+		return err
+	}
+
+	err = sch.Validate(json)
+	if err != nil {
+		return fmt.Errorf("invalid format: %w", err)
+	}
 	return nil
 }

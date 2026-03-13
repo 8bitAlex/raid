@@ -103,8 +103,19 @@
                         }
                     }
                 },
-                "required": ["name"]
+                "required": ["name"],
+                "additionalProperties": false
             }
+        },
+        "install": {
+            "type": "object",
+            "description": "Options for installing the raid profile",
+            "properties": {
+                "tasks": {
+                    "$ref": "#/properties/tasks"
+                }
+            },
+            "additionalProperties": false
         }
     },
     "$defs": {

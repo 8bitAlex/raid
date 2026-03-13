@@ -1,6 +1,12 @@
 package utils
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+
+	"gopkg.in/yaml.v3"
+)
 
 func MergeErr(errs []error) error {
 	var result string
@@ -12,4 +18,12 @@ func MergeErr(errs []error) error {
 		}
 	}
 	return fmt.Errorf("%s", result)
+}
+
+func YAMLToJSON(file io.Reader) ([]byte, error) {
+	var data interface{}
+	if err := yaml.NewDecoder(file).Decode(&data); err != nil {
+		return nil, err
+	}
+	return json.Marshal(data)
 }

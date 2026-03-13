@@ -1,31 +1,29 @@
 package lib
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	ACTIVE_PROFILE_KEY   = "profile"
-	ALL_PROFILES_KEY     = "profiles"
-	PROFILE_SCHEMA_PATH  = "schemas/raid-profile.schema.json"
+	ACTIVE_PROFILE_KEY  = "profile"
+	ALL_PROFILES_KEY    = "profiles"
+	PROFILE_SCHEMA_PATH = "schemas/raid-profile.schema.json"
 )
 
 type Profile struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	Repositories []Repo `json:"repositories"`
-	Environments []Env  `json:"environments"`
+	Name         string    `json:"name"`
+	Path         string    `json:"path"`
+	Repositories []Repo    `json:"repositories"`
+	Environments []Env     `json:"environments"`
+	Install      OnInstall `json:"install"`
 }
 
 func (p Profile) IsZero() bool {
@@ -53,7 +51,7 @@ func GetProfile() Profile {
 	if context != nil && !context.Profile.IsZero() {
 		return context.Profile
 	}
-	
+
 	name := viper.GetString(ACTIVE_PROFILE_KEY)
 	paths := getProfilePaths()
 	return Profile{
@@ -206,51 +204,7 @@ func ContainsProfile(name string) bool {
 }
 
 func ValidateProfile(path string) error {
-	if !sys.FileExists(path) {
-		return fmt.Errorf("file not found at %s", path)
-	}
-
-	c := jsonschema.NewCompiler()
-	sch, err := c.Compile(PROFILE_SCHEMA_PATH)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	profile := io.Reader(f)
-
-	ext := strings.ToLower(filepath.Ext(path))
-	if ext == ".yaml" || ext == ".yml" {
-		data, err := yamlToJSON(f)
-		if err != nil {
-			return err
-		}
-		profile = bytes.NewReader(data)
-	}
-
-	json, err := jsonschema.UnmarshalJSON(profile)
-	if err != nil {
-		return err
-	}
-
-	err = sch.Validate(json)
-	if err != nil {
-		return fmt.Errorf("invalid profile format: %w", err)
-	}
-	return nil
-}
-
-func yamlToJSON(file io.Reader) ([]byte, error) {
-	var data interface{}
-	if err := yaml.NewDecoder(file).Decode(&data); err != nil {
-		return nil, err
-	}
-	return json.Marshal(data)
+	return ValidateSchema(path, PROFILE_SCHEMA_PATH)
 }
 
 func buildProfile(profile Profile) (Profile, error) {
