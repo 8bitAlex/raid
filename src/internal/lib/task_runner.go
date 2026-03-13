@@ -175,6 +175,9 @@ func getShell(shell string) []string {
 	case "cmd":
 		return []string{"cmd", "/c"}
 	default:
+		if sys.GetPlatform() == sys.Windows {
+			return []string{"cmd", "/c"}
+		}
 		return []string{"bash", "-c"}
 	}
 }
