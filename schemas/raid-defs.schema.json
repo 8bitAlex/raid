@@ -239,6 +239,48 @@
                 }
             },
             "additionalProperties": false
+        },
+        "commands": {
+            "type": "array",
+            "description": "Custom commands exposed as top-level raid subcommands",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Command name used to invoke it via 'raid <name>'"
+                    },
+                    "usage": {
+                        "type": "string",
+                        "description": "Short description shown in 'raid --help'"
+                    },
+                    "tasks": {
+                        "$ref": "#/properties/tasks"
+                    },
+                    "out": {
+                        "type": "object",
+                        "description": "Output configuration for the command",
+                        "properties": {
+                            "stdout": {
+                                "type": "boolean",
+                                "description": "Show stdout from tasks (default: true when out is omitted)"
+                            },
+                            "stderr": {
+                                "type": "boolean",
+                                "description": "Show stderr from tasks (default: true when out is omitted)"
+                            },
+                            "file": {
+                                "type": "string",
+                                "description": "Path to additionally write all output to. Supports $VAR expansion."
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["name", "tasks"],
+                "additionalProperties": false
+            }
         }
     },
     "$defs": {

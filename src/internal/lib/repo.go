@@ -19,6 +19,7 @@ type Repo struct {
 	URL          string    `json:"url"`
 	Environments []Env     `json:"environments"`
 	Install      OnInstall `json:"install"`
+	Commands     []Command `json:"commands"`
 }
 
 // IsZero reports whether the repo is uninitialized.

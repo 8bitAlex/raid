@@ -45,6 +45,9 @@
       "additionalProperties": {
         "$ref": "raid-defs.schema.json#/properties/tasks"
       }
+    },
+    "commands": {
+      "$ref": "raid-defs.schema.json#/properties/commands"
     }
   },
   "required": ["name"]

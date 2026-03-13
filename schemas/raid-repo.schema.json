@@ -19,6 +19,9 @@
         },
         "install": {
             "$ref": "raid-defs.schema.json#/properties/install"
+        },
+        "commands": {
+            "$ref": "raid-defs.schema.json#/properties/commands"
         }
     },
     "required": ["name","branch"]

@@ -26,6 +26,7 @@ type Profile struct {
 	Environments []Env             `json:"environments"`
 	Install      OnInstall         `json:"install"`
 	Groups       map[string][]Task `json:"groups"`
+	Commands     []Command         `json:"commands"`
 }
 
 // IsZero reports whether the profile is uninitialized.

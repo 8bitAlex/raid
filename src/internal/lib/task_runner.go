@@ -16,6 +16,13 @@ import (
 	"github.com/8bitalex/raid/src/internal/sys"
 )
 
+// commandStdout and commandStderr are the output writers used by task execution.
+// ExecuteCommand replaces these temporarily when a command's Out field is set.
+var (
+	commandStdout io.Writer = os.Stdout
+	commandStderr io.Writer = os.Stderr
+)
+
 var colorCodes = map[string]string{
 	"red":    "\033[31m",
 	"green":  "\033[32m",
@@ -199,8 +206,8 @@ func execScript(task Task) error {
 }
 
 func setCmdOutput(cmd *exec.Cmd) {
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout
+	cmd.Stderr = commandStderr
 	cmd.Stdin = os.Stdin
 }
 

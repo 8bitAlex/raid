@@ -61,3 +61,13 @@ func ForceLoad() error {
 func Install(maxThreads int) error {
 	return lib.Install(maxThreads)
 }
+
+// GetCommands returns all commands available in the active profile.
+func GetCommands() []lib.Command {
+	return lib.GetCommands()
+}
+
+// ExecuteCommand runs the named command from the active profile.
+func ExecuteCommand(name string) error {
+	return lib.ExecuteCommand(name)
+}

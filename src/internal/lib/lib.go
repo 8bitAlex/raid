@@ -58,6 +58,7 @@ func ForceLoad() error {
 		if err := buildRepo(&profile.Repositories[i]); err != nil {
 			return err
 		}
+		profile.Commands = mergeCommands(profile.Commands, profile.Repositories[i].Commands)
 	}
 
 	context = &Context{
