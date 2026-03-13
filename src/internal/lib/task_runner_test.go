@@ -18,15 +18,15 @@ func TestGetShell(t *testing.T) {
 		input string
 		want  []string
 	}{
-		{"bash", []string{"/bin/bash", "-c"}},
-		{"/bin/bash", []string{"/bin/bash", "-c"}},
-		{"sh", []string{"/bin/sh", "-c"}},
-		{"/bin/sh", []string{"/bin/sh", "-c"}},
-		{"zsh", []string{"/bin/zsh", "-c"}},
-		{"/bin/zsh", []string{"/bin/zsh", "-c"}},
-		{"BASH", []string{"/bin/bash", "-c"}}, // case-insensitive
-		{"unknown", []string{"/bin/bash", "-c"}},
-		{"", []string{"/bin/bash", "-c"}}, // default on non-Windows
+		{"bash", []string{"bash", "-c"}},
+		{"/bin/bash", []string{"bash", "-c"}},
+		{"sh", []string{"sh", "-c"}},
+		{"/bin/sh", []string{"sh", "-c"}},
+		{"zsh", []string{"zsh", "-c"}},
+		{"/bin/zsh", []string{"zsh", "-c"}},
+		{"BASH", []string{"bash", "-c"}}, // case-insensitive
+		{"unknown", []string{"bash", "-c"}},
+		{"", []string{"bash", "-c"}}, // default on non-Windows
 	}
 
 	for _, tt := range tests {
@@ -46,19 +46,24 @@ func TestGetShell(t *testing.T) {
 
 func TestGetShell_powershell(t *testing.T) {
 	tests := []struct {
-		input     string
-		wantFirst string
+		input string
+		want  []string
 	}{
-		{"powershell", "powershell"},
-		{"pwsh", "powershell"},
-		{"ps", "powershell"},
+		{"powershell", []string{"powershell", "-Command"}},
+		{"pwsh", []string{"powershell", "-Command"}},
+		{"ps", []string{"powershell", "-Command"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			got := getShell(tt.input)
-			if got[0] != tt.wantFirst {
-				t.Errorf("getShell(%q)[0] = %q, want %q", tt.input, got[0], tt.wantFirst)
+			if len(got) != len(tt.want) {
+				t.Fatalf("getShell(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("getShell(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
+				}
 			}
 		})
 	}
@@ -327,7 +332,7 @@ func TestExecuteTasks_sequentialFailsFast(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "should-not-exist")
 	tasks := []Task{
 		{Type: Shell, Cmd: "exit 1"},
-		{Type: Shell, Cmd: "touch " + marker},
+		{Type: Shell, Cmd: "echo done > " + marker},
 	}
 
 	err := ExecuteTasks(tasks)
@@ -686,7 +691,7 @@ func TestExecuteTask_condition_cmd_passes(t *testing.T) {
 	task := Task{
 		Type:      Shell,
 		Cmd:       "exit 0",
-		Condition: &Condition{Cmd: "true"},
+		Condition: &Condition{Cmd: "exit 0"},
 	}
 	if err := ExecuteTask(task); err != nil {
 		t.Errorf("unexpected error when condition cmd passes: %v", err)
@@ -698,8 +703,8 @@ func TestExecuteTask_condition_cmd_fails(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "should-not-exist")
 	task := Task{
 		Type:      Shell,
-		Cmd:       "touch " + marker,
-		Condition: &Condition{Cmd: "false"},
+		Cmd:       "echo done > " + marker,
+		Condition: &Condition{Cmd: "exit 1"},
 	}
 	if err := ExecuteTask(task); err != nil {
 		t.Errorf("task with failing condition cmd should be skipped, got error: %v", err)
@@ -757,7 +762,7 @@ func TestExecuteTask_group_success(t *testing.T) {
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"mygroup": {
-					{Type: Shell, Cmd: "touch " + marker},
+					{Type: Shell, Cmd: "echo done > " + marker},
 				},
 			},
 		},
@@ -1070,8 +1075,8 @@ func TestExecuteTask_parallel_success(t *testing.T) {
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"workers": {
-					{Type: Shell, Cmd: "touch " + markerA},
-					{Type: Shell, Cmd: "touch " + markerB},
+					{Type: Shell, Cmd: "echo done > " + markerA},
+					{Type: Shell, Cmd: "echo done > " + markerB},
 				},
 			},
 		},
@@ -1129,7 +1134,7 @@ func TestExecuteTask_retry_succeedsOnFirstAttempt(t *testing.T) {
 	context = &Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
-				"work": {{Type: Shell, Cmd: "touch " + marker}},
+				"work": {{Type: Shell, Cmd: "echo done > " + marker}},
 			},
 		},
 	}

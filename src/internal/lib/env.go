@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"path/filepath"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/joho/godotenv"
@@ -94,7 +95,7 @@ func setEnvVariablesForRepos(name string) error {
 }
 
 func buildEnvPath(path string) (string, error) {
-	filePath := sys.ExpandPath(path) + sys.Sep + ".env"
+	filePath := filepath.Join(sys.ExpandPath(path), ".env")
 	file, err := sys.CreateFile(filePath)
 	if err != nil {
 		return "", err
@@ -135,7 +136,7 @@ func LoadEnv() error {
 
 	var paths []string
 	for _, r := range context.Profile.Repositories {
-		p := sys.ExpandPath(r.Path) + sys.Sep + ".env"
+		p := filepath.Join(sys.ExpandPath(r.Path), ".env")
 		if sys.FileExists(p) {
 			paths = append(paths, p)
 		}

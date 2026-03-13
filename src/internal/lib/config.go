@@ -1,6 +1,8 @@
 package lib
 
 import (
+	"path/filepath"
+
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/viper"
 )
@@ -16,7 +18,7 @@ const (
 
 var CfgPath string
 
-var defaultConfigPath = sys.GetHomeDir() + sys.Sep + ConfigDirName + sys.Sep
+var defaultConfigPath = filepath.Join(sys.GetHomeDir(), ConfigDirName)
 
 func InitConfig() error {
 	viper.SetConfigFile(getOrCreateConfigFile())
@@ -36,7 +38,7 @@ func getOrCreateConfigFile() string {
 
 func getPath() string {
 	if CfgPath == "" {
-		CfgPath = defaultConfigPath + ConfigFileName
+		CfgPath = filepath.Join(defaultConfigPath, ConfigFileName)
 	}
 	return CfgPath
 }

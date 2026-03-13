@@ -162,23 +162,22 @@ func getShell(shell string) []string {
 		if sys.GetPlatform() == sys.Windows {
 			return []string{"cmd", "/c"}
 		}
-		return []string{"/bin/bash", "-c"}
+		return []string{"bash", "-c"}
 	}
 
-	shell = strings.ToLower(shell)
-	switch shell {
+	switch strings.ToLower(shell) {
 	case "/bin/bash", "bash":
-		return []string{"/bin/bash", "-c"}
+		return []string{"bash", "-c"}
 	case "/bin/sh", "sh":
-		return []string{"/bin/sh", "-c"}
+		return []string{"sh", "-c"}
 	case "/bin/zsh", "zsh":
-		return []string{"/bin/zsh", "-c"}
+		return []string{"zsh", "-c"}
 	case "powershell", "pwsh", "ps":
-		return []string{"powershell"}
+		return []string{"powershell", "-Command"}
 	case "cmd":
 		return []string{"cmd", "/c"}
 	default:
-		return []string{"/bin/bash", "-c"}
+		return []string{"bash", "-c"}
 	}
 }
 

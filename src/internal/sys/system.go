@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -40,7 +40,7 @@ func CreateFile(filePath string) (*os.File, error) {
 		return os.Open(pathEx)
 	}
 
-	if err := os.MkdirAll(path.Dir(pathEx), os.ModeDir|0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(pathEx), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create directories for '%s': %w", filePath, err)
 	}
 	return os.Create(pathEx)
