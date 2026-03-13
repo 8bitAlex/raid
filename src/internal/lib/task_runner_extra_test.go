@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -176,6 +177,9 @@ func TestExecuteTask_http_createError(t *testing.T) {
 // --- execTemplate error paths ---
 
 func TestExecuteTask_template_readError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission 0000 not enforced on Windows")
+	}
 	dir := t.TempDir()
 	srcPath := filepath.Join(dir, "template.txt")
 	if err := os.WriteFile(srcPath, []byte("content"), 0000); err != nil {

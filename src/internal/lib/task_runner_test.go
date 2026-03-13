@@ -26,11 +26,40 @@ func TestGetShell(t *testing.T) {
 		{"zsh", []string{"zsh", "-c"}},
 		{"/bin/zsh", []string{"zsh", "-c"}},
 		{"BASH", []string{"bash", "-c"}}, // case-insensitive
-		{"unknown", []string{"bash", "-c"}},
-		{"", []string{"bash", "-c"}}, // default on non-Windows
 	}
 
 	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := getShell(tt.input)
+			if len(got) != len(tt.want) {
+				t.Fatalf("getShell(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("getShell(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestGetShell_defaults(t *testing.T) {
+	var wantEmpty, wantUnknown []string
+	if runtime.GOOS == "windows" {
+		wantEmpty = []string{"cmd", "/c"}
+		wantUnknown = []string{"cmd", "/c"}
+	} else {
+		wantEmpty = []string{"bash", "-c"}
+		wantUnknown = []string{"bash", "-c"}
+	}
+
+	for _, tt := range []struct {
+		input string
+		want  []string
+	}{
+		{"", wantEmpty},
+		{"unknown", wantUnknown},
+	} {
 		t.Run(tt.input, func(t *testing.T) {
 			got := getShell(tt.input)
 			if len(got) != len(tt.want) {
