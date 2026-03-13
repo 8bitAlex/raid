@@ -15,6 +15,27 @@ import (
 	"github.com/8bitalex/raid/src/internal/sys"
 )
 
+func evaluateCondition(c *Condition) bool {
+	if c.Platform != "" {
+		if string(sys.GetPlatform()) != strings.ToLower(c.Platform) {
+			return false
+		}
+	}
+	if c.Exists != "" {
+		if !sys.FileExists(sys.ExpandPath(c.Exists)) {
+			return false
+		}
+	}
+	if c.Cmd != "" {
+		shell := getShell("")
+		cmd := exec.Command(shell[0], append(shell[1:], c.Cmd)...)
+		if err := cmd.Run(); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func ExecuteTasks(tasks []Task) error {
 	var wg sync.WaitGroup
 	errorChan := make(chan error, len(tasks))
@@ -62,6 +83,10 @@ func ExecuteTask(task Task) error {
 		return nil
 	}
 
+	if task.Condition != nil && !evaluateCondition(task.Condition) {
+		return nil
+	}
+
 	switch task.Type.ToLower() {
 	case Shell:
 		return execShell(task)
@@ -73,6 +98,10 @@ func ExecuteTask(task Task) error {
 		return execWait(task)
 	case Template:
 		return execTemplate(task)
+	case Group:
+		return execGroup(task)
+	case Git:
+		return execGit(task)
 	default:
 		return fmt.Errorf("invalid task type: %s", task.Type)
 	}
@@ -271,6 +300,81 @@ func execTemplate(task Task) error {
 
 	if err := os.WriteFile(task.Dest, []byte(rendered), 0644); err != nil {
 		return fmt.Errorf("failed to write output file '%s': %w", task.Dest, err)
+	}
+
+	return nil
+}
+
+func execGroup(task Task) error {
+	if task.Ref == "" {
+		return fmt.Errorf("ref is required for Group task")
+	}
+	if context == nil || context.Profile.Groups == nil {
+		return fmt.Errorf("no groups defined in the active profile")
+	}
+
+	tasks, ok := context.Profile.Groups[task.Ref]
+	if !ok {
+		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+	}
+
+	return ExecuteTasks(tasks)
+}
+
+func execGit(task Task) error {
+	task = task.Expand()
+
+	if task.Op == "" {
+		return fmt.Errorf("op is required for Git task")
+	}
+
+	dir := task.Dir
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+	}
+
+	if !sys.FileExists(dir) {
+		return fmt.Errorf("directory does not exist: %s", dir)
+	}
+
+	var args []string
+	switch strings.ToLower(task.Op) {
+	case "pull":
+		args = []string{"pull"}
+		if task.Branch != "" {
+			args = append(args, "origin", task.Branch)
+		}
+	case "checkout":
+		if task.Branch == "" {
+			return fmt.Errorf("branch is required for git checkout")
+		}
+		args = []string{"checkout", task.Branch}
+	case "fetch":
+		args = []string{"fetch"}
+		if task.Branch != "" {
+			args = append(args, "origin", task.Branch)
+		}
+	case "reset":
+		args = []string{"reset", "--hard"}
+		if task.Branch != "" {
+			args = append(args, task.Branch)
+		}
+	default:
+		return fmt.Errorf("invalid git operation '%s' (supported: pull, checkout, fetch, reset)", task.Op)
+	}
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if !task.Concurrent {
+		setCmdOutput(cmd)
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git %s failed in '%s': %w", task.Op, dir, err)
 	}
 
 	return nil

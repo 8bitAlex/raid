@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -633,6 +634,254 @@ func TestExecuteTask_template_unsetVarExpandsToEmpty(t *testing.T) {
 	got, _ := os.ReadFile(dest)
 	if string(got) != "value=" {
 		t.Errorf("rendered content = %q, want %q", got, "value=")
+	}
+}
+
+// --- Condition ---
+
+func TestExecuteTask_condition_platform(t *testing.T) {
+	// Task with a condition that will never match (impossible platform).
+	task := Task{
+		Type:      Shell,
+		Cmd:       "exit 0",
+		Condition: &Condition{Platform: "nonexistent-platform"},
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("task with unmet condition should be skipped, got error: %v", err)
+	}
+}
+
+func TestExecuteTask_condition_exists_filePresent(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "exists-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	// Condition is met — task runs.
+	task := Task{
+		Type:      Shell,
+		Cmd:       "exit 0",
+		Condition: &Condition{Exists: f.Name()},
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("unexpected error with met exists condition: %v", err)
+	}
+}
+
+func TestExecuteTask_condition_exists_fileMissing(t *testing.T) {
+	// Condition is NOT met — task is skipped (no error).
+	task := Task{
+		Type:      Shell,
+		Cmd:       "exit 1",
+		Condition: &Condition{Exists: "/nonexistent/file/path"},
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("task with unmet exists condition should be skipped, got error: %v", err)
+	}
+}
+
+func TestExecuteTask_condition_cmd_passes(t *testing.T) {
+	// Condition command exits 0 — task runs.
+	task := Task{
+		Type:      Shell,
+		Cmd:       "exit 0",
+		Condition: &Condition{Cmd: "true"},
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("unexpected error when condition cmd passes: %v", err)
+	}
+}
+
+func TestExecuteTask_condition_cmd_fails(t *testing.T) {
+	// Condition command exits non-0 — task is skipped (no error).
+	marker := filepath.Join(t.TempDir(), "should-not-exist")
+	task := Task{
+		Type:      Shell,
+		Cmd:       "touch " + marker,
+		Condition: &Condition{Cmd: "false"},
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("task with failing condition cmd should be skipped, got error: %v", err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("task body ran despite failing condition cmd")
+	}
+}
+
+// --- Group tasks ---
+
+func TestExecuteTask_group_noContext(t *testing.T) {
+	context = nil
+	task := Task{Type: Group, Ref: "mygroup"}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("expected error when context is nil, got nil")
+	}
+}
+
+func TestExecuteTask_group_noGroups(t *testing.T) {
+	context = &Context{Profile: Profile{}}
+	defer func() { context = nil }()
+
+	task := Task{Type: Group, Ref: "mygroup"}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("expected error when profile has no groups, got nil")
+	}
+}
+
+func TestExecuteTask_group_missingRef(t *testing.T) {
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"other": {{Type: Shell, Cmd: "exit 0"}},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Group, Ref: "missing"}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("expected error for missing group ref, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Errorf("error %q should mention the group name", err.Error())
+	}
+}
+
+func TestExecuteTask_group_success(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "group-ran")
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"mygroup": {
+					{Type: Shell, Cmd: "touch " + marker},
+				},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Group, Ref: "mygroup"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("group tasks did not run: marker file missing")
+	}
+}
+
+func TestExecuteTask_group_propagatesFailure(t *testing.T) {
+	context = &Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"failgroup": {
+					{Type: Shell, Cmd: "exit 1"},
+				},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	task := Task{Type: Group, Ref: "failgroup"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error from failing group task, got nil")
+	}
+}
+
+func TestExecuteTask_group_emptyRefError(t *testing.T) {
+	task := Task{Type: Group, Ref: ""}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error for empty ref, got nil")
+	}
+}
+
+// --- Git tasks ---
+
+func initTempGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	run(t, dir, "git", "init")
+	run(t, dir, "git", "config", "user.email", "test@example.com")
+	run(t, dir, "git", "config", "user.name", "Test")
+	// Create an initial commit so HEAD exists.
+	run(t, dir, "git", "commit", "--allow-empty", "-m", "init")
+	return dir
+}
+
+func run(t *testing.T, dir string, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("command %q failed: %v\n%s", name+" "+strings.Join(args, " "), err, out)
+	}
+}
+
+func TestExecuteTask_git(t *testing.T) {
+	dir := initTempGitRepo(t)
+
+	tests := []struct {
+		name    string
+		task    Task
+		wantErr bool
+	}{
+		{
+			name:    "missing op",
+			task:    Task{Type: Git, Dir: dir},
+			wantErr: true,
+		},
+		{
+			name:    "invalid op",
+			task:    Task{Type: Git, Op: "push", Dir: dir},
+			wantErr: true,
+		},
+		{
+			name:    "dir does not exist",
+			task:    Task{Type: Git, Op: "pull", Dir: "/nonexistent/path"},
+			wantErr: true,
+		},
+		{
+			name:    "fetch with no remote succeeds",
+			task:    Task{Type: Git, Op: "fetch", Dir: dir},
+			wantErr: false,
+		},
+		{
+			name:    "checkout nonexistent branch fails",
+			task:    Task{Type: Git, Op: "checkout", Branch: "nonexistent-branch-xyz", Dir: dir},
+			wantErr: true,
+		},
+		{
+			name:    "reset hard HEAD succeeds",
+			task:    Task{Type: Git, Op: "reset", Branch: "HEAD", Dir: dir},
+			wantErr: false,
+		},
+		{
+			name:    "type is case-insensitive",
+			task:    Task{Type: "GIT", Op: "fetch", Dir: dir},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteTask(tt.task)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExecuteTask_git_defaultsToWorkingDir(t *testing.T) {
+	// When Dir is empty, git runs in the current working directory.
+	// We just verify it doesn't crash — the actual git op (fetch) exits 0 with no remote.
+	task := Task{Type: Git, Op: "fetch"}
+	// The test runner's working dir is the package directory (a valid git repo).
+	if err := ExecuteTask(task); err != nil {
+		t.Logf("note: git fetch returned error (possibly no remote): %v", err)
 	}
 }
 

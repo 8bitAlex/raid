@@ -6,10 +6,22 @@ import (
 	"github.com/8bitalex/raid/src/internal/sys"
 )
 
+// Condition guards a task — all specified fields must be satisfied for the task to run.
+type Condition struct {
+	Platform string `json:"platform,omitempty"`
+	Exists   string `json:"exists,omitempty"`
+	Cmd      string `json:"cmd,omitempty"`
+}
+
+func (c Condition) IsZero() bool {
+	return c.Platform == "" && c.Exists == "" && c.Cmd == ""
+}
+
 // There has to be a better way to do this... todo
 type Task struct {
-	Type       TaskType `json:"type"`
-	Concurrent bool     `json:"concurrent,omitempty"`
+	Type       TaskType   `json:"type"`
+	Concurrent bool       `json:"concurrent,omitempty"`
+	Condition  *Condition `json:"condition,omitempty"`
 	// Shell
 	Cmd     string `json:"cmd,omitempty"`
 	Literal bool   `json:"literal,omitempty"`
@@ -24,6 +36,12 @@ type Task struct {
 	Timeout string `json:"timeout,omitempty"`
 	// Template
 	Src string `json:"src,omitempty"`
+	// Group
+	Ref string `json:"ref,omitempty"`
+	// Git
+	Op     string `json:"op,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Dir    string `json:"dir,omitempty"`
 }
 
 func (t Task) IsZero() bool {
@@ -34,6 +52,7 @@ func (t Task) Expand() Task {
 	return Task{
 		Type:       t.Type,
 		Concurrent: t.Concurrent,
+		Condition:  t.Condition,
 		Cmd:        sys.Expand(t.Cmd),
 		Literal:    t.Literal,
 		Shell:      t.Shell,
@@ -43,6 +62,10 @@ func (t Task) Expand() Task {
 		Dest:       sys.Expand(t.Dest),
 		Timeout:    t.Timeout,
 		Src:        sys.Expand(t.Src),
+		Ref:        t.Ref,
+		Op:         t.Op,
+		Branch:     sys.Expand(t.Branch),
+		Dir:        sys.Expand(t.Dir),
 	}
 }
 
@@ -54,6 +77,8 @@ const (
 	HTTP     TaskType = "http"
 	Wait     TaskType = "wait"
 	Template TaskType = "template"
+	Group    TaskType = "group"
+	Git      TaskType = "git"
 )
 
 func (t TaskType) ToLower() TaskType {

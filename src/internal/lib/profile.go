@@ -19,11 +19,12 @@ const (
 )
 
 type Profile struct {
-	Name         string    `json:"name"`
-	Path         string    `json:"path"`
-	Repositories []Repo    `json:"repositories"`
-	Environments []Env     `json:"environments"`
-	Install      OnInstall `json:"install"`
+	Name         string            `json:"name"`
+	Path         string            `json:"path"`
+	Repositories []Repo            `json:"repositories"`
+	Environments []Env             `json:"environments"`
+	Install      OnInstall         `json:"install"`
+	Groups       map[string][]Task `json:"groups"`
 }
 
 func (p Profile) IsZero() bool {
