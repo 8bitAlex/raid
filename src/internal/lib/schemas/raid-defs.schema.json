@@ -1,0 +1,316 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "raid-defs.schema.json",
+    "title": "Raid Schema Definitions",
+    "description": "Shared schema definitions for raid",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "description": "Tasks to be executed",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Shell" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "cmd": { "type": "string", "description": "Command to execute" },
+                            "shell": {
+                                "type": "string",
+                                "enum": ["bash", "sh", "zsh", "powershell", "cmd"],
+                                "description": "Shell to use (default: bash)"
+                            },
+                            "literal": {
+                                "type": "boolean",
+                                "description": "Pass the command to the shell without prior env var expansion",
+                                "default": false
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "Working directory for the command. Defaults to ~ for profile tasks, the repo directory for repo tasks."
+                            }
+                        },
+                        "required": ["type", "cmd"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Script" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "path": { "type": "string", "description": "Path to the script file" },
+                            "runner": {
+                                "type": "string",
+                                "enum": ["bash", "sh", "zsh", "python", "python2", "python3", "node", "powershell"],
+                                "description": "Interpreter to use (optional)"
+                            }
+                        },
+                        "required": ["type", "path"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "HTTP" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "url": { "type": "string", "description": "URL to download from" },
+                            "dest": { "type": "string", "description": "Local path to write the file to" }
+                        },
+                        "required": ["type", "url", "dest"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Wait" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "url": { "type": "string", "description": "HTTP(S) URL or TCP host:port to poll" },
+                            "timeout": { "type": "string", "description": "Max wait duration (e.g. 30s, 1m). Defaults to 30s." }
+                        },
+                        "required": ["type", "url"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Template" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "src": { "type": "string", "description": "Path to the template file. Supports $VAR and ${VAR} substitution." },
+                            "dest": { "type": "string", "description": "Path to write the rendered file to" }
+                        },
+                        "required": ["type", "src", "dest"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Group" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "ref": { "type": "string", "description": "Name of the group to execute, as defined in the profile's top-level groups map" }
+                        },
+                        "required": ["type", "ref"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Git" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "op": {
+                                "type": "string",
+                                "enum": ["pull", "checkout", "fetch", "reset"],
+                                "description": "Git operation to perform"
+                            },
+                            "branch": { "type": "string", "description": "Target branch (required for checkout, optional for others)" },
+                            "path": { "type": "string", "description": "Path to the git repository. Defaults to the current working directory." }
+                        },
+                        "required": ["type", "op"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Prompt" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "var": { "type": "string", "description": "Environment variable name to set with the user's input" },
+                            "message": { "type": "string", "description": "Message to display to the user" },
+                            "default": { "type": "string", "description": "Default value if the user provides no input" }
+                        },
+                        "required": ["type", "var"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Confirm" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "message": { "type": "string", "description": "Confirmation prompt to display to the user" }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Parallel" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "ref": { "type": "string", "description": "Name of the group whose tasks will all be executed concurrently" }
+                        },
+                        "required": ["type", "ref"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Print" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "message": { "type": "string", "description": "Message to print. Supports $VAR substitution unless literal is true." },
+                            "color": {
+                                "type": "string",
+                                "enum": ["red", "green", "yellow", "blue", "cyan", "white"],
+                                "description": "Optional terminal color for the output"
+                            },
+                            "literal": {
+                                "type": "boolean",
+                                "description": "Skip environment variable expansion in the message",
+                                "default": false
+                            }
+                        },
+                        "required": ["type", "message"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": { "type": "string", "const": "Retry" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "ref": { "type": "string", "description": "Name of the group to retry on failure" },
+                            "attempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Maximum number of attempts (default: 3)"
+                            },
+                            "delay": { "type": "string", "description": "Duration to wait between attempts (e.g. 1s, 500ms). Default: 1s." }
+                        },
+                        "required": ["type", "ref"],
+                        "additionalProperties": false
+                    }
+                ]
+            }
+        },
+        "environments": {
+            "type": "array",
+            "description": "The environments to include in the raid profile",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The name of the environment"
+                    },
+                    "tasks": {
+                        "$ref": "#/properties/tasks"
+                    },
+                    "variables": {
+                        "type": "array",
+                        "description": "Environment variables to set",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "description": "Environment variables to set",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "The name of the variable"
+                                },
+                                "value": {
+                                    "type": "string",
+                                    "description": "The value of the variable"
+                                }
+                            },
+                            "required": ["name", "value"],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+            }
+        },
+        "install": {
+            "type": "object",
+            "description": "Options for installing the raid profile",
+            "properties": {
+                "tasks": {
+                    "$ref": "#/properties/tasks"
+                }
+            },
+            "additionalProperties": false
+        },
+        "commands": {
+            "type": "array",
+            "description": "Custom commands exposed as top-level raid subcommands",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Command name used to invoke it via 'raid <name>'"
+                    },
+                    "usage": {
+                        "type": "string",
+                        "description": "Short description shown in 'raid --help'"
+                    },
+                    "tasks": {
+                        "$ref": "#/properties/tasks"
+                    },
+                    "out": {
+                        "type": "object",
+                        "description": "Output configuration for the command",
+                        "properties": {
+                            "stdout": {
+                                "type": "boolean",
+                                "description": "Show stdout from tasks (default: true when out is omitted)"
+                            },
+                            "stderr": {
+                                "type": "boolean",
+                                "description": "Show stderr from tasks (default: true when out is omitted)"
+                            },
+                            "file": {
+                                "type": "string",
+                                "description": "Path to additionally write all output to. Supports $VAR expansion."
+                            }
+                        },
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["name", "tasks"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "$defs": {
+        "concurrent": {
+            "type": "boolean",
+            "description": "Whether to execute the task concurrently with other tasks"
+        },
+        "condition": {
+            "type": "object",
+            "description": "All specified fields must be satisfied for the task to run",
+            "properties": {
+                "platform": {
+                    "type": "string",
+                    "enum": ["darwin", "linux", "windows"],
+                    "description": "Only run on this platform"
+                },
+                "exists": {
+                    "type": "string",
+                    "description": "Only run if this file or directory exists"
+                },
+                "cmd": {
+                    "type": "string",
+                    "description": "Only run if this command exits with code 0"
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}

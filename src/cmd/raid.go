@@ -31,7 +31,6 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	cobra.OnInitialize(raid.Initialize)
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(raid.ConfigPath, raid.ConfigPathFlag, raid.ConfigPathFlagShort, "", raid.ConfigPathFlagDesc)
 	// Subcommands

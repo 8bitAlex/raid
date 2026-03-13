@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const repoSchemaPath = "schemas/raid-repo.schema.json"
+const repoSchemaPath = "raid-repo.schema.json"
 
 // Repo represents a single repository entry in a profile.
 type Repo struct {
@@ -105,7 +105,7 @@ func clone(path string, url string) error {
 
 // ValidateRepo validates the repo config file at path against the repo JSON schema.
 func ValidateRepo(path string) error {
-	return ValidateSchema(path, repoSchemaPath)
+	return validateWithEmbeddedSchema(path, repoSchemaPath)
 }
 
 // ExtractRepo reads and parses the raid.yaml from the given repository directory.

@@ -33,17 +33,13 @@ func GetHomeDir() string {
 	return home
 }
 
-// CreateFile opens the file at filePath if it exists, or creates it (including parent directories).
+// CreateFile opens or creates the file at filePath for reading and writing, creating parent directories as needed.
 func CreateFile(filePath string) (*os.File, error) {
 	pathEx := ExpandPath(filePath)
-	if FileExists(pathEx) {
-		return os.Open(pathEx)
-	}
-
 	if err := os.MkdirAll(filepath.Dir(pathEx), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create directories for '%s': %w", filePath, err)
 	}
-	return os.Create(pathEx)
+	return os.OpenFile(pathEx, os.O_RDWR|os.O_CREATE, 0644)
 }
 
 // FileExists reports whether the file or directory at path exists.

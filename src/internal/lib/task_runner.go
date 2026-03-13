@@ -145,9 +145,7 @@ func execShell(task Task) error {
 	if task.Path != "" {
 		cmd.Dir = sys.ExpandPath(task.Path)
 	}
-	if !task.Concurrent {
-		setCmdOutput(cmd)
-	}
+	setCmdOutput(cmd)
 
 	err := cmd.Run()
 	if err != nil {
@@ -195,9 +193,7 @@ func execScript(task Task) error {
 		cmd = exec.Command(task.Path)
 	}
 
-	if !task.Concurrent {
-		setCmdOutput(cmd)
-	}
+	setCmdOutput(cmd)
 
 	err := cmd.Run()
 	if err != nil {
@@ -399,9 +395,7 @@ func execGit(task Task) error {
 
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	if !task.Concurrent {
-		setCmdOutput(cmd)
-	}
+	setCmdOutput(cmd)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git %s failed in '%s': %w", task.Op, dir, err)

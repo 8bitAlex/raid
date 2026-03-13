@@ -4,20 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
+// MergeErr combines multiple errors into a single error, skipping nil entries.
+// Returns nil if all errors are nil or the slice is empty.
 func MergeErr(errs []error) error {
-	var result string
+	var msgs []string
 	for _, err := range errs {
-		if len(result) == 0 {
-			result = err.Error()
-		} else {
-			result = result + ", " + err.Error()
+		if err != nil {
+			msgs = append(msgs, err.Error())
 		}
 	}
-	return fmt.Errorf("%s", result)
+	if len(msgs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s", strings.Join(msgs, ", "))
 }
 
 func YAMLToJSON(file io.Reader) ([]byte, error) {

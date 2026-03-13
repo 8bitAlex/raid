@@ -3,6 +3,8 @@ package lib
 
 import (
 	"bytes"
+	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +16,9 @@ import (
 	"github.com/8bitalex/raid/src/internal/utils"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+//go:embed schemas/*.json
+var schemaFS embed.FS
 
 const (
 	yamlSep            = "---"
@@ -137,6 +142,7 @@ func Install(maxThreads int) error {
 }
 
 // ValidateSchema validates the file at path against the JSON schema at schemaPath.
+// schemaPath must be an absolute or CWD-relative path to a schema file on disk.
 func ValidateSchema(path string, schemaPath string) error {
 	path = sys.ExpandPath(path)
 	schemaPath = sys.ExpandPath(schemaPath)
@@ -154,6 +160,47 @@ func ValidateSchema(path string, schemaPath string) error {
 		return err
 	}
 
+	return validateFile(path, sch)
+}
+
+// validateWithEmbeddedSchema validates path against a schema embedded in the binary.
+// schemaName must be the bare filename of a schema in the embedded schemas directory
+// (e.g. "raid-profile.schema.json"). All embedded schemas are registered so that
+// cross-schema $ref values resolve correctly.
+func validateWithEmbeddedSchema(path, schemaName string) error {
+	path = sys.ExpandPath(path)
+	if path == "" || !sys.FileExists(path) {
+		return fmt.Errorf("file not found at %s", path)
+	}
+
+	c := jsonschema.NewCompiler()
+	entries, err := schemaFS.ReadDir("schemas")
+	if err != nil {
+		return fmt.Errorf("failed to read embedded schemas: %w", err)
+	}
+	for _, entry := range entries {
+		data, err := schemaFS.ReadFile("schemas/" + entry.Name())
+		if err != nil {
+			return fmt.Errorf("failed to read embedded schema %s: %w", entry.Name(), err)
+		}
+		var doc any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("failed to parse embedded schema %s: %w", entry.Name(), err)
+		}
+		if err := c.AddResource(entry.Name(), doc); err != nil {
+			return fmt.Errorf("failed to register embedded schema %s: %w", entry.Name(), err)
+		}
+	}
+
+	sch, err := c.Compile(schemaName)
+	if err != nil {
+		return err
+	}
+
+	return validateFile(path, sch)
+}
+
+func validateFile(path string, sch *jsonschema.Schema) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err

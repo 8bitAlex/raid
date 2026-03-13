@@ -15,7 +15,7 @@ import (
 const (
 	activeProfileKey  = "profile"
 	allProfilesKey    = "profiles"
-	profileSchemaPath = "schemas/raid-profile.schema.json"
+	profileSchemaPath = "raid-profile.schema.json"
 )
 
 // Profile represents a named collection of repositories, environments, and task groups.
@@ -217,7 +217,7 @@ func ContainsProfile(name string) bool {
 
 // ValidateProfile validates the profile file at path against the profile JSON schema.
 func ValidateProfile(path string) error {
-	return ValidateSchema(path, profileSchemaPath)
+	return validateWithEmbeddedSchema(path, profileSchemaPath)
 }
 
 func buildProfile(profile Profile) (Profile, error) {

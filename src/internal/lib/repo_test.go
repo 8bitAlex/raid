@@ -129,12 +129,11 @@ func TestBuildRepo_noRaidYAML(t *testing.T) {
 
 func TestBuildRepo_validationError(t *testing.T) {
 	dir := t.TempDir()
-	// Create raid.yaml; schema not found from test CWD → ValidateRepo returns error.
-	os.WriteFile(filepath.Join(dir, RaidConfigFileName), []byte("name: test\nbranch: main"), 0644)
+	// badfield violates additionalProperties:false in the repo schema.
+	os.WriteFile(filepath.Join(dir, RaidConfigFileName), []byte("name: test\nbranch: main\nbadfield: invalid"), 0644)
 
 	repo := Repo{Name: "test", Path: dir, URL: "http://x.com"}
-	err := buildRepo(&repo)
-	if err == nil {
+	if err := buildRepo(&repo); err == nil {
 		t.Fatal("buildRepo() expected error when schema validation fails")
 	}
 }
@@ -189,14 +188,13 @@ func TestCloneRepository_successLocalRepo(t *testing.T) {
 	}
 }
 
-func TestValidateRepo_schemaNotFound(t *testing.T) {
+func TestValidateRepo_schemaViolation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "raid.yaml")
-	os.WriteFile(path, []byte("name: test\nbranch: main"), 0644)
+	// badfield violates additionalProperties:false in the repo schema.
+	os.WriteFile(path, []byte("name: test\nbranch: main\nbadfield: invalid"), 0644)
 
-	// repoSchemaPath is relative to repo root; won't resolve from test CWD.
-	err := ValidateRepo(path)
-	if err == nil {
-		t.Fatal("ValidateRepo() expected error when schema cannot be found from test CWD")
+	if err := ValidateRepo(path); err == nil {
+		t.Fatal("ValidateRepo() expected error for schema violation")
 	}
 }

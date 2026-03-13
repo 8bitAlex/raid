@@ -19,11 +19,11 @@ environments:
         literal: false
         cmd: echo $NODE_ENV
       - type: Script
-        path: ~/Developer/raid/docs/examples/hello.sh
+        path: ./docs/examples/hello.sh
         runner: bash
         concurrent: false
       - type: Shell
-        cmd: touch ~/testfile.txt && echo "Created testfile.txt"
+        cmd: echo "Hello from concurrent task"
         concurrent: true
     variables:
       - name: NODE_ENV

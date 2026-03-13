@@ -17,6 +17,7 @@ package raid
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/8bitalex/raid/src/internal/lib"
 )
@@ -43,7 +44,7 @@ func Initialize() {
 		log.Fatalf("%v\n", err)
 	}
 	if err := lib.LoadEnv(); err != nil {
-		fmt.Printf("%v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 }
 

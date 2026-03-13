@@ -76,12 +76,12 @@ func TestForceLoad_buildProfileError(t *testing.T) {
 
 	dir := t.TempDir()
 	profilePath := filepath.Join(dir, "profile.yaml")
-	os.WriteFile(profilePath, []byte("name: test"), 0644)
+	// badfield violates additionalProperties:false in the profile schema.
+	os.WriteFile(profilePath, []byte("name: test\nbadfield: invalid"), 0644)
 
 	AddProfile(Profile{Name: "test", Path: profilePath})
 	SetProfile("test")
 
-	// profileSchemaPath is relative; not found from test CWD → buildProfile fails.
 	if err := ForceLoad(); err == nil {
 		t.Fatal("ForceLoad() expected error when buildProfile fails")
 	}

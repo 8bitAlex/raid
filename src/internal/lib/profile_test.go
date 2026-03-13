@@ -340,9 +340,9 @@ func TestBuildProfile_fileNotFound(t *testing.T) {
 func TestBuildProfile_validationError(t *testing.T) {
 	dir := t.TempDir()
 	profilePath := filepath.Join(dir, "profile.yaml")
-	os.WriteFile(profilePath, []byte("name: test"), 0644)
+	// badfield violates additionalProperties:false in the profile schema.
+	os.WriteFile(profilePath, []byte("name: test\nbadfield: invalid"), 0644)
 
-	// profileSchemaPath is relative; schema not found from test CWD → validation error.
 	_, err := buildProfile(Profile{Name: "test", Path: profilePath})
 	if err == nil {
 		t.Fatal("buildProfile() expected error when schema validation fails")
@@ -367,15 +367,13 @@ func TestBuildProfile_extractionError(t *testing.T) {
 	}
 }
 
-func TestValidateProfile_schemaNotFound(t *testing.T) {
+func TestValidateProfile_schemaViolation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "profile.yaml")
-	os.WriteFile(path, []byte("name: test"), 0644)
+	// badfield violates additionalProperties:false in the profile schema.
+	os.WriteFile(path, []byte("name: test\nbadfield: invalid"), 0644)
 
-	// profileSchemaPath is relative to repo root; won't resolve from test CWD.
-	// We just need to exercise the function; the error path is valid coverage.
-	err := ValidateProfile(path)
-	if err == nil {
-		t.Fatal("ValidateProfile() expected error when schema cannot be found from test CWD")
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() expected error for schema violation")
 	}
 }
