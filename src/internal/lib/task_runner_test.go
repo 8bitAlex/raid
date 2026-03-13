@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -119,11 +120,6 @@ func TestExecuteTask_shell(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "explicit zsh shell",
-			task:    Task{Type: Shell, Cmd: "exit 0", Shell: "zsh"},
-			wantErr: false,
-		},
-		{
 			name:    "literal=true still executes",
 			task:    Task{Type: Shell, Cmd: "exit 0", Literal: true},
 			wantErr: false,
@@ -142,6 +138,16 @@ func TestExecuteTask_shell(t *testing.T) {
 				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestExecuteTask_shell_zsh(t *testing.T) {
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available on this system")
+	}
+	task := Task{Type: Shell, Cmd: "exit 0", Shell: "zsh"}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("unexpected error with zsh shell: %v", err)
 	}
 }
 
@@ -199,11 +205,6 @@ func TestExecuteTask_script(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "success without runner (direct execution)",
-			task:    Task{Type: Script, Path: successScript},
-			wantErr: false,
-		},
-		{
 			name:    "type is case-insensitive",
 			task:    Task{Type: "SCRIPT", Path: successScript, Runner: "bash"},
 			wantErr: false,
@@ -222,6 +223,17 @@ func TestExecuteTask_script(t *testing.T) {
 				t.Errorf("ExecuteTask() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestExecuteTask_script_directExecution(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
+	script := writeTempScript(t, "#!/bin/sh\nexit 0\n")
+	task := Task{Type: Script, Path: script}
+	if err := ExecuteTask(task); err != nil {
+		t.Errorf("unexpected error with direct script execution: %v", err)
 	}
 }
 
