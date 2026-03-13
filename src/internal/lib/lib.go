@@ -41,7 +41,13 @@ func Load() error {
 }
 
 func ForceLoad() error {
-	profile, err := buildProfile(GetProfile())
+	p := GetProfile()
+	if p.IsZero() {
+		context = &Context{Env: GetEnv()}
+		return nil
+	}
+
+	profile, err := buildProfile(p)
 	if err != nil {
 		return err
 	}

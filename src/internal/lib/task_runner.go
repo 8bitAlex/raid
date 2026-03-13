@@ -25,7 +25,14 @@ func ExecuteTasks(tasks []Task) error {
 			}(task)
 		} else {
 			if err := ExecuteTask(task); err != nil {
-				errorChan <- fmt.Errorf("failed to execute task '%s': %w", task.Type, err)
+				// Wait for any already-started concurrent tasks before returning.
+				wg.Wait()
+				close(errorChan)
+				errs := []error{fmt.Errorf("failed to execute task '%s': %w", task.Type, err)}
+				for e := range errorChan {
+					errs = append(errs, e)
+				}
+				return fmt.Errorf("some tasks failed to execute: %v", errs)
 			}
 		}
 	}

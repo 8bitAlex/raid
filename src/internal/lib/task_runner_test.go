@@ -316,22 +316,22 @@ func TestExecuteTasks(t *testing.T) {
 	}
 }
 
-func TestExecuteTasks_multipleFailures_allReported(t *testing.T) {
+func TestExecuteTasks_sequentialFailsFast(t *testing.T) {
+	// A failing sequential task must halt further sequential execution.
+	// We verify this by placing a task after the failure that would write a
+	// marker file if it ran — the marker must not exist after the run.
+	marker := filepath.Join(t.TempDir(), "should-not-exist")
 	tasks := []Task{
 		{Type: Shell, Cmd: "exit 1"},
-		{Type: Shell, Cmd: "exit 1"},
+		{Type: Shell, Cmd: "touch " + marker},
 	}
 
 	err := ExecuteTasks(tasks)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-
-	// Both failures should be captured in the combined error message.
-	const wantOccurrences = 2
-	count := strings.Count(err.Error(), "failed to execute task")
-	if count < wantOccurrences {
-		t.Errorf("error should mention %d failures, got %d occurrences in: %q", wantOccurrences, count, err.Error())
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Error("second task ran after sequential failure; expected fail-fast")
 	}
 }
 
