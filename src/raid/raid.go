@@ -41,7 +41,8 @@ func Initialize() {
 		log.Fatalf("init config: %v", err)
 	}
 	if err := Load(); err != nil {
-		log.Fatalf("load profile: %v", err)
+		// Non-fatal: allows 'raid doctor' to run and report the underlying issue.
+		fmt.Fprintf(os.Stderr, "warning: could not load profile: %v\n", err)
 	}
 	if err := lib.LoadEnv(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -71,4 +72,21 @@ func GetCommands() []lib.Command {
 // ExecuteCommand runs the named command from the active profile.
 func ExecuteCommand(name string) error {
 	return lib.ExecuteCommand(name)
+}
+
+// Severity indicates the importance of a Doctor finding.
+type Severity = lib.Severity
+
+const (
+	SeverityOK    = lib.SeverityOK
+	SeverityWarn  = lib.SeverityWarn
+	SeverityError = lib.SeverityError
+)
+
+// Finding represents the result of a single Doctor check.
+type Finding = lib.Finding
+
+// Doctor performs all configuration checks and returns the findings.
+func Doctor() []Finding {
+	return lib.RunDoctor()
 }
