@@ -370,8 +370,9 @@ func execGit(task Task) error {
 		}
 	}
 
-	if !sys.FileExists(dir) {
-		return fmt.Errorf("directory does not exist: %s", dir)
+	info, statErr := os.Stat(dir)
+	if statErr != nil || !info.IsDir() {
+		return fmt.Errorf("path is not a directory: %s", dir)
 	}
 
 	var args []string

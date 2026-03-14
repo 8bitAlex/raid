@@ -13,8 +13,8 @@ import (
 	"sync"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
-	"github.com/8bitalex/raid/src/internal/utils"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed schemas/*.json
@@ -207,21 +207,38 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 	}
 	defer f.Close()
 
-	var reader io.Reader = f
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".yaml" || ext == ".yml" {
-		data, err := utils.YAMLToJSON(f)
-		if err != nil {
-			return err
+		// Validate every document in a multi-doc YAML stream individually so
+		// that profile files using --- separators are fully validated.
+		dec := yaml.NewDecoder(f)
+		for {
+			var raw any
+			if err := dec.Decode(&raw); err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+			jsonBytes, err := json.Marshal(raw)
+			if err != nil {
+				return err
+			}
+			doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonBytes))
+			if err != nil {
+				return err
+			}
+			if err := sch.Validate(doc); err != nil {
+				return fmt.Errorf("invalid format: %w", err)
+			}
 		}
-		reader = bytes.NewReader(data)
+		return nil
 	}
 
-	doc, err := jsonschema.UnmarshalJSON(reader)
+	doc, err := jsonschema.UnmarshalJSON(f)
 	if err != nil {
 		return err
 	}
-
 	if err := sch.Validate(doc); err != nil {
 		return fmt.Errorf("invalid format: %w", err)
 	}
