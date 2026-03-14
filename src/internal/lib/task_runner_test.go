@@ -1090,24 +1090,24 @@ func TestExecuteTask_confirm_no(t *testing.T) {
 	}
 }
 
-// --- Parallel tasks ---
+// --- Group parallel mode ---
 
-func TestExecuteTask_parallel_noContext(t *testing.T) {
+func TestExecuteTask_group_parallel_noContext(t *testing.T) {
 	context = nil
-	task := Task{Type: Parallel, Ref: "mygroup"}
+	task := Task{Type: Group, Ref: "mygroup", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error when context is nil, got nil")
 	}
 }
 
-func TestExecuteTask_parallel_missingRef(t *testing.T) {
-	task := Task{Type: Parallel, Ref: ""}
+func TestExecuteTask_group_parallel_missingRef(t *testing.T) {
+	task := Task{Type: Group, Ref: "", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error for empty ref, got nil")
 	}
 }
 
-func TestExecuteTask_parallel_success(t *testing.T) {
+func TestExecuteTask_group_parallel_success(t *testing.T) {
 	markerA := filepath.Join(t.TempDir(), "a")
 	markerB := filepath.Join(t.TempDir(), "b")
 	context = &Context{
@@ -1122,7 +1122,7 @@ func TestExecuteTask_parallel_success(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Parallel, Ref: "workers"}
+	task := Task{Type: Group, Ref: "workers", Parallel: true}
 	if err := ExecuteTask(task); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1133,7 +1133,7 @@ func TestExecuteTask_parallel_success(t *testing.T) {
 	}
 }
 
-func TestExecuteTask_parallel_propagatesFailure(t *testing.T) {
+func TestExecuteTask_group_parallel_propagatesFailure(t *testing.T) {
 	context = &Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
@@ -1145,30 +1145,30 @@ func TestExecuteTask_parallel_propagatesFailure(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Parallel, Ref: "broken"}
+	task := Task{Type: Group, Ref: "broken", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
-		t.Fatal("expected error from failing parallel task, got nil")
+		t.Fatal("expected error from failing parallel group, got nil")
 	}
 }
 
-// --- Retry tasks ---
+// --- Group retry mode ---
 
-func TestExecuteTask_retry_missingRef(t *testing.T) {
-	task := Task{Type: Retry, Ref: ""}
+func TestExecuteTask_group_retry_missingRef(t *testing.T) {
+	task := Task{Type: Group, Ref: "", Attempts: 3}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error for empty ref, got nil")
 	}
 }
 
-func TestExecuteTask_retry_noContext(t *testing.T) {
+func TestExecuteTask_group_retry_noContext(t *testing.T) {
 	context = nil
-	task := Task{Type: Retry, Ref: "mygroup"}
+	task := Task{Type: Group, Ref: "mygroup", Attempts: 1}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error when context is nil, got nil")
 	}
 }
 
-func TestExecuteTask_retry_succeedsOnFirstAttempt(t *testing.T) {
+func TestExecuteTask_group_retry_succeedsOnFirstAttempt(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "ran")
 	context = &Context{
 		Profile: Profile{
@@ -1179,16 +1179,16 @@ func TestExecuteTask_retry_succeedsOnFirstAttempt(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Retry, Ref: "work", Attempts: 3}
+	task := Task{Type: Group, Ref: "work", Attempts: 3}
 	if err := ExecuteTask(task); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := os.Stat(marker); err != nil {
-		t.Error("expected marker to exist after successful retry task")
+		t.Error("expected marker to exist after successful group retry")
 	}
 }
 
-func TestExecuteTask_retry_exhaustsAllAttempts(t *testing.T) {
+func TestExecuteTask_group_retry_exhaustsAllAttempts(t *testing.T) {
 	context = &Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
@@ -1198,7 +1198,7 @@ func TestExecuteTask_retry_exhaustsAllAttempts(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Retry, Ref: "always-fail", Attempts: 2, Delay: "1ms"}
+	task := Task{Type: Group, Ref: "always-fail", Attempts: 2, Delay: "1ms"}
 	err := ExecuteTask(task)
 	if err == nil {
 		t.Fatal("expected error after all retries exhausted, got nil")
@@ -1208,7 +1208,7 @@ func TestExecuteTask_retry_exhaustsAllAttempts(t *testing.T) {
 	}
 }
 
-func TestExecuteTask_retry_invalidDelay(t *testing.T) {
+func TestExecuteTask_group_retry_invalidDelay(t *testing.T) {
 	context = &Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
@@ -1218,7 +1218,7 @@ func TestExecuteTask_retry_invalidDelay(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Retry, Ref: "work", Delay: "not-a-duration"}
+	task := Task{Type: Group, Ref: "work", Attempts: 1, Delay: "not-a-duration"}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error for invalid delay, got nil")
 	}

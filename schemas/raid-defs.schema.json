@@ -96,7 +96,10 @@
                             "type": { "type": "string", "const": "Group" },
                             "concurrent": { "$ref": "#/$defs/concurrent" },
                             "condition": { "$ref": "#/$defs/condition" },
-                            "ref": { "type": "string", "description": "Name of the group to execute, as defined in the profile's top-level groups map" }
+                            "ref": { "type": "string", "description": "Name of the task group to execute, as defined in the profile's top-level task_groups map" },
+                            "parallel": { "type": "boolean", "description": "Run all tasks in the group concurrently, then wait for all to finish", "default": false },
+                            "attempts": { "type": "integer", "minimum": 1, "description": "Retry the group on failure up to this many times" },
+                            "delay": { "type": "string", "description": "Duration to wait between retry attempts (e.g. 1s, 500ms). Default: 1s." }
                         },
                         "required": ["type", "ref"],
                         "additionalProperties": false
@@ -145,17 +148,6 @@
                     {
                         "type": "object",
                         "properties": {
-                            "type": { "type": "string", "const": "Parallel" },
-                            "concurrent": { "$ref": "#/$defs/concurrent" },
-                            "condition": { "$ref": "#/$defs/condition" },
-                            "ref": { "type": "string", "description": "Name of the group whose tasks will all be executed concurrently" }
-                        },
-                        "required": ["type", "ref"],
-                        "additionalProperties": false
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
                             "type": { "type": "string", "const": "Print" },
                             "concurrent": { "$ref": "#/$defs/concurrent" },
                             "condition": { "$ref": "#/$defs/condition" },
@@ -174,23 +166,6 @@
                         "required": ["type", "message"],
                         "additionalProperties": false
                     },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "type": { "type": "string", "const": "Retry" },
-                            "concurrent": { "$ref": "#/$defs/concurrent" },
-                            "condition": { "$ref": "#/$defs/condition" },
-                            "ref": { "type": "string", "description": "Name of the group to retry on failure" },
-                            "attempts": {
-                                "type": "integer",
-                                "minimum": 1,
-                                "description": "Maximum number of attempts (default: 3)"
-                            },
-                            "delay": { "type": "string", "description": "Duration to wait between attempts (e.g. 1s, 500ms). Default: 1s." }
-                        },
-                        "required": ["type", "ref"],
-                        "additionalProperties": false
-                    }
                 ]
             }
         },

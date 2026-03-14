@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,7 +26,7 @@ type Profile struct {
 	Repositories []Repo            `json:"repositories"`
 	Environments []Env             `json:"environments"`
 	Install      OnInstall         `json:"install"`
-	Groups       map[string][]Task `json:"groups"`
+	Groups       map[string][]Task `json:"task_groups" yaml:"task_groups"`
 	Commands     []Command         `json:"commands"`
 }
 
@@ -218,6 +219,93 @@ func ContainsProfile(name string) bool {
 // ValidateProfile validates the profile file at path against the profile JSON schema.
 func ValidateProfile(path string) error {
 	return validateWithEmbeddedSchema(path, profileSchemaPath)
+}
+
+const (
+	profileSchemaURL = "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json"
+	repoSchemaURL    = "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json"
+)
+
+// ProfileDraft is the minimal structure written to a new profile file.
+type ProfileDraft struct {
+	Name         string      `yaml:"name"`
+	Repositories []RepoDraft `yaml:"repositories,omitempty"`
+}
+
+// RepoDraft holds the fields collected for each repository during profile creation.
+type RepoDraft struct {
+	Name   string `yaml:"name"`
+	Path   string `yaml:"path"`
+	URL    string `yaml:"url"`
+	Branch string `yaml:"branch,omitempty"`
+}
+
+// WriteProfileFile serializes draft as YAML and writes it to path, creating parent directories as needed.
+func WriteProfileFile(draft ProfileDraft, path string) error {
+	data, err := yaml.Marshal(draft)
+	if err != nil {
+		return fmt.Errorf("serializing profile: %w", err)
+	}
+	content := "# yaml-language-server: $schema=" + profileSchemaURL + "\n\n" + string(data)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// CollectRepos runs an interactive prompt loop to collect repository details from reader.
+func CollectRepos(reader *bufio.Reader) []RepoDraft {
+	var repos []RepoDraft
+	for {
+		fmt.Println()
+		if !sys.ReadYesNo(reader, "Add a repository? [y/N]: ") {
+			break
+		}
+		name := sys.ReadLine(reader, "  Name: ")
+		url := sys.ReadLine(reader, "  URL: ")
+		path := sys.ReadLine(reader, "  Local path: ")
+		defaultBranch := sys.DetectGitDefaultBranch(url)
+		branchPrompt := "  Default branch: "
+		if defaultBranch != "" {
+			branchPrompt = fmt.Sprintf("  Default branch [%s]: ", defaultBranch)
+		}
+		branch := sys.ReadLine(reader, branchPrompt)
+		if branch == "" {
+			branch = defaultBranch
+		}
+		repo := RepoDraft{Name: name, URL: url, Path: path, Branch: branch}
+		if repo.Name == "" || repo.URL == "" || repo.Path == "" {
+			fmt.Println("  Name, URL, and path are all required. Skipping.")
+			continue
+		}
+		repos = append(repos, repo)
+	}
+	return repos
+}
+
+// CreateRepoConfigs writes a raid.yaml stub into each repository's local directory.
+func CreateRepoConfigs(repos []RepoDraft) {
+	for _, repo := range repos {
+		repoPath := sys.ExpandPath(repo.Path)
+		if err := os.MkdirAll(repoPath, 0755); err != nil {
+			fmt.Printf("  Failed to create directory for '%s': %v\n", repo.Name, err)
+			continue
+		}
+		configPath := filepath.Join(repoPath, "raid.yaml")
+		if sys.FileExists(configPath) {
+			fmt.Printf("  raid.yaml already exists at %s, skipping.\n", configPath)
+			continue
+		}
+		content := "# yaml-language-server: $schema=" + repoSchemaURL + "\n\nname: " + repo.Name + "\n"
+		if repo.Branch != "" {
+			content += "branch: " + repo.Branch + "\n"
+		}
+		if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+			fmt.Printf("  Failed to write repo config for '%s': %v\n", repo.Name, err)
+			continue
+		}
+		fmt.Printf("  Created %s\n", configPath)
+	}
 }
 
 func buildProfile(profile Profile) (Profile, error) {

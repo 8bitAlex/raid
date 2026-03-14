@@ -37,8 +37,9 @@ type Task struct {
 	Timeout string `json:"timeout,omitempty"`
 	// Template
 	Src string `json:"src,omitempty"`
-	// Group / Parallel / Retry
-	Ref string `json:"ref,omitempty"`
+	// Group
+	Ref      string `json:"ref,omitempty"`
+	Parallel bool   `json:"parallel,omitempty"`
 	// Git
 	Op     string `json:"op,omitempty"`
 	Branch string `json:"branch,omitempty"`
@@ -75,6 +76,7 @@ func (t Task) Expand() Task {
 		Timeout:    t.Timeout,
 		Src:        sys.ExpandPath(t.Src),
 		Ref:        t.Ref,
+		Parallel:   t.Parallel,
 		Op:         t.Op,
 		Branch:     sys.Expand(t.Branch),
 		Message:    sys.Expand(t.Message),
@@ -95,13 +97,11 @@ const (
 	HTTP     TaskType = "http"
 	Wait     TaskType = "wait"
 	Template TaskType = "template"
-	Group    TaskType = "group"
-	Git      TaskType = "git"
-	Prompt   TaskType = "prompt"
-	Confirm  TaskType = "confirm"
-	Parallel TaskType = "parallel"
-	Print    TaskType = "print"
-	Retry    TaskType = "retry"
+	Group   TaskType = "group"
+	Git     TaskType = "git"
+	Prompt  TaskType = "prompt"
+	Confirm TaskType = "confirm"
+	Print   TaskType = "print"
 )
 
 // ToLower returns the task type normalized to lowercase for case-insensitive comparisons.

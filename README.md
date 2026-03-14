@@ -39,13 +39,12 @@ brew install raid  # macOS — Linux and Windows coming soon
 
 ### Quickstart
 
-First, create a profile file (see [Configuration](#configuration) below), then:
-
 ```bash
-raid profile add my-project.raid.yaml  # register and activate a profile
-raid install                           # clone repos and run install tasks
-raid env dev                           # apply the dev environment
+raid profile create   # interactive wizard: name your profile and add repositories
+raid install          # clone repos and run install tasks
 ```
+
+You can also write a profile file manually (see [Configuration](#configuration)) and register it with `raid profile add <file>`.
 
 ---
 
@@ -55,7 +54,8 @@ raid env dev                           # apply the dev environment
 
 Manage profiles. A profile is a named collection of repositories and environments.
 
-- `raid profile add <file>` — register profiles from a YAML or JSON file; the first added profile is set as active automatically
+- `raid profile create` — interactive wizard to create and register a new profile
+- `raid profile add <file>` — register profiles from a YAML or JSON file
 - `raid profile list` — list all registered profiles
 - `raid profile <name>` — switch the active profile
 - `raid profile remove <name>` — remove a profile
@@ -69,6 +69,10 @@ Clone all repositories in the active profile and run any configured install task
 - `raid env <name>` — apply a named environment: writes `.env` files into each repo and runs environment tasks
 - `raid env` — show the currently active environment
 - `raid env list` — list available environments
+
+### `raid doctor`
+
+Check the current configuration for issues and get suggestions for fixing them. Useful after initial setup or when something isn't working as expected.
 
 ### `raid <command>`
 
@@ -85,14 +89,15 @@ Custom commands appear alongside built-in commands in `raid --help`. Commands de
 
 ## Configuration
 
-Tasks can be defined under `install`, within any environment, or in named `groups` — in both profile and repo configs.
-
 ### Profile (`*.raid.yaml`)
 
-A profile defines the repositories, environments, and reusable task groups for a project. The `$schema` annotation enables autocomplete and validation in editors like VS Code.
+A profile defines the repositories, environments, and tasks for a project. The `$schema` annotation enables autocomplete and validation in editors like VS Code. See [Tasks](#tasks) for available task types.
 
+Supported formats: `.yaml`, `.yml`, `.json`
+
+Example `my-project.raid.yaml`:
 ```yaml
-# yaml-language-server: $schema=schemas/raid-profile.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
 
 name: my-project
 
@@ -126,7 +131,7 @@ install:
     - type: Shell
       cmd: brew install node
 
-groups:
+task_groups:
   verify-services:
     - type: Wait
       url: http://localhost:3000
@@ -147,16 +152,18 @@ commands:
         path: ~/Developer/backend
       - type: Shell
         cmd: docker compose restart
+      - type: Group
+        ref: verify-services
 ```
 
 Multiple profiles can be defined in a single file using YAML document separators (`---`) or a JSON array.
 
 ### Repository (`raid.yaml`)
 
-Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and install tasks. These are merged with the profile configuration at load time. Committing this file to each repo is the recommended way to share setup knowledge with your team.
+Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and tasks. These are merged with the profile configuration at load time. Committing this file to each repo is the recommended way to share knowledge with your team.
 
 ```yaml
-# yaml-language-server: $schema=schemas/raid-repo.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
 
 name: my-service
 branch: main
@@ -180,6 +187,21 @@ commands:
 ---
 
 ## Tasks
+
+Tasks are the unit of work in raid. They appear in environments, install steps, commands, and task groups. Each task has a `type` and type-specific fields.
+
+| Type | Description |
+|------|-------------|
+| `Shell` | Run a shell command |
+| `Script` | Execute a script file |
+| `Git` | Run a git operation (`pull`, `clone`, etc.) |
+| `HTTP` | Download a file from a URL |
+| `Wait` | Poll a URL or address until it responds |
+| `Template` | Render a template file |
+| `Print` | Print a message to the console |
+| `Prompt` | Prompt the user for input and store it in a variable |
+| `Confirm` | Prompt the user for a yes/no confirmation |
+| `Group` | Execute a named task group by `ref` |
 
 All task types support two optional modifiers:
 
@@ -245,20 +267,14 @@ Render a file by substituting `$VAR` and `${VAR}` references with environment va
 
 ### Group
 
-Execute a named group of tasks defined in the profile's top-level `groups` map.
+Execute a named task group defined in the profile's `task_groups`. Supports optional parallel and retry modifiers.
 
 ```yaml
 - type: Group
   ref: verify-services
-```
-
-### Parallel
-
-Like `Group`, but forces all tasks in the group to run concurrently, then waits for all to finish before continuing.
-
-```yaml
-- type: Parallel
-  ref: start-services
+  parallel: true   # optional: run all tasks in the group concurrently
+  attempts: 3      # optional: retry the group on failure
+  delay: 5s        # optional: delay between retries (default: 1s)
 ```
 
 ### Git
@@ -301,17 +317,6 @@ Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful
 ```yaml
 - type: Confirm
   message: "This will reset the production database. Continue?"
-```
-
-### Retry
-
-Re-run a group of tasks on failure, up to a configurable number of attempts.
-
-```yaml
-- type: Retry
-  ref: run-migrations
-  attempts: 3      # optional, default: 3
-  delay: 5s        # optional, default: 1s
 ```
 
 ---

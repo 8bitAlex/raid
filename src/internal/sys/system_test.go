@@ -1,8 +1,11 @@
 package sys
 
 import (
+	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -210,4 +213,148 @@ func TestCreateFile_existingFile(t *testing.T) {
 		t.Fatalf("CreateFile() on existing file error: %v", err)
 	}
 	f.Close()
+}
+
+// --- ValidateFileName ---
+
+func TestValidateFileName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"valid simple name", "my-profile", false},
+		{"valid with underscores", "my_profile_2", false},
+		{"empty string", "", true},
+		{"forward slash", "foo/bar", true},
+		{"backslash", `foo\bar`, true},
+		{"colon", "foo:bar", true},
+		{"asterisk", "foo*bar", true},
+		{"question mark", "foo?bar", true},
+		{"double quote", `foo"bar`, true},
+		{"less than", "foo<bar", true},
+		{"greater than", "foo>bar", true},
+		{"pipe", "foo|bar", true},
+		{"null byte", "foo\x00bar", true},
+		{"control character", "foo\x01bar", true},
+		{"dots only", "...", true},
+		{"spaces only", "   ", true},
+		{"dots and spaces", " . ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFileName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateFileName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// --- ReadLine ---
+
+func TestReadLine(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"hello world\n", "hello world"},
+		{"  trimmed  \n", "trimmed"},
+		{"\n", ""},
+	}
+	for _, tc := range cases {
+		reader := bufio.NewReader(strings.NewReader(tc.input))
+		got := ReadLine(reader, "")
+		if got != tc.want {
+			t.Errorf("ReadLine(%q): got %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// --- ReadYesNo ---
+
+func TestReadYesNo(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"y\n", true},
+		{"Y\n", true},
+		{"yes\n", true},
+		{"YES\n", true},
+		{"n\n", false},
+		{"no\n", false},
+		{"\n", false},
+		{"maybe\n", false},
+	}
+	for _, tc := range cases {
+		reader := bufio.NewReader(strings.NewReader(tc.input))
+		got := ReadYesNo(reader, "")
+		if got != tc.want {
+			t.Errorf("ReadYesNo(%q): got %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
+
+// --- DetectGitDefaultBranch ---
+
+// initRepoWithBranch creates a non-bare git repo with one empty commit on the
+// given branch. ls-remote requires at least one object to return the symref.
+func initRepoWithBranch(t *testing.T, branch string) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmds := [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "symbolic-ref", "HEAD", "refs/heads/" + branch},
+		{"git", "-C", dir, "config", "user.email", "test@example.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, cmd := range cmds {
+		if err := exec.Command(cmd[0], cmd[1:]...).Run(); err != nil {
+			t.Fatalf("%v: %v", cmd, err)
+		}
+	}
+	return dir
+}
+
+func TestDetectGitDefaultBranch_localRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := initRepoWithBranch(t, "develop")
+	got := DetectGitDefaultBranch("file://" + dir)
+	if got != "develop" {
+		t.Errorf("DetectGitDefaultBranch: got %q, want %q", got, "develop")
+	}
+}
+
+func TestDetectGitDefaultBranch_unreachable(t *testing.T) {
+	got := DetectGitDefaultBranch("https://127.0.0.1:1/nonexistent.git")
+	if got != "" {
+		t.Errorf("DetectGitDefaultBranch: got %q, want empty string for unreachable remote", got)
+	}
+}
+
+func TestDetectGitDefaultBranch_detachedHEAD(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	// Create a repo, then detach HEAD — ls-remote will return no symref line.
+	dir := initRepoWithBranch(t, "main")
+	// Detach HEAD by checking out the commit hash directly.
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	hash := strings.TrimSpace(string(out))
+	if err := exec.Command("git", "-C", dir, "checkout", "--detach", hash).Run(); err != nil {
+		t.Fatalf("checkout --detach: %v", err)
+	}
+
+	got := DetectGitDefaultBranch("file://" + dir)
+	if got != "" {
+		t.Errorf("DetectGitDefaultBranch with detached HEAD: got %q, want empty string", got)
+	}
 }

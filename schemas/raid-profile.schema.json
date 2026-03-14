@@ -39,7 +39,7 @@
     "install": {
       "$ref": "raid-defs.schema.json#/properties/install"
     },
-    "groups": {
+    "task_groups": {
       "type": "object",
       "description": "Named reusable task sequences. Reference them in any task list with type: Group and ref: <name>.",
       "additionalProperties": {

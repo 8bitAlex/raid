@@ -130,12 +130,8 @@ func ExecuteTask(task Task) error {
 		return execPrompt(task)
 	case Confirm:
 		return execConfirm(task)
-	case Parallel:
-		return execParallel(task)
 	case Print:
 		return execPrint(task)
-	case Retry:
-		return execRetry(task)
 	default:
 		return fmt.Errorf("invalid task type: %s", task.Type)
 	}
@@ -357,15 +353,54 @@ func execGroup(task Task) error {
 		return fmt.Errorf("ref is required for Group task")
 	}
 	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no groups defined in the active profile")
+		return fmt.Errorf("no task_groups defined in the active profile")
 	}
 
 	tasks, ok := context.Profile.Groups[task.Ref]
 	if !ok {
-		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+		return fmt.Errorf("task group '%s' not found in profile", task.Ref)
+	}
+
+	if task.Parallel {
+		concurrent := make([]Task, len(tasks))
+		for i, t := range tasks {
+			t.Concurrent = true
+			concurrent[i] = t
+		}
+		tasks = concurrent
+	}
+
+	if task.Attempts > 0 {
+		return execGroupWithRetry(tasks, task.Attempts, task.Delay)
 	}
 
 	return ExecuteTasks(tasks)
+}
+
+func execGroupWithRetry(tasks []Task, attempts int, delayStr string) error {
+	delay := time.Second
+	if delayStr != "" {
+		d, err := time.ParseDuration(delayStr)
+		if err != nil {
+			return fmt.Errorf("invalid delay '%s': %w", delayStr, err)
+		}
+		delay = d
+	}
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			fmt.Fprintf(commandStdout, "Retrying... (attempt %d/%d)\n", i+1, attempts)
+			time.Sleep(delay)
+		}
+		if err := ExecuteTasks(tasks); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+
+	return fmt.Errorf("all %d attempts failed: %w", attempts, lastErr)
 }
 
 func execGit(task Task) error {
@@ -480,27 +515,6 @@ func execConfirm(task Task) error {
 	return nil
 }
 
-func execParallel(task Task) error {
-	if task.Ref == "" {
-		return fmt.Errorf("ref is required for Parallel task")
-	}
-	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no groups defined in the active profile")
-	}
-
-	tasks, ok := context.Profile.Groups[task.Ref]
-	if !ok {
-		return fmt.Errorf("group '%s' not found in profile", task.Ref)
-	}
-
-	concurrent := make([]Task, len(tasks))
-	for i, t := range tasks {
-		t.Concurrent = true
-		concurrent[i] = t
-	}
-
-	return ExecuteTasks(concurrent)
-}
 
 func execPrint(task Task) error {
 	msg := task.Message
@@ -519,48 +533,6 @@ func execPrint(task Task) error {
 	return nil
 }
 
-func execRetry(task Task) error {
-	if task.Ref == "" {
-		return fmt.Errorf("ref is required for Retry task")
-	}
-	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no groups defined in the active profile")
-	}
-
-	tasks, ok := context.Profile.Groups[task.Ref]
-	if !ok {
-		return fmt.Errorf("group '%s' not found in profile", task.Ref)
-	}
-
-	attempts := task.Attempts
-	if attempts <= 0 {
-		attempts = 3
-	}
-
-	delay := time.Second
-	if task.Delay != "" {
-		d, err := time.ParseDuration(task.Delay)
-		if err != nil {
-			return fmt.Errorf("invalid delay '%s': %w", task.Delay, err)
-		}
-		delay = d
-	}
-
-	var lastErr error
-	for i := 0; i < attempts; i++ {
-		if i > 0 {
-			fmt.Fprintf(commandStdout, "Retrying... (attempt %d/%d)\n", i+1, attempts)
-			time.Sleep(delay)
-		}
-		if err := ExecuteTasks(tasks); err != nil {
-			lastErr = err
-			continue
-		}
-		return nil
-	}
-
-	return fmt.Errorf("all %d attempts failed: %w", attempts, lastErr)
-}
 
 // withDefaultDir returns a copy of tasks with path set to dir on any Shell task
 // that does not already have an explicit path. Used to apply profile-level (home)

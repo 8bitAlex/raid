@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/8bitalex/raid/src/cmd/doctor"
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
@@ -18,6 +19,7 @@ var reservedNames = map[string]bool{
 	"profile":    true,
 	"install":    true,
 	"env":        true,
+	"doctor":     true,
 	"help":       true,
 	"version":    true,
 	"completion": true,
@@ -38,6 +40,7 @@ func init() {
 	rootCmd.AddCommand(profile.Command)
 	rootCmd.AddCommand(install.Command)
 	rootCmd.AddCommand(env.Command)
+	rootCmd.AddCommand(doctor.Command)
 }
 
 func Execute() {
