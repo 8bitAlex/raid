@@ -47,6 +47,8 @@ func evaluateCondition(c *Condition) bool {
 	if c.Cmd != "" {
 		shell := getShell("")
 		cmd := exec.Command(shell[0], append(shell[1:], c.Cmd)...)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
 		if err := cmd.Run(); err != nil {
 			return false
 		}
