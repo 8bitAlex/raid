@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"path/filepath"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
@@ -21,21 +22,27 @@ var CfgPath string
 var defaultConfigPath = filepath.Join(sys.GetHomeDir(), ConfigDirName)
 
 func InitConfig() error {
-	viper.SetConfigFile(getOrCreateConfigFile())
+	path, err := getOrCreateConfigFile()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigFile(path)
 	if err := viper.ReadInConfig(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func getOrCreateConfigFile() string {
+func getOrCreateConfigFile() (string, error) {
 	path := getPath()
 	if !sys.FileExists(path) {
-		if f, err := sys.CreateFile(path); err == nil {
-			f.Close()
+		f, err := sys.CreateFile(path)
+		if err != nil {
+			return "", fmt.Errorf("failed to create config file at %s: %w", path, err)
 		}
+		f.Close()
 	}
-	return path
+	return path, nil
 }
 
 func getPath() string {

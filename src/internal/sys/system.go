@@ -54,17 +54,10 @@ func FileExists(path string) bool {
 	return os.IsPermission(err)
 }
 
-// Expand expands environment variables and home directory references in each whitespace-delimited
-// token of input, then rejoins them with spaces.
+// Expand expands environment variables in input without tokenizing, preserving
+// quoting and spacing. Use ExpandPath for file system paths that also need ~ expansion.
 func Expand(input string) string {
-	if input == "" {
-		return input
-	}
-	parts := SplitInput(input)
-	for i, p := range parts {
-		parts[i] = ExpandPath(p)
-	}
-	return strings.Join(parts, " ")
+	return os.ExpandEnv(input)
 }
 
 // ExpandPath expands environment variables and a leading ~ in the given path.

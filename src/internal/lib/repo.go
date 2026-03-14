@@ -98,10 +98,11 @@ func isGitInstalled() bool {
 }
 
 func clone(path string, url string, branch string) error {
-	args := []string{"clone", url, path}
+	args := []string{"clone"}
 	if branch != "" {
 		args = append(args, "--branch", branch)
 	}
+	args = append(args, url, path)
 	cmd := exec.Command("git", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
