@@ -63,6 +63,9 @@ func ForceLoad() error {
 	for i := range profile.Commands {
 		profile.Commands[i].Tasks = withDefaultDir(profile.Commands[i].Tasks, homeDir)
 	}
+	for name, tasks := range profile.Groups {
+		profile.Groups[name] = withDefaultDir(tasks, homeDir)
+	}
 
 	for i := range profile.Repositories {
 		if err := buildRepo(&profile.Repositories[i]); err != nil {
@@ -235,7 +238,33 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 		return nil
 	}
 
-	doc, err := jsonschema.UnmarshalJSON(f)
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+
+	// Detect a top-level JSON array and validate each element individually,
+	// mirroring how extractProfilesFromJSON supports both single-object and
+	// array-of-objects JSON profile files.
+	var arr []any
+	if json.Unmarshal(data, &arr) == nil {
+		for _, elem := range arr {
+			jsonBytes, err := json.Marshal(elem)
+			if err != nil {
+				return err
+			}
+			doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonBytes))
+			if err != nil {
+				return err
+			}
+			if err := sch.Validate(doc); err != nil {
+				return fmt.Errorf("invalid format: %w", err)
+			}
+		}
+		return nil
+	}
+
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
