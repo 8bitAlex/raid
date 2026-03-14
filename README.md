@@ -42,9 +42,8 @@ brew install raid  # macOS — Linux and Windows coming soon
 First, create a profile file (see [Configuration](#configuration) below), then:
 
 ```bash
-raid profile add my-project.raid.yaml  # register and activate a profile
+raid profile add ~/my-project.raid.yaml  # register and activate a profile
 raid install                           # clone repos and run install tasks
-raid env dev                           # apply the dev environment
 ```
 
 ---
