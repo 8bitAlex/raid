@@ -1,9 +1,15 @@
 // Manage raid profiles.
 package profile
 
-import "github.com/8bitalex/raid/src/internal/lib"
+import (
+	"bufio"
+
+	"github.com/8bitalex/raid/src/internal/lib"
+)
 
 type Profile = lib.Profile
+type ProfileDraft = lib.ProfileDraft
+type RepoDraft = lib.RepoDraft
 
 // Returns the active profile
 func Get() Profile {
@@ -48,4 +54,19 @@ func Validate(path string) error {
 // Checks if a profile exists
 func Contains(name string) bool {
 	return lib.ContainsProfile(name)
+}
+
+// WriteFile serializes draft to path as a YAML profile file.
+func WriteFile(draft ProfileDraft, path string) error {
+	return lib.WriteProfileFile(draft, path)
+}
+
+// CollectRepos runs an interactive prompt loop to collect repository details from reader.
+func CollectRepos(reader *bufio.Reader) []RepoDraft {
+	return lib.CollectRepos(reader)
+}
+
+// CreateRepoConfigs writes a raid.yaml stub into each repository's local directory.
+func CreateRepoConfigs(repos []RepoDraft) {
+	lib.CreateRepoConfigs(repos)
 }

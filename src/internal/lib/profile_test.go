@@ -1,9 +1,12 @@
 package lib
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -390,4 +393,194 @@ func TestValidateProfile_schemaViolation(t *testing.T) {
 	if err := ValidateProfile(path); err == nil {
 		t.Fatal("ValidateProfile() expected error for schema violation")
 	}
+}
+
+// --- WriteProfileFile ---
+
+func TestWriteProfileFile_createsFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.raid.yaml")
+
+	if err := WriteProfileFile(ProfileDraft{Name: "test-profile"}, path); err != nil {
+		t.Fatalf("WriteProfileFile() unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "yaml-language-server") {
+		t.Error("WriteProfileFile(): missing schema comment")
+	}
+	if !strings.Contains(content, "name: test-profile") {
+		t.Error("WriteProfileFile(): missing profile name in output")
+	}
+}
+
+func TestWriteProfileFile_createsParentDirectories(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nested", "deep", "test.raid.yaml")
+
+	if err := WriteProfileFile(ProfileDraft{Name: "nested"}, path); err != nil {
+		t.Fatalf("WriteProfileFile() unexpected error: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("WriteProfileFile(): file not found at %s: %v", path, err)
+	}
+}
+
+func TestWriteProfileFile_mkdirAllError(t *testing.T) {
+	file, err := os.CreateTemp("", "raid-lib-profile-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file.Close()
+	defer os.Remove(file.Name())
+
+	path := filepath.Join(file.Name(), "subdir", "test.raid.yaml")
+	if err := WriteProfileFile(ProfileDraft{Name: "x"}, path); err == nil {
+		t.Fatal("WriteProfileFile(): expected error when parent path contains a file")
+	}
+}
+
+// --- CollectRepos ---
+
+// initRepoWithBranch creates a non-bare git repo with one empty commit on the
+// given branch. ls-remote requires at least one object to return the symref.
+func initRepoWithBranch(t *testing.T, branch string) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	cmds := [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "symbolic-ref", "HEAD", "refs/heads/" + branch},
+		{"git", "-C", dir, "config", "user.email", "test@example.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, cmd := range cmds {
+		if err := exec.Command(cmd[0], cmd[1:]...).Run(); err != nil {
+			t.Fatalf("%v: %v", cmd, err)
+		}
+	}
+	return dir
+}
+
+func TestCollectRepos_noRepos(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("n\n"))
+	repos := CollectRepos(reader)
+	if len(repos) != 0 {
+		t.Errorf("CollectRepos(): got %d repos, want 0", len(repos))
+	}
+}
+
+func TestCollectRepos_skipsWhenRequiredFieldMissing(t *testing.T) {
+	// Answer yes but leave name blank — repo should be skipped.
+	input := "y\n\nhttps://127.0.0.1:1/repo.git\n/some/path\nmain\nn\n"
+	reader := bufio.NewReader(strings.NewReader(input))
+	repos := CollectRepos(reader)
+	if len(repos) != 0 {
+		t.Errorf("CollectRepos(): expected skipped repo, got %d", len(repos))
+	}
+}
+
+func TestCollectRepos_collectsCompleteRepo(t *testing.T) {
+	// Use 127.0.0.1:1 so DetectGitDefaultBranch fails fast; branch is supplied manually.
+	input := "y\nmy-repo\nhttps://127.0.0.1:1/repo.git\n/tmp/my-repo\nmain\nn\n"
+	reader := bufio.NewReader(strings.NewReader(input))
+	repos := CollectRepos(reader)
+	if len(repos) != 1 {
+		t.Fatalf("CollectRepos(): got %d repos, want 1", len(repos))
+	}
+	r := repos[0]
+	if r.Name != "my-repo" {
+		t.Errorf("Name: got %q, want %q", r.Name, "my-repo")
+	}
+	if r.Branch != "main" {
+		t.Errorf("Branch: got %q, want %q", r.Branch, "main")
+	}
+}
+
+func TestCollectRepos_usesDetectedBranch(t *testing.T) {
+	repoDir := initRepoWithBranch(t, "trunk")
+
+	// Leave branch input blank — should pick up "trunk" from the remote.
+	input := "y\nmy-repo\nfile://" + repoDir + "\n/tmp/my-repo\n\nn\n"
+	reader := bufio.NewReader(strings.NewReader(input))
+	repos := CollectRepos(reader)
+	if len(repos) != 1 {
+		t.Fatalf("CollectRepos(): got %d repos, want 1", len(repos))
+	}
+	if repos[0].Branch != "trunk" {
+		t.Errorf("Branch: got %q, want %q", repos[0].Branch, "trunk")
+	}
+}
+
+// --- CreateRepoConfigs ---
+
+func TestCreateRepoConfigs_createsConfig(t *testing.T) {
+	dir := t.TempDir()
+	CreateRepoConfigs([]RepoDraft{
+		{Name: "my-repo", URL: "https://example.com", Path: dir, Branch: "main"},
+	})
+
+	data, err := os.ReadFile(filepath.Join(dir, "raid.yaml"))
+	if err != nil {
+		t.Fatalf("raid.yaml not created: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "name: my-repo") {
+		t.Error("raid.yaml: missing name field")
+	}
+	if !strings.Contains(content, "branch: main") {
+		t.Error("raid.yaml: missing branch field")
+	}
+}
+
+func TestCreateRepoConfigs_skipsExistingConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "raid.yaml")
+	original := "original content\n"
+	os.WriteFile(configPath, []byte(original), 0644)
+
+	CreateRepoConfigs([]RepoDraft{
+		{Name: "my-repo", URL: "https://example.com", Path: dir, Branch: "main"},
+	})
+
+	data, _ := os.ReadFile(configPath)
+	if string(data) != original {
+		t.Error("CreateRepoConfigs(): overwrote existing raid.yaml")
+	}
+}
+
+func TestCreateRepoConfigs_omitsBranchWhenEmpty(t *testing.T) {
+	dir := t.TempDir()
+	CreateRepoConfigs([]RepoDraft{
+		{Name: "no-branch", URL: "https://example.com", Path: dir, Branch: ""},
+	})
+
+	data, err := os.ReadFile(filepath.Join(dir, "raid.yaml"))
+	if err != nil {
+		t.Fatalf("raid.yaml not created: %v", err)
+	}
+	if strings.Contains(string(data), "branch:") {
+		t.Error("CreateRepoConfigs(): wrote branch field when Branch is empty")
+	}
+}
+
+func TestCreateRepoConfigs_mkdirAllError(t *testing.T) {
+	file, err := os.CreateTemp("", "raid-lib-profile-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file.Close()
+	defer os.Remove(file.Name())
+
+	// Should not panic — just print error and continue.
+	CreateRepoConfigs([]RepoDraft{
+		{Name: "x", URL: "https://example.com", Path: filepath.Join(file.Name(), "subdir"), Branch: "main"},
+	})
 }

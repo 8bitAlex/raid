@@ -1,8 +1,11 @@
 package sys
 
 import (
+	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -210,4 +213,89 @@ func TestCreateFile_existingFile(t *testing.T) {
 		t.Fatalf("CreateFile() on existing file error: %v", err)
 	}
 	f.Close()
+}
+
+// --- ReadLine ---
+
+func TestReadLine(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"hello world\n", "hello world"},
+		{"  trimmed  \n", "trimmed"},
+		{"\n", ""},
+	}
+	for _, tc := range cases {
+		reader := bufio.NewReader(strings.NewReader(tc.input))
+		got := ReadLine(reader, "")
+		if got != tc.want {
+			t.Errorf("ReadLine(%q): got %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// --- ReadYesNo ---
+
+func TestReadYesNo(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"y\n", true},
+		{"Y\n", true},
+		{"yes\n", true},
+		{"YES\n", true},
+		{"n\n", false},
+		{"no\n", false},
+		{"\n", false},
+		{"maybe\n", false},
+	}
+	for _, tc := range cases {
+		reader := bufio.NewReader(strings.NewReader(tc.input))
+		got := ReadYesNo(reader, "")
+		if got != tc.want {
+			t.Errorf("ReadYesNo(%q): got %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
+
+// --- DetectGitDefaultBranch ---
+
+// initRepoWithBranch creates a non-bare git repo with one empty commit on the
+// given branch. ls-remote requires at least one object to return the symref.
+func initRepoWithBranch(t *testing.T, branch string) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmds := [][]string{
+		{"git", "init", dir},
+		{"git", "-C", dir, "symbolic-ref", "HEAD", "refs/heads/" + branch},
+		{"git", "-C", dir, "config", "user.email", "test@example.com"},
+		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, cmd := range cmds {
+		if err := exec.Command(cmd[0], cmd[1:]...).Run(); err != nil {
+			t.Fatalf("%v: %v", cmd, err)
+		}
+	}
+	return dir
+}
+
+func TestDetectGitDefaultBranch_localRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := initRepoWithBranch(t, "develop")
+	got := DetectGitDefaultBranch("file://" + dir)
+	if got != "develop" {
+		t.Errorf("DetectGitDefaultBranch: got %q, want %q", got, "develop")
+	}
+}
+
+func TestDetectGitDefaultBranch_unreachable(t *testing.T) {
+	got := DetectGitDefaultBranch("https://127.0.0.1:1/nonexistent.git")
+	if got != "" {
+		t.Errorf("DetectGitDefaultBranch: got %q, want empty string for unreachable remote", got)
+	}
 }

@@ -1,9 +1,11 @@
 package sys
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -127,6 +129,35 @@ func ValidateFileName(name string) error {
 		return fmt.Errorf("cannot consist only of dots or spaces")
 	}
 	return nil
+}
+
+// ReadLine prints prompt to stdout and returns the trimmed line read from reader.
+func ReadLine(reader *bufio.Reader, prompt string) string {
+	fmt.Print(prompt)
+	line, _ := reader.ReadString('\n')
+	return strings.TrimSpace(line)
+}
+
+// ReadYesNo prompts the user and returns true if they answer "y" or "yes" (case-insensitive).
+func ReadYesNo(reader *bufio.Reader, prompt string) bool {
+	answer := ReadLine(reader, prompt)
+	return strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes")
+}
+
+// DetectGitDefaultBranch queries the remote at url to find its default branch without cloning.
+// Returns an empty string if the remote is unreachable or the branch cannot be determined.
+func DetectGitDefaultBranch(url string) string {
+	out, err := exec.Command("git", "ls-remote", "--symref", url, "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		// Format: "ref: refs/heads/<branch>\tHEAD"
+		if strings.HasPrefix(line, "ref: refs/heads/") {
+			return strings.TrimPrefix(strings.SplitN(line, "\t", 2)[0], "ref: refs/heads/")
+		}
+	}
+	return ""
 }
 
 // GetPlatform returns the current operating system as a Platform value.
