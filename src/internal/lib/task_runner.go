@@ -249,6 +249,8 @@ func execHTTP(task Task) error {
 	defer f.Close()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		os.Remove(task.Dest)
 		return fmt.Errorf("failed to write to '%s': %w", task.Dest, err)
 	}
 
@@ -296,6 +298,9 @@ func checkHTTP(url string) error {
 		return err
 	}
 	resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
 	return nil
 }
 
