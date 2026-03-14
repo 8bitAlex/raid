@@ -1,1 +1,2 @@
-echo "Hello, world!"
+#!/bin/sh
+echo "Hello, world! - From script"

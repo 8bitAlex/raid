@@ -2,43 +2,48 @@ package lib
 
 import (
 	"fmt"
+	"path/filepath"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
-const (
-	ACTIVE_ENV_KEY = "env"
-)
+const activeEnvKey = "env"
 
+// Env represents a named environment with variables and tasks.
 type Env struct {
-	Name      string 	`json:"name"`
-	Variables []EnvVar 	`json:"variables"`
+	Name      string   `json:"name"`
+	Variables []EnvVar `json:"variables"`
+	Tasks     []Task   `json:"tasks"`
 }
 
+// IsZero reports whether the environment is uninitialized.
 func (e Env) IsZero() bool {
 	return e.Name == ""
 }
 
+// EnvVar is a key/value pair written into a repository's .env file.
 type EnvVar struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
 
+// SetEnv sets the named environment as the active environment.
 func SetEnv(name string) error {
 	if name == "" || !ContainsEnv(name) {
 		return fmt.Errorf("environment '%s' not found", name)
 	}
 
-	Set(ACTIVE_ENV_KEY, name)
-	return nil
+	return Set(activeEnvKey, name)
 }
 
+// GetEnv returns the name of the currently active environment.
 func GetEnv() string {
-	return viper.GetString(ACTIVE_ENV_KEY)
+	return viper.GetString(activeEnvKey)
 }
 
+// ListEnvs returns the names of all environments in the active profile.
 func ListEnvs() []string {
 	if context == nil || len(context.Profile.Environments) == 0 {
 		return []string{}
@@ -51,6 +56,7 @@ func ListEnvs() []string {
 	return names
 }
 
+// ContainsEnv reports whether an environment with the given name exists in the active profile.
 func ContainsEnv(name string) bool {
 	for _, envName := range ListEnvs() {
 		if envName == name {
@@ -60,7 +66,21 @@ func ContainsEnv(name string) bool {
 	return false
 }
 
+// ExecuteEnv writes environment variables to each repo's .env file and runs the environment's tasks.
 func ExecuteEnv(name string) error {
+	if context == nil {
+		return fmt.Errorf("raid context is not initialized")
+	}
+	if err := setEnvVariablesForRepos(name); err != nil {
+		return fmt.Errorf("failed to set env variables: %w", err)
+	}
+	if err := runTasksForEnv(name); err != nil {
+		return fmt.Errorf("failed to run env tasks: %w", err)
+	}
+	return nil
+}
+
+func setEnvVariablesForRepos(name string) error {
 	for _, repo := range context.Profile.Repositories {
 		fmt.Printf("Setting up environment for repo: %s\n", repo.Name)
 
@@ -69,11 +89,7 @@ func ExecuteEnv(name string) error {
 			return fmt.Errorf("invalid path for repo '%s': %w", repo.Name, err)
 		}
 
-		pEnv := context.Profile.getEnv(name)
-		rEnv := repo.getEnv(name)
-
-		err = setEnvVariables(pEnv.Variables, rEnv.Variables, path)
-		if err != nil {
+		if err := setEnvVariables(context.Profile.getEnv(name).Variables, repo.getEnv(name).Variables, path); err != nil {
 			return fmt.Errorf("failed to set env variables for repo '%s': %w", repo.Name, err)
 		}
 	}
@@ -81,14 +97,13 @@ func ExecuteEnv(name string) error {
 }
 
 func buildEnvPath(path string) (string, error) {
-	filepath := sys.ExpandPath(path) + sys.Sep + ".env"
-	// create file if it does not exist
-	file, err := sys.CreateFile(filepath)
+	filePath := filepath.Join(sys.ExpandPath(path), ".env")
+	file, err := sys.CreateFile(filePath)
 	if err != nil {
 		return "", err
 	}
 	file.Close()
-	return filepath, nil
+	return filePath, nil
 }
 
 func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
@@ -100,16 +115,41 @@ func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
 	for _, v := range profVars {
 		envMap[v.Name] = v.Value
 	}
-
 	for _, v := range repoVars {
-		fmt.Printf("Setting variable %s=%s\n", v.Name, v.Value)
 		envMap[v.Name] = v.Value
 	}
 
-	err = godotenv.Write(envMap, path)
-	if err != nil {
-		return err
+	return godotenv.Write(envMap, path)
+}
+
+func runTasksForEnv(name string) error {
+	env := context.Profile.getEnv(name)
+	if env.IsZero() || len(env.Tasks) == 0 {
+		return nil
+	}
+	return ExecuteTasks(withDefaultDir(env.Tasks, sys.GetHomeDir()))
+}
+
+// LoadEnv loads .env files from all repositories in the active profile into the process environment.
+func LoadEnv() error {
+	if context == nil {
+		return fmt.Errorf("context not initialized")
+	}
+
+	var paths []string
+	for _, r := range context.Profile.Repositories {
+		p := filepath.Join(sys.ExpandPath(r.Path), ".env")
+		if sys.FileExists(p) {
+			paths = append(paths, p)
+		}
+	}
+
+	if len(paths) == 0 {
+		return nil
+	}
+
+	if err := godotenv.Load(paths...); err != nil {
+		return fmt.Errorf("failed to load env files: %w", err)
 	}
 	return nil
 }
-

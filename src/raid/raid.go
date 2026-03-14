@@ -15,12 +15,15 @@ Related packages:
 package raid
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/8bitalex/raid/src/internal/lib"
 )
 
 const (
+	RaidConfigFileName  = lib.RaidConfigFileName
 	ConfigPathFlag      = lib.ConfigPathFlag
 	ConfigPathFlagDesc  = lib.ConfigPathFlagDesc
 	ConfigPathFlagShort = lib.ConfigPathFlagShort
@@ -35,10 +38,13 @@ var ConfigPath = &lib.CfgPath
 // Initialize the raid environment, including loading configurations and initializing data storage.
 func Initialize() {
 	if err := lib.InitConfig(); err != nil {
-		log.Fatalf("Failed to initialize configuration: %v", err)
+		log.Fatalf("init config: %v", err)
 	}
 	if err := Load(); err != nil {
-		log.Fatalf("Failed to compile configurations: %v", err)
+		log.Fatalf("load profile: %v", err)
+	}
+	if err := lib.LoadEnv(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 }
 
@@ -55,4 +61,14 @@ func ForceLoad() error {
 // Install the active profile
 func Install(maxThreads int) error {
 	return lib.Install(maxThreads)
+}
+
+// GetCommands returns all commands available in the active profile.
+func GetCommands() []lib.Command {
+	return lib.GetCommands()
+}
+
+// ExecuteCommand runs the named command from the active profile.
+func ExecuteCommand(name string) error {
+	return lib.ExecuteCommand(name)
 }

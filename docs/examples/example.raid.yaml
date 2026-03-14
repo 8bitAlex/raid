@@ -14,8 +14,17 @@ environments:
     tasks:
       - type: Shell
         cmd: echo "Hello, world! - From profile"
+        shell: bash
+      - type: Shell
+        literal: false
+        cmd: echo $NODE_ENV
       - type: Script
-        path: ./hello.sh
+        path: ./docs/examples/hello.sh
+        runner: bash
+        concurrent: false
+      - type: Shell
+        cmd: echo "Hello from concurrent task"
+        concurrent: true
     variables:
       - name: NODE_ENV
         value: development
@@ -24,26 +33,7 @@ environments:
       - name: API_URL
         value: https://api.example.com
 
----
-
-name: example2
-repositories:
-  - name: raid
-    path: ~/Developer/raid
-    url: https://github.com/8bitAlex/raid.git
-
----
-
-name: example3
-repositories:
-  - name: raid
-    path: ~/Developer/raid
-    url: https://github.com/8bitAlex/raid.git
-
----
-
-name: example4
-repositories:
-  - name: raid
-    path: ~/Developer/raid
-    url: https://github.com/8bitAlex/raid.git
+install:
+  tasks:
+    - type: Shell
+      cmd: echo "Installing dependencies..."

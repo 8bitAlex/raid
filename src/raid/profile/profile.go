@@ -16,13 +16,13 @@ func ListAll() []Profile {
 }
 
 // Adds a profile to the available profile list
-func Add(profile Profile) {
-	lib.AddProfile(profile)
+func Add(profile Profile) error {
+	return lib.AddProfile(profile)
 }
 
 // Adds multiple profiles to the profile list
-func AddAll(profiles []Profile) {
-	lib.AddProfiles(profiles)
+func AddAll(profiles []Profile) error {
+	return lib.AddProfiles(profiles)
 }
 
 // Sets the active profile

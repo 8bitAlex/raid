@@ -1,6 +1,9 @@
 package lib
 
 import (
+	"fmt"
+	"path/filepath"
+
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/viper"
 )
@@ -16,38 +19,46 @@ const (
 
 var CfgPath string
 
-var defaultConfigPath = sys.GetHomeDir() + sys.Sep + ConfigDirName + sys.Sep
+var defaultConfigPath = filepath.Join(sys.GetHomeDir(), ConfigDirName)
 
 func InitConfig() error {
-	viper.SetConfigFile(getOrCreateConfigFile())
+	path, err := getOrCreateConfigFile()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigFile(path)
 	if err := viper.ReadInConfig(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func getOrCreateConfigFile() string {
-	path := getPath()
+func getOrCreateConfigFile() (string, error) {
+	path := sys.ExpandPath(getPath())
 	if !sys.FileExists(path) {
-		sys.CreateFile(path)
+		f, err := sys.CreateFile(path)
+		if err != nil {
+			return "", fmt.Errorf("failed to create config file at %s: %w", path, err)
+		}
+		f.Close()
 	}
-	return path
+	return path, nil
 }
 
 func getPath() string {
 	if CfgPath == "" {
-		CfgPath = defaultConfigPath + ConfigFileName
+		CfgPath = filepath.Join(defaultConfigPath, ConfigFileName)
 	}
 	return CfgPath
 }
 
-func Set(key string, value any) {
+// Set stores key in the viper config and persists it to disk.
+func Set(key string, value any) error {
 	viper.Set(key, value)
-	Write()
+	return Write()
 }
 
-func Write() {
-	if err := viper.WriteConfig(); err != nil {
-		panic(err)
-	}
+// Write persists the current viper config to disk.
+func Write() error {
+	return viper.WriteConfig()
 }

@@ -24,3 +24,7 @@ go.work.sum
 
 # env file
 .env
+
+# AI assistant files
+CLAUDE.md
+.claude/

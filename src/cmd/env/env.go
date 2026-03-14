@@ -17,30 +17,34 @@ var Command = &cobra.Command{
 	Args:  cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			env := env.Get()
-			if env == "" {
+			active := env.Get()
+			if active == "" {
 				cmd.PrintErrln("No active environment set.")
 			} else {
-				cmd.Println("Active environment:", env)
+				cmd.Println("Active environment:", active)
 			}
-		} else if len(args) == 1 {
-			name := args[0]
-			if !env.Contains(name) {
-				cmd.PrintErrln("Environment not found:", name)
-			} else {
-				cmd.Println("Setting up environment:", name)
-				if err := env.Set(name); err != nil {
-					cmd.PrintErrln("Failed to switch environment:", err)
-				}
-				raid.ForceLoad()
-				if err := env.Execute(env.Get()); err != nil {
-					cmd.PrintErrln("Failed to execute environment:", err)
-				} else {
-					cmd.Println("Environment executed successfully.")
-				}
-			}
-		} else {
-			cmd.PrintErrln("Invalid number of arguments.")
+			return
 		}
+
+		name := args[0]
+		if !env.Contains(name) {
+			cmd.PrintErrln("Environment not found:", name)
+			return
+		}
+
+		cmd.Println("Setting up environment:", name)
+		if err := env.Set(name); err != nil {
+			cmd.PrintErrln("Failed to switch environment:", err)
+			return
+		}
+		if err := raid.ForceLoad(); err != nil {
+			cmd.PrintErrln("Failed to reload profile:", err)
+			return
+		}
+		if err := env.Execute(env.Get()); err != nil {
+			cmd.PrintErrln("Failed to execute environment:", err)
+			return
+		}
+		cmd.Println("Environment executed successfully.")
 	},
 }

@@ -1,33 +1,35 @@
 package lib
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	ACTIVE_PROFILE_KEY   = "profile"
-	ALL_PROFILES_KEY     = "profiles"
-	PROFILE_SCHEMA_PATH  = "schemas/raid-profile.schema.json"
+	activeProfileKey  = "profile"
+	allProfilesKey    = "profiles"
+	profileSchemaPath = "raid-profile.schema.json"
 )
 
+// Profile represents a named collection of repositories, environments, and task groups.
 type Profile struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	Repositories []Repo `json:"repositories"`
-	Environments []Env  `json:"environments"`
+	Name         string            `json:"name"`
+	Path         string            `json:"path"`
+	Repositories []Repo            `json:"repositories"`
+	Environments []Env             `json:"environments"`
+	Install      OnInstall         `json:"install"`
+	Groups       map[string][]Task `json:"groups"`
+	Commands     []Command         `json:"commands"`
 }
 
+// IsZero reports whether the profile is uninitialized.
 func (p Profile) IsZero() bool {
 	return p.Name == "" || p.Path == ""
 }
@@ -41,20 +43,21 @@ func (p Profile) getEnv(name string) Env {
 	return Env{}
 }
 
+// SetProfile sets the named profile as the active profile.
 func SetProfile(name string) error {
 	if !ContainsProfile(name) {
 		return fmt.Errorf("profile '%s' not found", name)
 	}
-	Set(ACTIVE_PROFILE_KEY, name)
-	return nil
+	return Set(activeProfileKey, name)
 }
 
+// GetProfile returns the currently active profile.
 func GetProfile() Profile {
 	if context != nil && !context.Profile.IsZero() {
 		return context.Profile
 	}
-	
-	name := viper.GetString(ACTIVE_PROFILE_KEY)
+
+	name := viper.GetString(activeProfileKey)
 	paths := getProfilePaths()
 	return Profile{
 		Name: name,
@@ -62,22 +65,27 @@ func GetProfile() Profile {
 	}
 }
 
-func AddProfile(profile Profile) {
-	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
+// AddProfile registers a profile in the config store.
+func AddProfile(profile Profile) error {
+	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		profiles = make(map[string]string)
 	}
-
 	profiles[profile.Name] = profile.Path
-	Set(ALL_PROFILES_KEY, profiles)
+	return Set(allProfilesKey, profiles)
 }
 
-func AddProfiles(profiles []Profile) {
+// AddProfiles registers multiple profiles in the config store.
+func AddProfiles(profiles []Profile) error {
 	for _, profile := range profiles {
-		AddProfile(profile)
+		if err := AddProfile(profile); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
+// ListProfiles returns all registered profiles.
 func ListProfiles() []Profile {
 	profilesMap := getProfilePaths()
 	results := make([]Profile, 0, len(profilesMap))
@@ -88,15 +96,16 @@ func ListProfiles() []Profile {
 }
 
 func getProfilePaths() map[string]string {
-	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
+	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		return make(map[string]string)
 	}
 	return profiles
 }
 
+// RemoveProfile removes a registered profile by name.
 func RemoveProfile(name string) error {
-	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
+	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		return fmt.Errorf("no profiles found")
 	}
@@ -104,10 +113,10 @@ func RemoveProfile(name string) error {
 		return fmt.Errorf("profile '%s' not found", name)
 	}
 	delete(profiles, name)
-	Set(ALL_PROFILES_KEY, profiles)
-	return nil
+	return Set(allProfilesKey, profiles)
 }
 
+// ExtractProfile reads and returns a single named profile from the given file.
 func ExtractProfile(name, path string) (Profile, error) {
 	profiles, err := ExtractProfiles(path)
 	if err != nil {
@@ -121,6 +130,7 @@ func ExtractProfile(name, path string) (Profile, error) {
 	return Profile{}, fmt.Errorf("profile '%s' not found in %s", name, path)
 }
 
+// ExtractProfiles reads all profiles from a YAML or JSON file.
 func ExtractProfiles(path string) ([]Profile, error) {
 	profileData, err := os.ReadFile(path)
 	if err != nil {
@@ -153,7 +163,7 @@ func ExtractProfiles(path string) ([]Profile, error) {
 func extractProfilesFromYAML(data []byte, path string) ([]Profile, error) {
 	var profiles []Profile
 
-	documents := strings.Split(string(data), YAML_SEP)
+	documents := strings.Split(string(data), yamlSep)
 
 	for _, doc := range documents {
 		doc = strings.TrimSpace(doc)
@@ -174,14 +184,13 @@ func extractProfilesFromYAML(data []byte, path string) ([]Profile, error) {
 }
 
 func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
-	var profiles []Profile
-
 	var profile Profile
 	if err := json.Unmarshal(data, &profile); err == nil {
 		profile.Path = path
 		return []Profile{profile}, nil
 	}
 
+	var profiles []Profile
 	if err := json.Unmarshal(data, &profiles); err != nil {
 		return nil, fmt.Errorf("invalid JSON format in %s: %w", path, err)
 	}
@@ -195,8 +204,9 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 	return results, nil
 }
 
+// ContainsProfile reports whether a profile with the given name is registered.
 func ContainsProfile(name string) bool {
-	profiles := viper.GetStringMapString(ALL_PROFILES_KEY)
+	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		return false
 	}
@@ -205,52 +215,9 @@ func ContainsProfile(name string) bool {
 	return exists
 }
 
+// ValidateProfile validates the profile file at path against the profile JSON schema.
 func ValidateProfile(path string) error {
-	if !sys.FileExists(path) {
-		return fmt.Errorf("file not found at %s", path)
-	}
-
-	c := jsonschema.NewCompiler()
-	sch, err := c.Compile(PROFILE_SCHEMA_PATH)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	profile := io.Reader(f)
-
-	ext := strings.ToLower(filepath.Ext(path))
-	if ext == ".yaml" || ext == ".yml" {
-		data, err := yamlToJSON(f)
-		if err != nil {
-			return err
-		}
-		profile = bytes.NewReader(data)
-	}
-
-	json, err := jsonschema.UnmarshalJSON(profile)
-	if err != nil {
-		return err
-	}
-
-	err = sch.Validate(json)
-	if err != nil {
-		return fmt.Errorf("invalid profile format: %w", err)
-	}
-	return nil
-}
-
-func yamlToJSON(file io.Reader) ([]byte, error) {
-	var data interface{}
-	if err := yaml.NewDecoder(file).Decode(&data); err != nil {
-		return nil, err
-	}
-	return json.Marshal(data)
+	return validateWithEmbeddedSchema(path, profileSchemaPath)
 }
 
 func buildProfile(profile Profile) (Profile, error) {
