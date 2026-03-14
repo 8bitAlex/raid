@@ -584,3 +584,17 @@ func TestCreateRepoConfigs_mkdirAllError(t *testing.T) {
 		{Name: "x", URL: "https://example.com", Path: filepath.Join(file.Name(), "subdir"), Branch: "main"},
 	})
 }
+
+func TestCreateRepoConfigs_writeError(t *testing.T) {
+	dir := t.TempDir()
+	// Make the repo directory read-only so os.WriteFile cannot create raid.yaml.
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0755) })
+
+	// Should not panic — just print error and continue.
+	CreateRepoConfigs([]RepoDraft{
+		{Name: "x", URL: "https://example.com", Path: dir, Branch: "main"},
+	})
+}

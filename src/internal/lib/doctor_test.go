@@ -6,7 +6,36 @@ import (
 	"testing"
 )
 
+// --- RunDoctor ---
+
+func TestRunDoctor_returnsFindings(t *testing.T) {
+	setupTestConfig(t)
+
+	findings := RunDoctor()
+	if len(findings) == 0 {
+		t.Fatal("RunDoctor(): expected at least one finding, got none")
+	}
+}
+
 // --- checkGit ---
+
+func TestCheckGit_notInstalled(t *testing.T) {
+	// Hide git by clearing PATH so exec.Command("git", "--version") fails.
+	old := os.Getenv("PATH")
+	os.Setenv("PATH", "")
+	t.Cleanup(func() { os.Setenv("PATH", old) })
+
+	findings := checkGit()
+	if len(findings) != 1 {
+		t.Fatalf("checkGit(): got %d findings, want 1", len(findings))
+	}
+	if findings[0].Severity != SeverityError {
+		t.Errorf("checkGit(): severity = %v, want SeverityError", findings[0].Severity)
+	}
+	if findings[0].Suggestion == "" {
+		t.Error("checkGit(): missing suggestion when git not found")
+	}
+}
 
 func TestCheckGit_installed(t *testing.T) {
 	findings := checkGit()
@@ -95,6 +124,28 @@ func TestCheckProfile_noRepositories(t *testing.T) {
 	}
 	if !severities[SeverityWarn] {
 		t.Error("checkProfile(): expected a warning finding for no repositories")
+	}
+}
+
+func TestCheckProfile_extractProfileError(t *testing.T) {
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	// File contains "bob" but we register it as "alice" — ExtractProfile will fail.
+	os.WriteFile(path, []byte("name: bob\n"), 0644)
+
+	if err := AddProfile(Profile{Name: "alice", Path: path}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("alice"); err != nil {
+		t.Fatal(err)
+	}
+
+	findings := checkProfile()
+	severities := severitySet(findings)
+	if !severities[SeverityError] {
+		t.Error("checkProfile(): expected an error finding when profile name not found in file")
 	}
 }
 

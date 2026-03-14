@@ -215,6 +215,43 @@ func TestCreateFile_existingFile(t *testing.T) {
 	f.Close()
 }
 
+// --- ValidateFileName ---
+
+func TestValidateFileName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"valid simple name", "my-profile", false},
+		{"valid with underscores", "my_profile_2", false},
+		{"empty string", "", true},
+		{"forward slash", "foo/bar", true},
+		{"backslash", `foo\bar`, true},
+		{"colon", "foo:bar", true},
+		{"asterisk", "foo*bar", true},
+		{"question mark", "foo?bar", true},
+		{"double quote", `foo"bar`, true},
+		{"less than", "foo<bar", true},
+		{"greater than", "foo>bar", true},
+		{"pipe", "foo|bar", true},
+		{"null byte", "foo\x00bar", true},
+		{"control character", "foo\x01bar", true},
+		{"dots only", "...", true},
+		{"spaces only", "   ", true},
+		{"dots and spaces", " . ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFileName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateFileName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // --- ReadLine ---
 
 func TestReadLine(t *testing.T) {
@@ -297,5 +334,27 @@ func TestDetectGitDefaultBranch_unreachable(t *testing.T) {
 	got := DetectGitDefaultBranch("https://127.0.0.1:1/nonexistent.git")
 	if got != "" {
 		t.Errorf("DetectGitDefaultBranch: got %q, want empty string for unreachable remote", got)
+	}
+}
+
+func TestDetectGitDefaultBranch_detachedHEAD(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	// Create a repo, then detach HEAD — ls-remote will return no symref line.
+	dir := initRepoWithBranch(t, "main")
+	// Detach HEAD by checking out the commit hash directly.
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	hash := strings.TrimSpace(string(out))
+	if err := exec.Command("git", "-C", dir, "checkout", "--detach", hash).Run(); err != nil {
+		t.Fatalf("checkout --detach: %v", err)
+	}
+
+	got := DetectGitDefaultBranch("file://" + dir)
+	if got != "" {
+		t.Errorf("DetectGitDefaultBranch with detached HEAD: got %q, want empty string", got)
 	}
 }
