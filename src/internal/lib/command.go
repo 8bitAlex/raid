@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/8bitalex/raid/src/internal/sys"
 )
@@ -68,6 +69,9 @@ func runCommand(cmd Command) error {
 
 	if cmd.Out.File != "" {
 		expanded := sys.ExpandPath(cmd.Out.File)
+		if err := os.MkdirAll(filepath.Dir(expanded), 0755); err != nil {
+			return fmt.Errorf("failed to create output directory for '%s': %w", cmd.Out.File, err)
+		}
 		f, err := os.Create(expanded)
 		if err != nil {
 			return fmt.Errorf("failed to open output file '%s': %w", cmd.Out.File, err)

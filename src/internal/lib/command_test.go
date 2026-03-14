@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -197,8 +198,16 @@ func TestRunCommand_fileOutput(t *testing.T) {
 }
 
 func TestRunCommand_fileCreateError(t *testing.T) {
-	// A parent directory that doesn't exist causes os.Create to fail.
-	outFile := filepath.Join(t.TempDir(), "nonexistent", "output.txt")
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-based path tricks don't apply on Windows")
+	}
+	// Use a path whose parent is a regular file, so MkdirAll fails.
+	dir := t.TempDir()
+	blockingFile := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(blockingFile, []byte{}, 0644); err != nil {
+		t.Fatal(err)
+	}
+	outFile := filepath.Join(blockingFile, "output.txt")
 	cmd := Command{
 		Name:  "bad-file",
 		Tasks: []Task{{Type: Shell, Cmd: "exit 0"}},
