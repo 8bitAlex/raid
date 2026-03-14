@@ -25,7 +25,7 @@ var reservedNames = map[string]bool{
 	"completion": true,
 }
 
-const version = "1.0.0-Alpha"
+const version = "0.1.0-beta"
 
 var rootCmd = &cobra.Command{
 	Use:     "raid",
