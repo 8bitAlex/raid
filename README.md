@@ -84,12 +84,13 @@ Custom commands appear alongside built-in commands in `raid --help`. Commands de
 
 ## Configuration
 
-Tasks can be defined under `install`, within any environment, or in named `groups` — in both profile and repo configs.
-
 ### Profile (`*.raid.yaml`)
 
-A profile defines the repositories, environments, and reusable task groups for a project. The `$schema` annotation enables autocomplete and validation in editors like VS Code.
+A profile defines the repositories, environments, and tasks for a project — tasks can be organized into install steps, reusable groups, and custom commands. The `$schema` annotation enables autocomplete and validation in editors like VS Code.
 
+Supported formats: `.yaml`, `.yml`, `.json`
+
+Example `my-project.raid.yaml`:
 ```yaml
 # yaml-language-server: $schema=schemas/raid-profile.schema.json
 
@@ -125,7 +126,7 @@ install:
     - type: Shell
       cmd: brew install node
 
-groups:
+task_groups:
   verify-services:
     - type: Wait
       url: http://localhost:3000
@@ -146,13 +147,15 @@ commands:
         path: ~/Developer/backend
       - type: Shell
         cmd: docker compose restart
+      - type: Group
+        ref: verify-services
 ```
 
 Multiple profiles can be defined in a single file using YAML document separators (`---`) or a JSON array.
 
 ### Repository (`raid.yaml`)
 
-Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and install tasks. These are merged with the profile configuration at load time. Committing this file to each repo is the recommended way to share setup knowledge with your team.
+Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and tasks. These are merged with the profile configuration at load time. Committing this file to each repo is the recommended way to share knowledge with your team.
 
 ```yaml
 # yaml-language-server: $schema=schemas/raid-repo.schema.json

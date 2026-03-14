@@ -357,12 +357,12 @@ func execGroup(task Task) error {
 		return fmt.Errorf("ref is required for Group task")
 	}
 	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no groups defined in the active profile")
+		return fmt.Errorf("no task_groups defined in the active profile")
 	}
 
 	tasks, ok := context.Profile.Groups[task.Ref]
 	if !ok {
-		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+		return fmt.Errorf("task group '%s' not found in profile", task.Ref)
 	}
 
 	return ExecuteTasks(tasks)
@@ -485,12 +485,12 @@ func execParallel(task Task) error {
 		return fmt.Errorf("ref is required for Parallel task")
 	}
 	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no groups defined in the active profile")
+		return fmt.Errorf("no task_groups defined in the active profile")
 	}
 
 	tasks, ok := context.Profile.Groups[task.Ref]
 	if !ok {
-		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+		return fmt.Errorf("task group '%s' not found in profile", task.Ref)
 	}
 
 	concurrent := make([]Task, len(tasks))
@@ -524,12 +524,12 @@ func execRetry(task Task) error {
 		return fmt.Errorf("ref is required for Retry task")
 	}
 	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no groups defined in the active profile")
+		return fmt.Errorf("no task_groups defined in the active profile")
 	}
 
 	tasks, ok := context.Profile.Groups[task.Ref]
 	if !ok {
-		return fmt.Errorf("group '%s' not found in profile", task.Ref)
+		return fmt.Errorf("task group '%s' not found in profile", task.Ref)
 	}
 
 	attempts := task.Attempts

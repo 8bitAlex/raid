@@ -96,7 +96,7 @@
                             "type": { "type": "string", "const": "Group" },
                             "concurrent": { "$ref": "#/$defs/concurrent" },
                             "condition": { "$ref": "#/$defs/condition" },
-                            "ref": { "type": "string", "description": "Name of the group to execute, as defined in the profile's top-level groups map" }
+                            "ref": { "type": "string", "description": "Name of the task group to execute, as defined in the profile's top-level task_groups map" }
                         },
                         "required": ["type", "ref"],
                         "additionalProperties": false

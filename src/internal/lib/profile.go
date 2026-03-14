@@ -25,7 +25,7 @@ type Profile struct {
 	Repositories []Repo            `json:"repositories"`
 	Environments []Env             `json:"environments"`
 	Install      OnInstall         `json:"install"`
-	Groups       map[string][]Task `json:"groups"`
+	Groups       map[string][]Task `json:"task_groups" yaml:"task_groups"`
 	Commands     []Command         `json:"commands"`
 }
 
