@@ -23,6 +23,10 @@ var (
 	commandStderr io.Writer = os.Stderr
 )
 
+// stdinMu serializes all stdin reads so that concurrent Prompt and Confirm
+// tasks do not interleave reads or compete for input.
+var stdinMu sync.Mutex
+
 var colorCodes = map[string]string{
 	"red":    "\033[31m",
 	"green":  "\033[32m",
@@ -431,6 +435,10 @@ func execPrompt(task Task) error {
 	if message == "" {
 		message = fmt.Sprintf("Enter value for %s:", task.Var)
 	}
+
+	stdinMu.Lock()
+	defer stdinMu.Unlock()
+
 	fmt.Fprint(commandStdout, message+" ")
 
 	reader := bufio.NewReader(os.Stdin)
@@ -453,6 +461,10 @@ func execConfirm(task Task) error {
 	if message == "" {
 		message = "Continue?"
 	}
+
+	stdinMu.Lock()
+	defer stdinMu.Unlock()
+
 	fmt.Fprint(commandStdout, message+" [y/N] ")
 
 	reader := bufio.NewReader(os.Stdin)
