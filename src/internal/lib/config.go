@@ -52,13 +52,13 @@ func getPath() string {
 	return CfgPath
 }
 
-func Set(key string, value any) {
+// Set stores key in the viper config and persists it to disk.
+func Set(key string, value any) error {
 	viper.Set(key, value)
-	Write()
+	return Write()
 }
 
-func Write() {
-	if err := viper.WriteConfig(); err != nil {
-		panic(err)
-	}
+// Write persists the current viper config to disk.
+func Write() error {
+	return viper.WriteConfig()
 }

@@ -93,7 +93,9 @@ func TestInitConfig_invalidTOML(t *testing.T) {
 func TestSet_persistsKeyInViper(t *testing.T) {
 	setupTestConfig(t)
 
-	Set("testkey", "testvalue")
+	if err := Set("testkey", "testvalue"); err != nil {
+		t.Fatalf("Set() error: %v", err)
+	}
 
 	if got := viper.GetString("testkey"); got != "testvalue" {
 		t.Errorf("Set() did not persist key: got %q, want %q", got, "testvalue")

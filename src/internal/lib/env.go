@@ -35,8 +35,7 @@ func SetEnv(name string) error {
 		return fmt.Errorf("environment '%s' not found", name)
 	}
 
-	Set(activeEnvKey, name)
-	return nil
+	return Set(activeEnvKey, name)
 }
 
 // GetEnv returns the name of the currently active environment.

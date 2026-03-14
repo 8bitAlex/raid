@@ -48,8 +48,7 @@ func SetProfile(name string) error {
 	if !ContainsProfile(name) {
 		return fmt.Errorf("profile '%s' not found", name)
 	}
-	Set(activeProfileKey, name)
-	return nil
+	return Set(activeProfileKey, name)
 }
 
 // GetProfile returns the currently active profile.
@@ -67,21 +66,23 @@ func GetProfile() Profile {
 }
 
 // AddProfile registers a profile in the config store.
-func AddProfile(profile Profile) {
+func AddProfile(profile Profile) error {
 	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		profiles = make(map[string]string)
 	}
-
 	profiles[profile.Name] = profile.Path
-	Set(allProfilesKey, profiles)
+	return Set(allProfilesKey, profiles)
 }
 
 // AddProfiles registers multiple profiles in the config store.
-func AddProfiles(profiles []Profile) {
+func AddProfiles(profiles []Profile) error {
 	for _, profile := range profiles {
-		AddProfile(profile)
+		if err := AddProfile(profile); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // ListProfiles returns all registered profiles.
@@ -112,8 +113,7 @@ func RemoveProfile(name string) error {
 		return fmt.Errorf("profile '%s' not found", name)
 	}
 	delete(profiles, name)
-	Set(allProfilesKey, profiles)
-	return nil
+	return Set(allProfilesKey, profiles)
 }
 
 // ExtractProfile reads and returns a single named profile from the given file.

@@ -52,10 +52,16 @@ var AddProfileCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		pro.AddAll(newProfiles)
+		if err := pro.AddAll(newProfiles); err != nil {
+			fmt.Printf("Failed to save profiles: %v\n", err)
+			os.Exit(1)
+		}
 
 		if pro.Get().IsZero() {
-			pro.Set(newProfiles[0].Name)
+			if err := pro.Set(newProfiles[0].Name); err != nil {
+				fmt.Printf("Failed to set active profile: %v\n", err)
+				os.Exit(1)
+			}
 			fmt.Printf("Profile '%s' set as active\n", newProfiles[0].Name)
 		}
 

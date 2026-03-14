@@ -79,8 +79,12 @@ func TestForceLoad_buildProfileError(t *testing.T) {
 	// badfield violates additionalProperties:false in the profile schema.
 	os.WriteFile(profilePath, []byte("name: test\nbadfield: invalid"), 0644)
 
-	AddProfile(Profile{Name: "test", Path: profilePath})
-	SetProfile("test")
+	if err := AddProfile(Profile{Name: "test", Path: profilePath}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
+	if err := SetProfile("test"); err != nil {
+		t.Fatalf("SetProfile() error: %v", err)
+	}
 
 	if err := ForceLoad(); err == nil {
 		t.Fatal("ForceLoad() expected error when buildProfile fails")
@@ -106,8 +110,12 @@ func TestForceLoad_buildRepoError(t *testing.T) {
 	os.Chdir(root)
 	defer os.Chdir(wd)
 
-	AddProfile(Profile{Name: "buildrepoerr", Path: profilePath})
-	SetProfile("buildrepoerr")
+	if err := AddProfile(Profile{Name: "buildrepoerr", Path: profilePath}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
+	if err := SetProfile("buildrepoerr"); err != nil {
+		t.Fatalf("SetProfile() error: %v", err)
+	}
 
 	if err := ForceLoad(); err == nil {
 		t.Fatal("ForceLoad() expected error when buildRepo fails")
@@ -147,8 +155,12 @@ func TestForceLoad_withValidProfile(t *testing.T) {
 	}
 	defer os.Chdir(wd)
 
-	AddProfile(Profile{Name: "testprofile", Path: profilePath})
-	SetProfile("testprofile")
+	if err := AddProfile(Profile{Name: "testprofile", Path: profilePath}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
+	if err := SetProfile("testprofile"); err != nil {
+		t.Fatalf("SetProfile() error: %v", err)
+	}
 
 	if err := ForceLoad(); err != nil {
 		t.Errorf("ForceLoad() with valid profile error: %v", err)
@@ -402,8 +414,12 @@ func TestForceLoad_mergesRepoCommands(t *testing.T) {
 	os.Chdir(root)
 	defer os.Chdir(wd)
 
-	AddProfile(Profile{Name: "mergetest", Path: profilePath})
-	SetProfile("mergetest")
+	if err := AddProfile(Profile{Name: "mergetest", Path: profilePath}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
+	if err := SetProfile("mergetest"); err != nil {
+		t.Fatalf("SetProfile() error: %v", err)
+	}
 
 	if err := ForceLoad(); err != nil {
 		t.Fatalf("ForceLoad() error: %v", err)

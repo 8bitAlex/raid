@@ -56,7 +56,9 @@ func TestProfileGetEnv(t *testing.T) {
 func TestAddAndContainsProfile(t *testing.T) {
 	setupTestConfig(t)
 
-	AddProfile(Profile{Name: "myprofile", Path: "/some/path"})
+	if err := AddProfile(Profile{Name: "myprofile", Path: "/some/path"}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
 
 	if !ContainsProfile("myprofile") {
 		t.Error("ContainsProfile() = false after AddProfile(), want true")
@@ -74,8 +76,12 @@ func TestContainsProfile_notFound(t *testing.T) {
 func TestListProfiles(t *testing.T) {
 	setupTestConfig(t)
 
-	AddProfile(Profile{Name: "list-a", Path: "/a"})
-	AddProfile(Profile{Name: "list-b", Path: "/b"})
+	if err := AddProfile(Profile{Name: "list-a", Path: "/a"}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
+	if err := AddProfile(Profile{Name: "list-b", Path: "/b"}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
 
 	profiles := ListProfiles()
 	names := make(map[string]bool)
@@ -90,10 +96,12 @@ func TestListProfiles(t *testing.T) {
 func TestAddProfiles(t *testing.T) {
 	setupTestConfig(t)
 
-	AddProfiles([]Profile{
+	if err := AddProfiles([]Profile{
 		{Name: "bulk-a", Path: "/a"},
 		{Name: "bulk-b", Path: "/b"},
-	})
+	}); err != nil {
+		t.Fatalf("AddProfiles() error: %v", err)
+	}
 
 	if !ContainsProfile("bulk-a") || !ContainsProfile("bulk-b") {
 		t.Error("AddProfiles() did not add all profiles")
@@ -103,7 +111,9 @@ func TestAddProfiles(t *testing.T) {
 func TestRemoveProfile(t *testing.T) {
 	setupTestConfig(t)
 
-	AddProfile(Profile{Name: "toremove", Path: "/path"})
+	if err := AddProfile(Profile{Name: "toremove", Path: "/path"}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
 	if err := RemoveProfile("toremove"); err != nil {
 		t.Fatalf("RemoveProfile() error: %v", err)
 	}
@@ -115,7 +125,9 @@ func TestRemoveProfile(t *testing.T) {
 func TestRemoveProfile_notFound(t *testing.T) {
 	setupTestConfig(t)
 
-	AddProfile(Profile{Name: "existing", Path: "/path"})
+	if err := AddProfile(Profile{Name: "existing", Path: "/path"}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
 	err := RemoveProfile("nonexistent")
 	if err == nil {
 		t.Fatal("RemoveProfile() expected error for nonexistent profile")
@@ -143,7 +155,9 @@ func TestSetProfile_notFound(t *testing.T) {
 func TestSetAndGetProfile(t *testing.T) {
 	setupTestConfig(t)
 
-	AddProfile(Profile{Name: "active", Path: "/active/path"})
+	if err := AddProfile(Profile{Name: "active", Path: "/active/path"}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
 	if err := SetProfile("active"); err != nil {
 		t.Fatalf("SetProfile() error: %v", err)
 	}
