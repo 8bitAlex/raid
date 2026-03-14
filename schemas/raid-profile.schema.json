@@ -34,20 +34,20 @@
       "minItems": 1
     },
     "environments": {
-      "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/environments"
+      "$ref": "raid-defs.schema.json#/properties/environments"
     },
     "install": {
-      "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/install"
+      "$ref": "raid-defs.schema.json#/properties/install"
     },
     "task_groups": {
       "type": "object",
       "description": "Named reusable task sequences. Reference them in any task list with type: Group and ref: <name>.",
       "additionalProperties": {
-        "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/tasks"
+        "$ref": "raid-defs.schema.json#/properties/tasks"
       }
     },
     "commands": {
-      "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/commands"
+      "$ref": "raid-defs.schema.json#/properties/commands"
     }
   },
   "required": ["name"]
