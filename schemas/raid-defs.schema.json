@@ -22,7 +22,7 @@
                             "cmd": { "type": "string", "description": "Command to execute" },
                             "shell": {
                                 "type": "string",
-                                "enum": ["bash", "sh", "zsh", "powershell", "cmd"],
+                                "enum": ["bash", "sh", "zsh", "powershell", "pwsh", "ps", "cmd"],
                                 "description": "Shell to use (default: bash)"
                             },
                             "literal": {
