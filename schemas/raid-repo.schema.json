@@ -15,13 +15,13 @@
             "description": "The branch to checkout"
         },
         "environments": {
-            "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/environments"
+            "$ref": "raid-defs.schema.json#/properties/environments"
         },
         "install": {
-            "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/install"
+            "$ref": "raid-defs.schema.json#/properties/install"
         },
         "commands": {
-            "$ref": "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json#/properties/commands"
+            "$ref": "raid-defs.schema.json#/properties/commands"
         }
     },
     "required": ["name","branch"]
