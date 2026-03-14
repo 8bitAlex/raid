@@ -25,11 +25,13 @@ var reservedNames = map[string]bool{
 	"completion": true,
 }
 
+const version = "1.0.0-Alpha"
+
 var rootCmd = &cobra.Command{
 	Use:     "raid",
-	Version: "1.0.0-Alpha",
+	Version: version,
 	Short:   "Raid is a tool for orchestrating common tasks across your development environment(s).",
-	Long:    `Raid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.`,
+	Long:    "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.",
 	Args:    cobra.NoArgs,
 }
 
