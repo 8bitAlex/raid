@@ -141,6 +141,9 @@ func execShell(task Task) error {
 	if !task.Literal {
 		task = task.Expand()
 	}
+	if task.Cmd == "" {
+		return fmt.Errorf("cmd is required for Shell task")
+	}
 
 	shell := getShell(task.Shell)
 	cmd := exec.Command(shell[0], append(shell[1:], task.Cmd)...)
