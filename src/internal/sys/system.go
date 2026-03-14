@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"unicode"
 
 	"github.com/mitchellh/go-homedir"
 )
@@ -104,6 +105,28 @@ func SplitInput(input string) []string {
 		out = append(out, b.String())
 	}
 	return out
+}
+
+// ValidateFileName reports whether name is safe to use as a filename across
+// common operating systems. It rejects empty names, path separators, shell
+// special characters, control characters, and names composed only of dots or spaces.
+func ValidateFileName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name cannot be empty")
+	}
+	for _, r := range name {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' ||
+			r == '"' || r == '<' || r == '>' || r == '|' || r == '\x00' {
+			return fmt.Errorf("contains invalid character %q", r)
+		}
+		if unicode.IsControl(r) {
+			return fmt.Errorf("contains control character")
+		}
+	}
+	if strings.Trim(name, ". ") == "" {
+		return fmt.Errorf("cannot consist only of dots or spaces")
+	}
+	return nil
 }
 
 // GetPlatform returns the current operating system as a Platform value.

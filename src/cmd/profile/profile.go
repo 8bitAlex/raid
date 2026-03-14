@@ -10,6 +10,7 @@ import (
 
 func init() {
 	Command.AddCommand(AddProfileCmd)
+	Command.AddCommand(CreateProfileCmd)
 	Command.AddCommand(ListProfileCmd)
 	Command.AddCommand(RemoveProfileCmd)
 }

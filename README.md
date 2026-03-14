@@ -92,7 +92,7 @@ Supported formats: `.yaml`, `.yml`, `.json`
 
 Example `my-project.raid.yaml`:
 ```yaml
-# yaml-language-server: $schema=schemas/raid-profile.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
 
 name: my-project
 
@@ -158,7 +158,7 @@ Multiple profiles can be defined in a single file using YAML document separators
 Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and tasks. These are merged with the profile configuration at load time. Committing this file to each repo is the recommended way to share knowledge with your team.
 
 ```yaml
-# yaml-language-server: $schema=schemas/raid-repo.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
 
 name: my-service
 branch: main
