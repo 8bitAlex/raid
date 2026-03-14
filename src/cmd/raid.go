@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -48,6 +49,7 @@ func Execute() {
 
 	for _, cmd := range raid.GetCommands() {
 		if reservedNames[cmd.Name] {
+			fmt.Fprintf(os.Stderr, "warning: command '%s' conflicts with a built-in subcommand and will be ignored\n", cmd.Name)
 			continue
 		}
 		name := cmd.Name
