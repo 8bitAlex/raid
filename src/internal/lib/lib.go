@@ -88,6 +88,9 @@ func ForceLoad() error {
 
 // Install clones all repositories in the active profile and runs install tasks.
 func Install(maxThreads int) error {
+	if context == nil {
+		return fmt.Errorf("raid context is not initialized")
+	}
 	profile := context.Profile
 	if profile.IsZero() {
 		return fmt.Errorf("profile not found")
