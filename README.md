@@ -39,12 +39,12 @@ brew install raid  # macOS — Linux and Windows coming soon
 
 ### Quickstart
 
-First, create a profile file (see [Configuration](#configuration) below), then:
-
 ```bash
-raid profile add ~/my-project.raid.yaml  # register and activate a profile
-raid install                           # clone repos and run install tasks
+raid profile create   # interactive wizard: name your profile and add repositories
+raid install          # clone repos and run install tasks
 ```
+
+You can also write a profile file manually (see [Configuration](#configuration)) and register it with `raid profile add <file>`.
 
 ---
 
@@ -54,7 +54,8 @@ raid install                           # clone repos and run install tasks
 
 Manage profiles. A profile is a named collection of repositories and environments.
 
-- `raid profile add <file>` — register profiles from a YAML or JSON file; the first added profile is set as active automatically
+- `raid profile create` — interactive wizard to create and register a new profile
+- `raid profile add <file>` — register profiles from a YAML or JSON file
 - `raid profile list` — list all registered profiles
 - `raid profile <name>` — switch the active profile
 - `raid profile remove <name>` — remove a profile
@@ -68,6 +69,10 @@ Clone all repositories in the active profile and run any configured install task
 - `raid env <name>` — apply a named environment: writes `.env` files into each repo and runs environment tasks
 - `raid env` — show the currently active environment
 - `raid env list` — list available environments
+
+### `raid doctor`
+
+Check the current configuration for issues and get suggestions for fixing them. Useful after initial setup or when something isn't working as expected.
 
 ### `raid <command>`
 
