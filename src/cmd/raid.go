@@ -67,14 +67,22 @@ func Execute() {
 
 // applyConfigFlag scans args for --config / -c so the config path is set
 // before the pre-initialization call, matching cobra's later flag parsing.
+// Scanning stops at the first -- end-of-flags marker.
 func applyConfigFlag(args []string) {
 	for i, arg := range args {
-		if (arg == "--config" || arg == "-c") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			*raid.ConfigPath = args[i+1]
+		if arg == "--" {
 			return
 		}
 		if strings.HasPrefix(arg, "--config=") {
 			*raid.ConfigPath = strings.TrimPrefix(arg, "--config=")
+			return
+		}
+		if strings.HasPrefix(arg, "-c=") {
+			*raid.ConfigPath = strings.TrimPrefix(arg, "-c=")
+			return
+		}
+		if (arg == "--config" || arg == "-c") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			*raid.ConfigPath = args[i+1]
 			return
 		}
 	}
