@@ -75,25 +75,23 @@ func TestGetShell_defaults(t *testing.T) {
 }
 
 func TestGetShell_powershell(t *testing.T) {
-	tests := []struct {
-		input string
-		want  []string
-	}{
-		{"powershell", []string{"powershell", "-Command"}},
-		{"pwsh", []string{"powershell", "-Command"}},
-		{"ps", []string{"powershell", "-Command"}},
+	// The resolved binary is "pwsh" when available, "powershell" otherwise.
+	wantBin := "powershell"
+	if _, err := exec.LookPath("pwsh"); err == nil {
+		wantBin = "pwsh"
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := getShell(tt.input)
-			if len(got) != len(tt.want) {
-				t.Fatalf("getShell(%q) = %v, want %v", tt.input, got, tt.want)
+	for _, input := range []string{"powershell", "pwsh", "ps"} {
+		t.Run(input, func(t *testing.T) {
+			got := getShell(input)
+			if len(got) != 2 {
+				t.Fatalf("getShell(%q) = %v, want 2-element slice", input, got)
 			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("getShell(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
-				}
+			if got[0] != wantBin {
+				t.Errorf("getShell(%q)[0] = %q, want %q", input, got[0], wantBin)
+			}
+			if got[1] != "-Command" {
+				t.Errorf("getShell(%q)[1] = %q, want \"-Command\"", input, got[1])
 			}
 		})
 	}

@@ -38,10 +38,10 @@ var ConfigPath = &lib.CfgPath
 // Initialize the raid environment, including loading configurations and initializing data storage.
 func Initialize() {
 	if err := lib.InitConfig(); err != nil {
-		log.Fatalf("%v\n", err)
+		log.Fatalf("%v", err)
 	}
 	if err := Load(); err != nil {
-		log.Fatalf("%v\n", err)
+		log.Fatalf("%v", err)
 	}
 	if err := lib.LoadEnv(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)

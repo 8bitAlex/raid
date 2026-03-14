@@ -171,6 +171,9 @@ func getShell(shell string) []string {
 	case "/bin/zsh", "zsh":
 		return []string{"zsh", "-c"}
 	case "powershell", "pwsh", "ps":
+		if _, err := exec.LookPath("pwsh"); err == nil {
+			return []string{"pwsh", "-Command"}
+		}
 		return []string{"powershell", "-Command"}
 	case "cmd":
 		return []string{"cmd", "/c"}
