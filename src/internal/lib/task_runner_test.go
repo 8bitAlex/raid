@@ -199,7 +199,7 @@ func TestExecuteTask_shell_literal_skipsGoExpansion(t *testing.T) {
 	os.Setenv("RAID_LITERAL_TEST", "value")
 	defer os.Unsetenv("RAID_LITERAL_TEST")
 
-	task := Task{Type: Shell, Cmd: "test -n anything", Literal: true}
+	task := Task{Type: Shell, Cmd: "exit 0", Literal: true}
 	if err := ExecuteTask(task); err != nil {
 		t.Errorf("literal task returned unexpected error: %v", err)
 	}
