@@ -215,6 +215,7 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 		// Validate every document in a multi-doc YAML stream individually so
 		// that profile files using --- separators are fully validated.
 		dec := yaml.NewDecoder(f)
+		count := 0
 		for {
 			var raw any
 			if err := dec.Decode(&raw); err != nil {
@@ -223,6 +224,7 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 				}
 				return err
 			}
+			count++
 			jsonBytes, err := json.Marshal(raw)
 			if err != nil {
 				return err
@@ -234,6 +236,9 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 			if err := sch.Validate(doc); err != nil {
 				return fmt.Errorf("invalid format: %w", err)
 			}
+		}
+		if count == 0 {
+			return fmt.Errorf("invalid format: file contains no YAML documents")
 		}
 		return nil
 	}
