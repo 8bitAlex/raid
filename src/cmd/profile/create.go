@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -84,7 +85,15 @@ func collectRepos(reader *bufio.Reader) []repoDraft {
 		name := readLine(reader, "  Name: ")
 		url := readLine(reader, "  URL: ")
 		path := readLine(reader, "  Local path: ")
-		branch := readLine(reader, "  Default branch [main]: ")
+		defaultBranch := detectDefaultBranch(url)
+		branchPrompt := "  Default branch: "
+		if defaultBranch != "" {
+			branchPrompt = fmt.Sprintf("  Default branch [%s]: ", defaultBranch)
+		}
+		branch := readLine(reader, branchPrompt)
+		if branch == "" {
+			branch = defaultBranch
+		}
 		if branch == "" {
 			branch = "main"
 		}
@@ -167,6 +176,22 @@ func createRepoConfigs(repos []repoDraft) {
 	}
 }
 
+
+// detectDefaultBranch queries the remote to find its default branch without cloning.
+// Returns an empty string if the remote is unreachable or the branch cannot be determined.
+func detectDefaultBranch(url string) string {
+	out, err := exec.Command("git", "ls-remote", "--symref", url, "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		// Format: "ref: refs/heads/<branch>\tHEAD"
+		if strings.HasPrefix(line, "ref: refs/heads/") {
+			return strings.TrimPrefix(strings.SplitN(line, "\t", 2)[0], "ref: refs/heads/")
+		}
+	}
+	return ""
+}
 
 func readLine(reader *bufio.Reader, prompt string) string {
 	fmt.Print(prompt)
