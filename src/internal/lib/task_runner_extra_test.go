@@ -67,9 +67,9 @@ func TestExecuteTask_prompt_readError(t *testing.T) {
 	}
 }
 
-// --- execParallel / execRetry group not found ---
+// --- Group parallel/retry group not found ---
 
-func TestExecuteTask_parallel_groupNotFound(t *testing.T) {
+func TestExecuteTask_group_parallel_groupNotFound(t *testing.T) {
 	context = &Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
@@ -79,13 +79,13 @@ func TestExecuteTask_parallel_groupNotFound(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Parallel, Ref: "nonexistent"}
+	task := Task{Type: Group, Ref: "nonexistent", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
-		t.Fatal("expected error for nonexistent parallel group ref, got nil")
+		t.Fatal("expected error for nonexistent group ref, got nil")
 	}
 }
 
-func TestExecuteTask_retry_groupNotFound(t *testing.T) {
+func TestExecuteTask_group_retry_groupNotFound(t *testing.T) {
 	context = &Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
@@ -95,9 +95,9 @@ func TestExecuteTask_retry_groupNotFound(t *testing.T) {
 	}
 	defer func() { context = nil }()
 
-	task := Task{Type: Retry, Ref: "nonexistent"}
+	task := Task{Type: Group, Ref: "nonexistent", Attempts: 1}
 	if err := ExecuteTask(task); err == nil {
-		t.Fatal("expected error for nonexistent retry group ref, got nil")
+		t.Fatal("expected error for nonexistent group ref, got nil")
 	}
 }
 
