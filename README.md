@@ -33,9 +33,26 @@ Feedback, issues, and contributions are welcome as the project takes shape.
 
 ### Installation
 
+**macOS**
 ```bash
-brew install raid  # macOS — Linux and Windows coming soon
+brew install 8bitalex/tap/raid
 ```
+
+**Linux**
+```bash
+curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash
+```
+
+**Windows**
+
+1. Go to the [latest release](https://github.com/8bitalex/raid/releases/latest) and download `raid_<version>_windows_amd64.zip`
+2. Extract the zip — you'll find `raid.exe` inside
+3. Move `raid.exe` to a folder that's on your `PATH` (e.g. `C:\Program Files\raid\`)
+4. If you moved it to a new folder, add that folder to your `PATH`:
+   - Open **Settings** → **System** → **About** → **Advanced system settings**
+   - Click **Environment Variables** → select **Path** under System variables → **Edit** → **New**
+   - Paste the folder path and click OK
+5. Open a new terminal and verify: `raid --version`
 
 ### Quickstart
 

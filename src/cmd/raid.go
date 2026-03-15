@@ -25,7 +25,8 @@ var reservedNames = map[string]bool{
 	"completion": true,
 }
 
-const version = "0.1.0-beta"
+// version is set at build time via -ldflags. Falls back to the development default.
+var version = "0.1.0-beta"
 
 var rootCmd = &cobra.Command{
 	Use:     "raid",
