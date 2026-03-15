@@ -17,7 +17,7 @@ jobs:
       - name: Confirm version bump
         if: ${{ !inputs.confirmed }}
         run: |
-          echo "::error::Deploy cancelled. Check the box to confirm the version has been bumped in src/cmd/raid.go."
+          echo "::error::Deploy cancelled. Check the box to confirm the version has been bumped in src/resources/app.properties."
           exit 1
 
       - uses: actions/checkout@v4.2.2
