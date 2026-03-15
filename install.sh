@@ -41,9 +41,10 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-# ── Download & extract ───────────────────────────────────────────────────────
+# ── Download & verify ────────────────────────────────────────────────────────
 FILENAME="${BINARY}_${VERSION}_${OS}_${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/v${VERSION}/${FILENAME}"
+CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/checksums.txt"
 
 echo "Installing ${BINARY} v${VERSION} (${OS}/${ARCH})..."
 
@@ -51,6 +52,20 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 curl -fsSL "$URL" -o "${TMP}/${FILENAME}"
+curl -fsSL "$CHECKSUMS_URL" -o "${TMP}/checksums.txt"
+
+if ! command -v sha256sum >/dev/null 2>&1; then
+  echo "Error: sha256sum is required to verify the downloaded archive."
+  exit 1
+fi
+
+if ! grep "  ${FILENAME}\$" "${TMP}/checksums.txt" > "${TMP}/checksums_for_file.txt"; then
+  echo "Error: checksum for ${FILENAME} not found in checksums.txt"
+  exit 1
+fi
+
+(cd "$TMP" && sha256sum -c "${TMP}/checksums_for_file.txt")
+
 tar -xzf "${TMP}/${FILENAME}" -C "$TMP"
 
 # ── Install ───────────────────────────────────────────────────────────────────
