@@ -98,6 +98,12 @@ type Property = resources.Property
 // Properties contains the typed names of all keys in app.properties.
 var Properties = resources.Properties
 
+// Environment identifies the runtime environment the binary was built for.
+type Environment = resources.Environment
+
+// Environments contains the valid values for the environment property.
+var Environments = resources.Environments
+
 // GetProperty returns the value of the named property from app.properties.
 func GetProperty(name Property) (string, error) {
 	return resources.GetProperty(name)

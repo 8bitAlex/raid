@@ -69,10 +69,17 @@ func isInfoCommand(args []string) bool {
 
 func Execute() {
 	info := isInfoCommand(os.Args)
+	environment, _ := raid.GetProperty(raid.Properties.Environment)
 
 	// Start version check early so network latency overlaps with initialization.
 	updateCh := make(chan string, 1)
-	go func() { updateCh <- sys.LatestGitHubRelease("8bitalex/raid") }()
+	go func() {
+		if raid.Environment(environment) == raid.Environments.Preview {
+			updateCh <- sys.LatestGitHubPreRelease("8bitalex/raid")
+		} else {
+			updateCh <- sys.LatestGitHubRelease("8bitalex/raid")
+		}
+	}()
 
 	applyConfigFlag(os.Args)
 	if !info {
@@ -98,7 +105,13 @@ func Execute() {
 
 	version, _ := raid.GetProperty(raid.Properties.Version)
 	if latest != "" && latest != version {
-		notice := sys.Yellow("(Update available: v" + version + " → v" + latest + ")")
+		var label string
+		if raid.Environment(environment) == raid.Environments.Preview {
+			label = "Preview update"
+		} else {
+			label = "Update available"
+		}
+		notice := sys.Yellow("(" + label + ": v" + version + " → v" + latest + ")")
 		rootCmd.Long = strings.Replace(rootCmd.Long, "Raid v"+version, "Raid v"+version+" "+notice, 1)
 		if !info {
 			fmt.Fprintf(os.Stderr, "Raid v%s %s\n", version, notice)

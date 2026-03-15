@@ -10,6 +10,22 @@ import (
 // Property identifies a key in app.properties.
 type Property string
 
+// Environment identifies the runtime environment the binary was built for.
+type Environment string
+
+type environmentValues struct {
+	Development Environment
+	Preview     Environment
+	Production  Environment
+}
+
+// Environments contains the valid values for the environment property.
+var Environments = environmentValues{
+	Development: "development",
+	Preview:     "preview",
+	Production:  "production",
+}
+
 type propertyNames struct {
 	Version     Property
 	Environment Property

@@ -1,0 +1,49 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - bash -c 'VERSION=$(grep -oP "(?<=version=)\S+" src/resources/app.properties) && SHA=$(git rev-parse --short HEAD) && printf "version=%s-preview.%s\nenvironment=preview\n" "$VERSION" "$SHA" > src/resources/app.properties'
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  prerelease: true
+
+brews:
+  - name: raid-preview
+    repository:
+      owner: 8bitalex
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/8bitalex/raid
+    description: "Distributed development environment orchestration tool (preview build)"
+    license: GPL-3.0-only
+    install: |
+      bin.install "raid"
+    test: |
+      system "#{bin}/raid", "--version"

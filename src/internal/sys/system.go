@@ -175,10 +175,16 @@ func DetectGitDefaultBranch(url string) string {
 }
 
 // LatestGitHubRelease queries the GitHub releases API for the given repo
-// (e.g. "owner/repo") and returns the latest version without the leading "v".
+// (e.g. "owner/repo") and returns the latest stable version without the leading "v".
 // Returns an empty string if the request fails, times out, or no release exists.
 func LatestGitHubRelease(repo string) string {
 	return latestGitHubRelease("https://api.github.com", repo)
+}
+
+// LatestGitHubPreRelease returns the latest pre-release version for the given repo.
+// Returns an empty string if none is found or the request fails.
+func LatestGitHubPreRelease(repo string) string {
+	return latestGitHubPreRelease("https://api.github.com", repo)
 }
 
 func latestGitHubRelease(baseURL, repo string) string {
@@ -198,6 +204,31 @@ func latestGitHubRelease(baseURL, repo string) string {
 		return ""
 	}
 	return strings.TrimPrefix(result.TagName, "v")
+}
+
+func latestGitHubPreRelease(baseURL, repo string) string {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(baseURL + "/repos/" + repo + "/releases?per_page=10")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var releases []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return ""
+	}
+	for _, r := range releases {
+		if r.Prerelease {
+			return strings.TrimPrefix(r.TagName, "v")
+		}
+	}
+	return ""
 }
 
 // GetPlatform returns the current operating system as a Platform value.

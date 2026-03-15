@@ -1,0 +1,42 @@
+name: Preview
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Generate preview tag
+        id: tag
+        run: |
+          VERSION=$(grep -oP '(?<=version=)\S+' src/resources/app.properties)
+          SHA=$(git rev-parse --short HEAD)
+          echo "tag=v${VERSION}-preview.${SHA}" >> $GITHUB_OUTPUT
+
+      - name: Create and push preview tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.tag.outputs.tag }}
+          git push origin ${{ steps.tag.outputs.tag }}
+
+      - uses: actions/setup-go@v5.4.0
+        with:
+          go-version: "1.24.4"
+
+      - uses: goreleaser/goreleaser-action@v6.3.0
+        with:
+          version: "~> v2"
+          args: release --clean --config .goreleaser.preview.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
