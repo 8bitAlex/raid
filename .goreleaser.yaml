@@ -3,6 +3,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - bash -c 'VERSION=$(grep -oP "(?<=version=)\S+" src/resources/app.properties) && printf "version=%s\nenvironment=production\n" "$VERSION" > src/resources/app.properties'
 
 builds:
   - env:
@@ -18,7 +19,7 @@ builds:
       - goos: windows
         goarch: arm64
     ldflags:
-      - -s -w -X github.com/8bitalex/raid/src/cmd.version={{.Version}}
+      - -s -w
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

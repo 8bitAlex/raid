@@ -16,8 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.1.1-beta"
-
 // reservedNames are built-in cobra subcommands that custom commands cannot shadow.
 var reservedNames = map[string]bool{
 	"profile":    true,
@@ -30,14 +28,18 @@ var reservedNames = map[string]bool{
 }
 
 var rootCmd = &cobra.Command{
-	Use:     "raid",
-	Version: version,
-	Short:   "Raid is a tool for orchestrating common tasks across your development environment(s).",
-	Long:    "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.",
-	Args:    cobra.NoArgs,
+	Use:   "raid",
+	Short: "Raid is a tool for orchestrating common tasks across your development environment(s).",
+	Args:  cobra.NoArgs,
 }
 
 func init() {
+	version, err := raid.GetProperty(raid.Properties.Version)
+	if err != nil {
+		log.Fatalf("app.properties: %v", err)
+	}
+	rootCmd.Version = version
+	rootCmd.Long = "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories."
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(raid.ConfigPath, raid.ConfigPathFlag, raid.ConfigPathFlagShort, "", raid.ConfigPathFlagDesc)
 	// Subcommands
@@ -94,6 +96,7 @@ func Execute() {
 		}
 	}
 
+	version, _ := raid.GetProperty(raid.Properties.Version)
 	if latest != "" && latest != version {
 		notice := sys.Yellow("(Update available: v" + version + " → v" + latest + ")")
 		rootCmd.Long = strings.Replace(rootCmd.Long, "Raid v"+version, "Raid v"+version+" "+notice, 1)

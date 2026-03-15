@@ -24,10 +24,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read version from source
+      - name: Read version from app.properties
         id: version
         run: |
-          VERSION=$(grep -oP '(?<=var version = ")[^"]+' src/cmd/raid.go)
+          VERSION=$(grep -oP '(?<=version=)\S+' src/resources/app.properties)
           echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists

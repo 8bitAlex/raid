@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/resources"
 )
 
 const (
@@ -89,4 +90,15 @@ type Finding = lib.Finding
 // Doctor performs all configuration checks and returns the findings.
 func Doctor() []Finding {
 	return lib.RunDoctor()
+}
+
+// Property identifies a key in app.properties.
+type Property = resources.Property
+
+// Properties contains the typed names of all keys in app.properties.
+var Properties = resources.Properties
+
+// GetProperty returns the value of the named property from app.properties.
+func GetProperty(name Property) (string, error) {
+	return resources.GetProperty(name)
 }
