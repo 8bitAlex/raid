@@ -3,25 +3,32 @@ name: Deploy
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Release version (e.g. 1.2.3)"
+      confirmed:
+        description: "I have bumped the version in src/cmd/raid.go"
         required: true
-        type: string
+        type: boolean
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Confirm version bump
+        if: ${{ !inputs.confirmed }}
+        run: |
+          echo "::error::Deploy cancelled. Check the box to confirm the version has been bumped in src/cmd/raid.go."
+          exit 1
+
       - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Set release tag
+      - name: Read version from source
         id: version
         run: |
-          echo "tag=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-
+          VERSION=$(grep -oP '(?<=var version = ")[^"]+' src/cmd/raid.go)
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists
         id: tag_check
