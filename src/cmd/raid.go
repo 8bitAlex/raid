@@ -95,7 +95,7 @@ func Execute() {
 	}
 
 	if latest != "" && latest != version {
-		notice := sys.Yellow("(Update available to v" + latest + ")")
+		notice := sys.Yellow("(Update available: v" + version + " → v" + latest + ")")
 		rootCmd.Long = strings.Replace(rootCmd.Long, "Raid v"+version, "Raid v"+version+" "+notice, 1)
 		if !info {
 			fmt.Fprintf(os.Stderr, "Raid v%s %s\n", version, notice)
