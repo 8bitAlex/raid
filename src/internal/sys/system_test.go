@@ -400,6 +400,101 @@ func TestLatestGitHubRelease_unreachable(t *testing.T) {
 	}
 }
 
+// --- LatestGitHubPreRelease ---
+
+func TestLatestGitHubPreRelease(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		want    string
+	}{
+		{
+			name: "returns prerelease version without v prefix",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`[{"tag_name":"v2.0.0-rc1","prerelease":true}]`))
+			},
+			want: "2.0.0-rc1",
+		},
+		{
+			name: "non-200 response returns empty string",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			},
+			want: "",
+		},
+		{
+			name: "invalid JSON returns empty string",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`not json`))
+			},
+			want: "",
+		},
+		{
+			name: "tag without v prefix is returned as-is",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`[{"tag_name":"3.0.0-beta1","prerelease":true}]`))
+			},
+			want: "3.0.0-beta1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
+
+			got := latestGitHubPreRelease(server.URL, "owner/repo")
+			if got != tt.want {
+				t.Errorf("latestGitHubPreRelease() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLatestGitHubPreRelease_pagination(t *testing.T) {
+	// Simulate two pages: first page has no prereleases, second page has one.
+	callCount := 0
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusOK)
+		if callCount == 1 {
+			// First page: only non-prerelease releases.
+			w.Write([]byte(`[
+				{"tag_name":"v0.9.0","prerelease":false},
+				{"tag_name":"v0.8.0","prerelease":false}
+			]`))
+			return
+		}
+		// Second page: contains a prerelease.
+		w.Write([]byte(`[
+			{"tag_name":"v1.0.0-rc1","prerelease":true},
+			{"tag_name":"v0.9.1","prerelease":false}
+		]`))
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	got := latestGitHubPreRelease(server.URL, "owner/repo")
+	want := "1.0.0-rc1"
+	if got != want {
+		t.Errorf("latestGitHubPreRelease() with pagination = %q, want %q", got, want)
+	}
+	if callCount < 2 {
+		t.Errorf("latestGitHubPreRelease() did not request a second page when first page had no prereleases; callCount = %d", callCount)
+	}
+}
+
+func TestLatestGitHubPreRelease_unreachable(t *testing.T) {
+	got := latestGitHubPreRelease("http://127.0.0.1:1", "owner/repo")
+	if got != "" {
+		t.Errorf("latestGitHubPreRelease() = %q, want empty string for unreachable server", got)
+	}
+}
+
 func TestDetectGitDefaultBranch_detachedHEAD(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
