@@ -2,7 +2,11 @@ name: Deploy
 
 on:
   workflow_dispatch:
-
+    inputs:
+      version:
+        description: "Release version (e.g. 1.2.3)"
+        required: true
+        type: string
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -13,11 +17,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version
+      - name: Set release tag
         id: version
         run: |
-          VERSION=$(grep -oP '(?<=var version = ").*(?=")' src/cmd/raid.go)
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+
 
       - name: Check if tag exists
         id: tag_check
