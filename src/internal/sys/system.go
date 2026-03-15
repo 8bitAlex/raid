@@ -208,24 +208,25 @@ func latestGitHubRelease(baseURL, repo string) string {
 
 func latestGitHubPreRelease(baseURL, repo string) string {
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/repos/" + repo + "/releases?per_page=10")
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return ""
-	}
-	for _, r := range releases {
-		if r.Prerelease {
-			return strings.TrimPrefix(r.TagName, "v")
+	for page := 1; page <= 10; page++ {
+		url := fmt.Sprintf("%s/repos/%s/releases?per_page=10&page=%d", baseURL, repo, page)
+		resp, err := client.Get(url)
+		if err != nil {
+			return ""
+		}
+		var releases []struct {
+			TagName    string `json:"tag_name"`
+			Prerelease bool   `json:"prerelease"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&releases)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || err != nil || len(releases) == 0 {
+			return ""
+		}
+		for _, r := range releases {
+			if r.Prerelease {
+				return strings.TrimPrefix(r.TagName, "v")
+			}
 		}
 	}
 	return ""
