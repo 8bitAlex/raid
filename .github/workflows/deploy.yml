@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmed:
-        description: "I have bumped the version in src/cmd/raid.go"
+        description: "I have bumped the version in src/resources/app.properties"
         required: true
         type: boolean
 
