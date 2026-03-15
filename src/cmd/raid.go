@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "0.1.1-beta"
+
 // reservedNames are built-in cobra subcommands that custom commands cannot shadow.
 var reservedNames = map[string]bool{
 	"profile":    true,
@@ -26,9 +28,6 @@ var reservedNames = map[string]bool{
 	"version":    true,
 	"completion": true,
 }
-
-// version is set at build time via -ldflags. Falls back to the development default.
-var version = "0.1.0-beta"
 
 var rootCmd = &cobra.Command{
 	Use:     "raid",
