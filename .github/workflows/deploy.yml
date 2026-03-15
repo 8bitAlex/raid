@@ -27,7 +27,7 @@ jobs:
       - name: Read version from app.properties
         id: version
         run: |
-          VERSION=$(grep -oP '(?<=version=)\S+' src/resources/app.properties)
+          VERSION=$(awk -F= '/^version=/{print $2}' src/resources/app.properties)
           echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists

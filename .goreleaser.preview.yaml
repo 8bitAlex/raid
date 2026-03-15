@@ -3,7 +3,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
-    - bash -c 'VERSION=$(grep -oP "(?<=version=)\S+" src/resources/app.properties) && SHA=$(git rev-parse --short HEAD) && printf "version=%s-preview.%s\nenvironment=preview\n" "$VERSION" "$SHA" > src/resources/app.properties'
+    - bash -c 'VERSION=$(awk -F= "/^version=/{print $2}" src/resources/app.properties) && SHA=$(git rev-parse --short HEAD) && printf "version=%s-preview.%s\nenvironment=preview\n" "$VERSION" "$SHA" > src/resources/app.properties'
 
 builds:
   - env:
