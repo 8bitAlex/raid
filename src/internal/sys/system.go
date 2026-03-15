@@ -2,13 +2,16 @@ package sys
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/mitchellh/go-homedir"
@@ -158,6 +161,28 @@ func DetectGitDefaultBranch(url string) string {
 		}
 	}
 	return ""
+}
+
+// LatestGitHubRelease queries the GitHub releases API for the given repo
+// (e.g. "owner/repo") and returns the latest version without the leading "v".
+// Returns an empty string if the request fails, times out, or no release exists.
+func LatestGitHubRelease(repo string) string {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("https://api.github.com/repos/" + repo + "/releases/latest")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var result struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(result.TagName, "v")
 }
 
 // GetPlatform returns the current operating system as a Platform value.

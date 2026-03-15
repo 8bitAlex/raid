@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/8bitalex/raid/src/cmd/doctor"
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
+	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
 )
@@ -65,12 +67,40 @@ func isInfoCommand(args []string) bool {
 }
 
 func Execute() {
-	// Pre-initialize before cobra parses args so that profile commands can be
-	// registered as subcommands. cobra.OnInitialize runs after arg parsing,
-	// which is too late for dynamic subcommand registration.
+	info := isInfoCommand(os.Args)
+
+	// Start version check early so network latency overlaps with initialization.
+	updateCh := make(chan string, 1)
+	go func() { updateCh <- sys.LatestGitHubRelease("8bitalex/raid") }()
+
 	applyConfigFlag(os.Args)
-	if !isInfoCommand(os.Args) {
+	if !info {
 		raid.Initialize()
+	}
+
+	// For info commands wait up to 1.5s; for regular commands do a non-blocking
+	// check so startup is not delayed.
+	var latest string
+	if info {
+		select {
+		case v := <-updateCh:
+			latest = v
+		case <-time.After(1500 * time.Millisecond):
+		}
+	} else {
+		select {
+		case v := <-updateCh:
+			latest = v
+		default:
+		}
+	}
+
+	if latest != "" && latest != version {
+		notice := "(Update available to v" + latest + ")"
+		rootCmd.Long = strings.Replace(rootCmd.Long, "Raid v"+version, "Raid v"+version+" "+notice, 1)
+		if !info {
+			fmt.Fprintf(os.Stderr, "Raid v%s %s\n", version, notice)
+		}
 	}
 
 	for _, cmd := range raid.GetCommands() {
