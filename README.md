@@ -33,9 +33,17 @@ Feedback, issues, and contributions are welcome as the project takes shape.
 
 ### Installation
 
+**macOS**
 ```bash
-brew install raid  # macOS — Linux and Windows coming soon
+brew install 8bitalex/tap/raid
 ```
+
+**Linux**
+```bash
+curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash
+```
+
+**Windows** — coming soon
 
 ### Quickstart
 
