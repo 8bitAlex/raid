@@ -41,12 +41,10 @@ jobs:
           git push origin ${{ steps.version.outputs.tag }}
 
       - uses: actions/setup-go@v5
-        if: steps.tag_check.outputs.exists == 'false'
         with:
           go-version: "1.24.4"
 
       - uses: goreleaser/goreleaser-action@v6
-        if: steps.tag_check.outputs.exists == 'false'
         with:
           version: "~> v2"
           args: release --clean
