@@ -46,12 +46,32 @@ func init() {
 	rootCmd.AddCommand(doctor.Command)
 }
 
+// isInfoCommand reports whether the invocation is for a built-in informational
+// command (help, version, completion) that does not require a loaded profile.
+func isInfoCommand(args []string) bool {
+	if len(args) <= 1 {
+		return true
+	}
+	for _, arg := range args[1:] {
+		if arg == "--" {
+			break
+		}
+		switch arg {
+		case "help", "version", "completion", "--help", "-h", "--version", "-v":
+			return true
+		}
+	}
+	return false
+}
+
 func Execute() {
 	// Pre-initialize before cobra parses args so that profile commands can be
 	// registered as subcommands. cobra.OnInitialize runs after arg parsing,
 	// which is too late for dynamic subcommand registration.
 	applyConfigFlag(os.Args)
-	raid.Initialize()
+	if !isInfoCommand(os.Args) {
+		raid.Initialize()
+	}
 
 	for _, cmd := range raid.GetCommands() {
 		if reservedNames[cmd.Name] {
