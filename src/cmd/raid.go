@@ -95,7 +95,7 @@ func Execute() {
 	}
 
 	if latest != "" && latest != version {
-		notice := "(Update available to v" + latest + ")"
+		notice := sys.Yellow("(Update available to v" + latest + ")")
 		rootCmd.Long = strings.Replace(rootCmd.Long, "Raid v"+version, "Raid v"+version+" "+notice, 1)
 		if !info {
 			fmt.Fprintf(os.Stderr, "Raid v%s %s\n", version, notice)
@@ -130,12 +130,12 @@ func applyConfigFlag(args []string) {
 		if arg == "--" {
 			return
 		}
-		if strings.HasPrefix(arg, "--config=") {
-			*raid.ConfigPath = strings.TrimPrefix(arg, "--config=")
+		if v, ok := strings.CutPrefix(arg, "--config="); ok {
+			*raid.ConfigPath = v
 			return
 		}
-		if strings.HasPrefix(arg, "-c=") {
-			*raid.ConfigPath = strings.TrimPrefix(arg, "-c=")
+		if v, ok := strings.CutPrefix(arg, "-c="); ok {
+			*raid.ConfigPath = v
 			return
 		}
 		if (arg == "--config" || arg == "-c") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {

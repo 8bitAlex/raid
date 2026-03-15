@@ -20,6 +20,17 @@ import (
 // Sep is the OS path separator as a string.
 const Sep = string(os.PathSeparator)
 
+// ANSI terminal color codes.
+const (
+	colorYellow = "\033[33m"
+	colorReset  = "\033[0m"
+)
+
+// Yellow wraps s in yellow ANSI color codes.
+func Yellow(s string) string {
+	return colorYellow + s + colorReset
+}
+
 // Platform identifies the host operating system.
 type Platform string
 
