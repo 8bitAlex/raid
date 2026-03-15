@@ -2,6 +2,8 @@ package sys
 
 import (
 	"bufio"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -334,6 +336,67 @@ func TestDetectGitDefaultBranch_unreachable(t *testing.T) {
 	got := DetectGitDefaultBranch("https://127.0.0.1:1/nonexistent.git")
 	if got != "" {
 		t.Errorf("DetectGitDefaultBranch: got %q, want empty string for unreachable remote", got)
+	}
+}
+
+// --- LatestGitHubRelease ---
+
+func TestLatestGitHubRelease(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		want    string
+	}{
+		{
+			name: "returns version without v prefix",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"tag_name":"v1.2.3"}`))
+			},
+			want: "1.2.3",
+		},
+		{
+			name: "non-200 response returns empty string",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			},
+			want: "",
+		},
+		{
+			name: "invalid JSON returns empty string",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`not json`))
+			},
+			want: "",
+		},
+		{
+			name: "tag without v prefix is returned as-is",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"tag_name":"2.0.0"}`))
+			},
+			want: "2.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
+
+			got := latestGitHubRelease(server.URL, "owner/repo")
+			if got != tt.want {
+				t.Errorf("latestGitHubRelease() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLatestGitHubRelease_unreachable(t *testing.T) {
+	got := latestGitHubRelease("http://127.0.0.1:1", "owner/repo")
+	if got != "" {
+		t.Errorf("latestGitHubRelease() = %q, want empty string for unreachable server", got)
 	}
 }
 

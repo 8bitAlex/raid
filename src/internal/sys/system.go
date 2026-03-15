@@ -167,8 +167,12 @@ func DetectGitDefaultBranch(url string) string {
 // (e.g. "owner/repo") and returns the latest version without the leading "v".
 // Returns an empty string if the request fails, times out, or no release exists.
 func LatestGitHubRelease(repo string) string {
+	return latestGitHubRelease("https://api.github.com", repo)
+}
+
+func latestGitHubRelease(baseURL, repo string) string {
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("https://api.github.com/repos/" + repo + "/releases/latest")
+	resp, err := client.Get(baseURL + "/repos/" + repo + "/releases/latest")
 	if err != nil {
 		return ""
 	}

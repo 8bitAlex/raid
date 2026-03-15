@@ -6,6 +6,37 @@ import (
 	"github.com/8bitalex/raid/src/raid"
 )
 
+func TestIsInfoCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no args", []string{"raid"}, true},
+		{"empty args", []string{}, true},
+		{"help subcommand", []string{"raid", "help"}, true},
+		{"version subcommand", []string{"raid", "version"}, true},
+		{"completion subcommand", []string{"raid", "completion"}, true},
+		{"--help flag", []string{"raid", "--help"}, true},
+		{"-h flag", []string{"raid", "-h"}, true},
+		{"--version flag", []string{"raid", "--version"}, true},
+		{"-v flag", []string{"raid", "-v"}, true},
+		{"regular command", []string{"raid", "install"}, false},
+		{"doctor command", []string{"raid", "doctor"}, false},
+		{"profile subcommand", []string{"raid", "profile", "create"}, false},
+		{"flag after end-of-flags marker", []string{"raid", "--", "--help"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isInfoCommand(tt.args)
+			if got != tt.want {
+				t.Errorf("isInfoCommand(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestApplyConfigFlag(t *testing.T) {
 	tests := []struct {
 		name     string
