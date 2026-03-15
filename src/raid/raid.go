@@ -95,14 +95,19 @@ func Doctor() []Finding {
 // Property identifies a key in app.properties.
 type Property = resources.Property
 
-// Properties contains the typed names of all keys in app.properties.
-var Properties = resources.Properties
+const (
+	PropertyVersion     = resources.PropertyVersion
+	PropertyEnvironment = resources.PropertyEnvironment
+)
 
 // Environment identifies the runtime environment the binary was built for.
 type Environment = resources.Environment
 
-// Environments contains the valid values for the environment property.
-var Environments = resources.Environments
+const (
+	EnvironmentDevelopment = resources.EnvironmentDevelopment
+	EnvironmentPreview     = resources.EnvironmentPreview
+	EnvironmentProduction  = resources.EnvironmentProduction
+)
 
 // GetProperty returns the value of the named property from app.properties.
 func GetProperty(name Property) (string, error) {

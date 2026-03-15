@@ -10,32 +10,19 @@ import (
 // Property identifies a key in app.properties.
 type Property string
 
+const (
+	PropertyVersion     Property = "version"
+	PropertyEnvironment Property = "environment"
+)
+
 // Environment identifies the runtime environment the binary was built for.
 type Environment string
 
-type environmentValues struct {
-	Development Environment
-	Preview     Environment
-	Production  Environment
-}
-
-// Environments contains the valid values for the environment property.
-var Environments = environmentValues{
-	Development: "development",
-	Preview:     "preview",
-	Production:  "production",
-}
-
-type propertyNames struct {
-	Version     Property
-	Environment Property
-}
-
-// Properties contains the typed names of all keys in app.properties.
-var Properties = propertyNames{
-	Version:     "version",
-	Environment: "environment",
-}
+const (
+	EnvironmentDevelopment Environment = "development"
+	EnvironmentPreview     Environment = "preview"
+	EnvironmentProduction  Environment = "production"
+)
 
 //go:embed app.properties
 var appProperties []byte

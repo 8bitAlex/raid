@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	version, err := raid.GetProperty(raid.Properties.Version)
+	version, err := raid.GetProperty(raid.PropertyVersion)
 	if err != nil {
 		log.Fatalf("app.properties: %v", err)
 	}
@@ -69,12 +69,12 @@ func isInfoCommand(args []string) bool {
 
 func Execute() {
 	info := isInfoCommand(os.Args)
-	environment, _ := raid.GetProperty(raid.Properties.Environment)
+	environment, _ := raid.GetProperty(raid.PropertyEnvironment)
 
 	// Start version check early so network latency overlaps with initialization.
 	updateCh := make(chan string, 1)
 	go func() {
-		if raid.Environment(environment) == raid.Environments.Preview {
+		if raid.Environment(environment) == raid.EnvironmentPreview {
 			updateCh <- sys.LatestGitHubPreRelease("8bitalex/raid")
 		} else {
 			updateCh <- sys.LatestGitHubRelease("8bitalex/raid")
@@ -103,10 +103,10 @@ func Execute() {
 		}
 	}
 
-	version, _ := raid.GetProperty(raid.Properties.Version)
+	version, _ := raid.GetProperty(raid.PropertyVersion)
 	if latest != "" && latest != version {
 		var label string
-		if raid.Environment(environment) == raid.Environments.Preview {
+		if raid.Environment(environment) == raid.EnvironmentPreview {
 			label = "Preview update"
 		} else {
 			label = "Update available"
