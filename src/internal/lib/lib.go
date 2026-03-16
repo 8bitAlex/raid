@@ -3,7 +3,6 @@ package lib
 
 import (
 	"bytes"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,13 +11,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/8bitalex/raid/schemas"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
-
-//go:embed schemas/*.json
-var schemaFS embed.FS
 
 const (
 	yamlSep            = "---"
@@ -194,12 +191,12 @@ func validateWithEmbeddedSchema(path, schemaName string) error {
 	}
 
 	c := jsonschema.NewCompiler()
-	entries, err := schemaFS.ReadDir("schemas")
+	entries, err := schemas.FS.ReadDir(".")
 	if err != nil {
 		return fmt.Errorf("failed to read embedded schemas: %w", err)
 	}
 	for _, entry := range entries {
-		data, err := schemaFS.ReadFile("schemas/" + entry.Name())
+		data, err := schemas.FS.ReadFile(entry.Name())
 		if err != nil {
 			return fmt.Errorf("failed to read embedded schema %s: %w", entry.Name(), err)
 		}
