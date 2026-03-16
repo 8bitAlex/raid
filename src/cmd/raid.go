@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/8bitalex/raid/src/cmd/doctor"
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
+	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
 )
@@ -25,18 +27,19 @@ var reservedNames = map[string]bool{
 	"completion": true,
 }
 
-// version is set at build time via -ldflags. Falls back to the development default.
-var version = "0.1.0-beta"
-
 var rootCmd = &cobra.Command{
-	Use:     "raid",
-	Version: version,
-	Short:   "Raid is a tool for orchestrating common tasks across your development environment(s).",
-	Long:    "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.",
-	Args:    cobra.NoArgs,
+	Use:   "raid",
+	Short: "Raid is a tool for orchestrating common tasks across your development environment(s).",
+	Args:  cobra.NoArgs,
 }
 
 func init() {
+	version, err := raid.GetProperty(raid.PropertyVersion)
+	if err != nil {
+		log.Fatalf("app.properties: %v", err)
+	}
+	rootCmd.Version = version
+	rootCmd.Long = "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories."
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(raid.ConfigPath, raid.ConfigPathFlag, raid.ConfigPathFlagShort, "", raid.ConfigPathFlagDesc)
 	// Subcommands
@@ -46,12 +49,74 @@ func init() {
 	rootCmd.AddCommand(doctor.Command)
 }
 
+// isInfoCommand reports whether the invocation is for a built-in informational
+// command (help, version, completion) that does not require a loaded profile.
+func isInfoCommand(args []string) bool {
+	if len(args) <= 1 {
+		return true
+	}
+	for _, arg := range args[1:] {
+		if arg == "--" {
+			break
+		}
+		switch arg {
+		case "help", "version", "completion", "--help", "-h", "--version", "-v":
+			return true
+		}
+	}
+	return false
+}
+
 func Execute() {
-	// Pre-initialize before cobra parses args so that profile commands can be
-	// registered as subcommands. cobra.OnInitialize runs after arg parsing,
-	// which is too late for dynamic subcommand registration.
+	info := isInfoCommand(os.Args)
+	environment, _ := raid.GetProperty(raid.PropertyEnvironment)
+
+	// Start version check early so network latency overlaps with initialization.
+	updateCh := make(chan string, 1)
+	go func() {
+		if raid.Environment(environment) == raid.EnvironmentPreview {
+			updateCh <- sys.LatestGitHubPreRelease("8bitalex/raid")
+		} else {
+			updateCh <- sys.LatestGitHubRelease("8bitalex/raid")
+		}
+	}()
+
 	applyConfigFlag(os.Args)
-	raid.Initialize()
+	if !info {
+		raid.Initialize()
+	}
+
+	// For info commands wait up to 1.5s; for regular commands do a non-blocking
+	// check so startup is not delayed.
+	var latest string
+	if info {
+		select {
+		case v := <-updateCh:
+			latest = v
+		case <-time.After(1500 * time.Millisecond):
+		}
+	} else {
+		select {
+		case v := <-updateCh:
+			latest = v
+		default:
+		}
+	}
+
+	version, _ := raid.GetProperty(raid.PropertyVersion)
+	if latest != "" && latest != version {
+		var label string
+		if raid.Environment(environment) == raid.EnvironmentPreview {
+			label = "Preview update"
+		} else {
+			label = "Update available"
+		}
+		notice := sys.Yellow("(" + label + ": v" + version + " → v" + latest + ")")
+		rootCmd.Long = strings.Replace(rootCmd.Long, "Raid v"+version, "Raid v"+version+" "+notice, 1)
+		if !info {
+			fmt.Fprintf(os.Stderr, "Raid v%s %s\n", version, notice)
+		}
+	}
 
 	for _, cmd := range raid.GetCommands() {
 		if reservedNames[cmd.Name] {
@@ -81,12 +146,12 @@ func applyConfigFlag(args []string) {
 		if arg == "--" {
 			return
 		}
-		if strings.HasPrefix(arg, "--config=") {
-			*raid.ConfigPath = strings.TrimPrefix(arg, "--config=")
+		if v, ok := strings.CutPrefix(arg, "--config="); ok {
+			*raid.ConfigPath = v
 			return
 		}
-		if strings.HasPrefix(arg, "-c=") {
-			*raid.ConfigPath = strings.TrimPrefix(arg, "-c=")
+		if v, ok := strings.CutPrefix(arg, "-c="); ok {
+			*raid.ConfigPath = v
 			return
 		}
 		if (arg == "--config" || arg == "-c") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {

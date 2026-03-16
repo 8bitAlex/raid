@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/resources"
 )
 
 const (
@@ -89,4 +90,26 @@ type Finding = lib.Finding
 // Doctor performs all configuration checks and returns the findings.
 func Doctor() []Finding {
 	return lib.RunDoctor()
+}
+
+// Property identifies a key in app.properties.
+type Property = resources.Property
+
+const (
+	PropertyVersion     = resources.PropertyVersion
+	PropertyEnvironment = resources.PropertyEnvironment
+)
+
+// Environment identifies the runtime environment the binary was built for.
+type Environment = resources.Environment
+
+const (
+	EnvironmentDevelopment = resources.EnvironmentDevelopment
+	EnvironmentPreview     = resources.EnvironmentPreview
+	EnvironmentProduction  = resources.EnvironmentProduction
+)
+
+// GetProperty returns the value of the named property from app.properties.
+func GetProperty(name Property) (string, error) {
+	return resources.GetProperty(name)
 }

@@ -2,13 +2,16 @@ package sys
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/mitchellh/go-homedir"
@@ -16,6 +19,17 @@ import (
 
 // Sep is the OS path separator as a string.
 const Sep = string(os.PathSeparator)
+
+// ANSI terminal color codes.
+const (
+	colorYellow = "\033[33m"
+	colorReset  = "\033[0m"
+)
+
+// Yellow wraps s in yellow ANSI color codes.
+func Yellow(s string) string {
+	return colorYellow + s + colorReset
+}
 
 // Platform identifies the host operating system.
 type Platform string
@@ -155,6 +169,64 @@ func DetectGitDefaultBranch(url string) string {
 		// Format: "ref: refs/heads/<branch>\tHEAD"
 		if strings.HasPrefix(line, "ref: refs/heads/") {
 			return strings.TrimPrefix(strings.SplitN(line, "\t", 2)[0], "ref: refs/heads/")
+		}
+	}
+	return ""
+}
+
+// LatestGitHubRelease queries the GitHub releases API for the given repo
+// (e.g. "owner/repo") and returns the latest stable version without the leading "v".
+// Returns an empty string if the request fails, times out, or no release exists.
+func LatestGitHubRelease(repo string) string {
+	return latestGitHubRelease("https://api.github.com", repo)
+}
+
+// LatestGitHubPreRelease returns the latest pre-release version for the given repo.
+// Returns an empty string if none is found or the request fails.
+func LatestGitHubPreRelease(repo string) string {
+	return latestGitHubPreRelease("https://api.github.com", repo)
+}
+
+func latestGitHubRelease(baseURL, repo string) string {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(baseURL + "/repos/" + repo + "/releases/latest")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var result struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(result.TagName, "v")
+}
+
+func latestGitHubPreRelease(baseURL, repo string) string {
+	client := &http.Client{Timeout: 2 * time.Second}
+	for page := 1; page <= 10; page++ {
+		url := fmt.Sprintf("%s/repos/%s/releases?per_page=10&page=%d", baseURL, repo, page)
+		resp, err := client.Get(url)
+		if err != nil {
+			return ""
+		}
+		var releases []struct {
+			TagName    string `json:"tag_name"`
+			Prerelease bool   `json:"prerelease"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&releases)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || err != nil || len(releases) == 0 {
+			return ""
+		}
+		for _, r := range releases {
+			if r.Prerelease {
+				return strings.TrimPrefix(r.TagName, "v")
+			}
 		}
 	}
 	return ""
