@@ -31,7 +31,7 @@ jobs:
           echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists
-        id: tag_check
+        id: tag
         run: |
           if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -40,7 +40,7 @@ jobs:
           fi
 
       - name: Create and push tag
-        if: steps.tag_check.outputs.exists == 'false'
+        if: steps.tag.outputs.exists == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
