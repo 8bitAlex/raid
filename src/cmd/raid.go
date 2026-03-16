@@ -138,10 +138,11 @@ func Execute() {
 	}
 }
 
-// baseVersion strips any "-preview" suffix from a version string so that
-// preview builds compare correctly against their corresponding release tag.
+// baseVersion strips "-preview" and anything following it from a version string
+// so that preview builds compare correctly against their corresponding release tag.
 func baseVersion(version string) string {
-	return strings.TrimSuffix(version, "-preview")
+	base, _, _ := strings.Cut(version, "-preview")
+	return base
 }
 
 // applyConfigFlag scans args for --config / -c so the config path is set

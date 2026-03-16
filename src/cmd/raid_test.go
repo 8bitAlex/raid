@@ -16,6 +16,7 @@ func TestBaseVersion(t *testing.T) {
 		{"beta release", "1.2.3-beta", "1.2.3-beta"},
 		{"preview build", "1.2.3-preview", "1.2.3"},
 		{"beta preview build", "1.2.3-beta-preview", "1.2.3-beta"},
+		{"preview build with sha", "1.2.3-beta-preview.abc1234", "1.2.3-beta"},
 	}
 
 	for _, tt := range tests {
