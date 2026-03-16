@@ -100,6 +100,12 @@ raid build        # run the "build" command
 raid deploy       # run the "deploy" command
 ```
 
+Arguments passed after the command name are available inside tasks as `$RAID_ARG_1`, `$RAID_ARG_2`, etc.
+
+```bash
+raid deploy staging v1.2.3   # $RAID_ARG_1=staging, $RAID_ARG_2=v1.2.3
+```
+
 Custom commands appear alongside built-in commands in `raid --help`. Commands defined in a profile take priority over same-named commands from repositories.
 
 ---
@@ -369,6 +375,20 @@ commands:
 - `file` — additionally write all output to this path; supports `$VAR` expansion
 
 **Priority** — when a profile and one of its repositories define a command with the same name, the profile's definition wins.
+
+**Arguments** — any arguments passed after the command name are exposed as environment variables `RAID_ARG_1`, `RAID_ARG_2`, etc. and are available to all tasks in the command.
+
+```yaml
+commands:
+  - name: deploy
+    usage: "Deploy a service to an environment"
+    tasks:
+      - type: Shell
+        cmd: ./deploy.sh $RAID_ARG_1 $RAID_ARG_2
+```
+```bash
+raid deploy staging v1.2.3   # $RAID_ARG_1=staging, $RAID_ARG_2=v1.2.3
+```
 
 ---
 
