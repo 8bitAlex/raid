@@ -70,7 +70,7 @@ func TestExecuteCommand_notFound(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("nonexistent"); err == nil {
+	if err := ExecuteCommand("nonexistent", nil); err == nil {
 		t.Fatal("ExecuteCommand() expected error for unknown command, got nil")
 	}
 }
@@ -87,7 +87,7 @@ func TestExecuteCommand_success(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("noop"); err != nil {
+	if err := ExecuteCommand("noop", nil); err != nil {
 		t.Errorf("ExecuteCommand() error: %v", err)
 	}
 }
@@ -100,8 +100,35 @@ func TestExecuteCommand_taskFailure(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("fail"); err == nil {
+	if err := ExecuteCommand("fail", nil); err == nil {
 		t.Fatal("ExecuteCommand() expected error from failing task, got nil")
+	}
+}
+
+func TestExecuteCommand_argsSetAsEnvVars(t *testing.T) {
+	setupTestConfig(t)
+	origOut := commandStdout
+	commandStdout = io.Discard
+	t.Cleanup(func() {
+		commandStdout = origOut
+		os.Unsetenv("RAID_ARG_1")
+		os.Unsetenv("RAID_ARG_2")
+	})
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+		},
+	}
+
+	if err := ExecuteCommand("noop", []string{"foo", "bar"}); err != nil {
+		t.Fatalf("ExecuteCommand() error: %v", err)
+	}
+	if got := os.Getenv("RAID_ARG_1"); got != "foo" {
+		t.Errorf("RAID_ARG_1 = %q, want %q", got, "foo")
+	}
+	if got := os.Getenv("RAID_ARG_2"); got != "bar" {
+		t.Errorf("RAID_ARG_2 = %q, want %q", got, "bar")
 	}
 }
 

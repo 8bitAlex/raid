@@ -40,7 +40,11 @@ func GetCommands() []Command {
 }
 
 // ExecuteCommand runs the tasks for the named command, applying any output configuration.
-func ExecuteCommand(name string) error {
+// Args are exposed as RAID_ARG_1, RAID_ARG_2, ... environment variables.
+func ExecuteCommand(name string, args []string) error {
+	for i, arg := range args {
+		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
+	}
 	for _, cmd := range GetCommands() {
 		if cmd.Name == name {
 			return runCommand(cmd)

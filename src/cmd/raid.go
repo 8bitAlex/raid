@@ -128,7 +128,7 @@ func Execute() {
 			Use:   name,
 			Short: cmd.Usage,
 			RunE: func(c *cobra.Command, args []string) error {
-				return raid.ExecuteCommand(name)
+				return raid.ExecuteCommand(name, args)
 			},
 		})
 	}

@@ -71,8 +71,8 @@ func GetCommands() []lib.Command {
 }
 
 // ExecuteCommand runs the named command from the active profile.
-func ExecuteCommand(name string) error {
-	return lib.ExecuteCommand(name)
+func ExecuteCommand(name string, args []string) error {
+	return lib.ExecuteCommand(name, args)
 }
 
 // Severity indicates the importance of a Doctor finding.
