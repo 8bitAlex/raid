@@ -10,7 +10,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  version-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Fail if version tag already exists
+        run: |
+          VERSION=$(awk -F= '/^version=/{print $2}' src/resources/app.properties)
+          TAG="v${VERSION}"
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists as a git tag. Bump the version in src/resources/app.properties."
+            exit 1
+          fi
+          echo "Version ${TAG} is new."
+
   build:
+    needs: version-check
+    if: always() && (needs.version-check.result == 'success' || needs.version-check.result == 'skipped')
     runs-on: ${{ matrix.os }}
     strategy:
         matrix:
