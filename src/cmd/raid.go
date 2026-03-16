@@ -104,7 +104,8 @@ func Execute() {
 	}
 
 	version, _ := raid.GetProperty(raid.PropertyVersion)
-	if latest != "" && latest != version {
+	compareVersion := strings.TrimSuffix(version, "-preview")
+	if latest != "" && latest != compareVersion {
 		var label string
 		if raid.Environment(environment) == raid.EnvironmentPreview {
 			label = "Preview update"
