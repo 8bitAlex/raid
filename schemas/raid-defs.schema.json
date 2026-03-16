@@ -165,7 +165,7 @@
                         },
                         "required": ["type", "message"],
                         "additionalProperties": false
-                    },
+                    }
                 ]
             }
         },
