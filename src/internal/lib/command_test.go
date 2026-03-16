@@ -111,11 +111,17 @@ func TestExecuteCommand_argsSetAsEnvVars(t *testing.T) {
 	commandStdout, commandStderr = io.Discard, io.Discard
 	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
 
-	outFile := filepath.Join(t.TempDir(), "args.txt")
+	dir := t.TempDir()
+	srcFile := filepath.Join(dir, "args.tmpl")
+	outFile := filepath.Join(dir, "args.txt")
+	if err := os.WriteFile(srcFile, []byte("$RAID_ARG_1\n$RAID_ARG_2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	context = &Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "capture", Tasks: []Task{
-				{Type: Shell, Cmd: "printf '%s\\n%s' \"$RAID_ARG_1\" \"$RAID_ARG_2\" > " + outFile},
+				{Type: Template, Src: srcFile, Dest: outFile},
 			}}},
 		},
 	}
@@ -134,12 +140,11 @@ func TestExecuteCommand_argsSetAsEnvVars(t *testing.T) {
 		t.Errorf("RAID_ARG_1 during exec = %q, want %q", lines[0], "foo")
 	}
 	if len(lines) < 2 || lines[1] != "bar" {
-		t.Errorf("RAID_ARG_2 during exec = %q, want %q", func() string {
-			if len(lines) < 2 {
-				return ""
-			}
-			return lines[1]
-		}(), "bar")
+		arg2 := ""
+		if len(lines) >= 2 {
+			arg2 = lines[1]
+		}
+		t.Errorf("RAID_ARG_2 during exec = %q, want %q", arg2, "bar")
 	}
 
 	// Args must be cleared after execution.
@@ -157,11 +162,17 @@ func TestExecuteCommand_staleArgsCleared(t *testing.T) {
 	commandStdout, commandStderr = io.Discard, io.Discard
 	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
 
-	outFile := filepath.Join(t.TempDir(), "args.txt")
+	dir := t.TempDir()
+	srcFile := filepath.Join(dir, "args.tmpl")
+	outFile := filepath.Join(dir, "args.txt")
+	if err := os.WriteFile(srcFile, []byte("$RAID_ARG_2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	context = &Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "capture", Tasks: []Task{
-				{Type: Shell, Cmd: "printf '%s' \"$RAID_ARG_2\" > " + outFile},
+				{Type: Template, Src: srcFile, Dest: outFile},
 			}}},
 		},
 	}
