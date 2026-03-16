@@ -28,6 +28,8 @@ jobs:
           echo "Version ${TAG} is new."
 
   build:
+    needs: version-check
+    if: always() && (needs.version-check.result == 'success' || needs.version-check.result == 'skipped')
     runs-on: ${{ matrix.os }}
     strategy:
         matrix:
