@@ -11,6 +11,7 @@ import (
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
@@ -116,17 +117,17 @@ func Execute() {
 		}
 	}
 
-	registerUserCommands(rootCmd)
+	registerUserCommands(rootCmd, raid.GetCommands())
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Failed to execute root command: %v", err)
 	}
 }
 
-// registerUserCommands adds user-defined commands from the active profile to root.
+// registerUserCommands adds user-defined commands to root.
 // Reserved built-in names are skipped with a warning.
-func registerUserCommands(root *cobra.Command) {
-	for _, cmd := range raid.GetCommands() {
+func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
+	for _, cmd := range cmds {
 		if reservedNames[cmd.Name] {
 			fmt.Fprintf(os.Stderr, "warning: command '%s' conflicts with a built-in subcommand and will be ignored\n", cmd.Name)
 			continue

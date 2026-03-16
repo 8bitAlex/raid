@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
-	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
+
+	"github.com/8bitalex/raid/src/raid"
 )
 
 func TestBaseVersion(t *testing.T) {
@@ -133,31 +134,20 @@ func helpOutput(root *cobra.Command) string {
 	return buf.String()
 }
 
-// withCommands sets lib.context to a profile containing the given commands and
-// restores the original context when the test ends.
-func withCommands(t *testing.T, cmds []lib.Command) {
-	t.Helper()
-	old := lib.GetContext()
-	lib.SetContext(&lib.Context{Profile: lib.Profile{Commands: cmds}})
-	t.Cleanup(func() { lib.SetContext(old) })
-}
-
 func TestRegisterUserCommands_emptyProfile(t *testing.T) {
-	withCommands(t, nil)
 	root := newTestRoot()
-	registerUserCommands(root)
+	registerUserCommands(root, nil)
 	if len(root.Commands()) != 0 {
 		t.Errorf("expected no subcommands, got %d", len(root.Commands()))
 	}
 }
 
 func TestRegisterUserCommands_appearsInHelp(t *testing.T) {
-	withCommands(t, []lib.Command{
+	root := newTestRoot()
+	registerUserCommands(root, []lib.Command{
 		{Name: "deploy", Usage: "Deploy all services"},
 		{Name: "sync", Usage: "Sync repositories"},
 	})
-	root := newTestRoot()
-	registerUserCommands(root)
 
 	out := helpOutput(root)
 	for _, want := range []string{"deploy", "Deploy all services", "sync", "Sync repositories"} {
@@ -168,12 +158,11 @@ func TestRegisterUserCommands_appearsInHelp(t *testing.T) {
 }
 
 func TestRegisterUserCommands_reservedNameSkipped(t *testing.T) {
-	withCommands(t, []lib.Command{
+	root := newTestRoot()
+	registerUserCommands(root, []lib.Command{
 		{Name: "install", Usage: "should be skipped"},
 		{Name: "deploy", Usage: "should appear"},
 	})
-	root := newTestRoot()
-	registerUserCommands(root)
 
 	cmds := root.Commands()
 	if len(cmds) != 1 || cmds[0].Name() != "deploy" {
@@ -190,13 +179,12 @@ func TestRegisterUserCommands_reservedNameSkipped(t *testing.T) {
 // Regression: user commands must appear in help output for every invocation
 // type, including info commands (no args, --help, help) and unknown commands.
 func TestRegisterUserCommands_visibleForAllInvocationTypes(t *testing.T) {
-	withCommands(t, []lib.Command{{Name: "build", Usage: "Build services"}})
+	cmds := []lib.Command{{Name: "build", Usage: "Build services"}}
 
-	invocations := []string{"(no args)", "--help", "help", "unknown-cmd"}
-	for _, inv := range invocations {
+	for _, inv := range []string{"(no args)", "--help", "help", "unknown-cmd"} {
 		t.Run(inv, func(t *testing.T) {
 			root := newTestRoot()
-			registerUserCommands(root)
+			registerUserCommands(root, cmds)
 			if !strings.Contains(helpOutput(root), "build") {
 				t.Errorf("'build' command missing from help output for invocation %q", inv)
 			}
