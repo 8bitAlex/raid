@@ -176,17 +176,35 @@ func TestRegisterUserCommands_reservedNameSkipped(t *testing.T) {
 	}
 }
 
-// Regression: user commands must appear in help output for every invocation
-// type, including info commands (no args, --help, help) and unknown commands.
+// Regression: user commands must appear in output for every invocation type,
+// including info commands (no args, --help, help) and unknown subcommands.
+// Each subtest drives Cobra via SetArgs + Execute() so the full Cobra dispatch
+// path is exercised rather than calling Help() directly.
 func TestRegisterUserCommands_visibleForAllInvocationTypes(t *testing.T) {
 	cmds := []lib.Command{{Name: "build", Usage: "Build services"}}
 
-	for _, inv := range []string{"(no args)", "--help", "help", "unknown-cmd"} {
-		t.Run(inv, func(t *testing.T) {
+	tests := []struct {
+		inv  string
+		args []string
+	}{
+		{"no args", []string{}},
+		{"--help flag", []string{"--help"}},
+		{"help subcommand", []string{"help"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.inv, func(t *testing.T) {
 			root := newTestRoot()
 			registerUserCommands(root, cmds)
-			if !strings.Contains(helpOutput(root), "build") {
-				t.Errorf("'build' command missing from help output for invocation %q", inv)
+
+			var buf bytes.Buffer
+			root.SetOut(&buf)
+			root.SetErr(&buf)
+			root.SetArgs(tt.args)
+			_ = root.Execute() // error expected for unknown-cmd; ignore it
+
+			if !strings.Contains(buf.String(), "build") {
+				t.Errorf("'build' missing from output for invocation %q\noutput:\n%s", tt.inv, buf.String())
 			}
 		})
 	}
