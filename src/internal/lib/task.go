@@ -45,9 +45,11 @@ type Task struct {
 	Branch string `json:"branch,omitempty"`
 	// Prompt / Confirm / Print
 	Message string `json:"message,omitempty"`
-	// Prompt
+	// Prompt / SetVar
 	Var     string `json:"var,omitempty"`
 	Default string `json:"default,omitempty"`
+	// SetVar
+	Value string `json:"value,omitempty"`
 	// Print
 	Color string `json:"color,omitempty"`
 	// Retry
@@ -82,6 +84,7 @@ func (t Task) Expand() Task {
 		Message:    sys.Expand(t.Message),
 		Var:        t.Var,
 		Default:    sys.Expand(t.Default),
+		Value:      sys.Expand(t.Value),
 		Color:      t.Color,
 		Attempts:   t.Attempts,
 		Delay:      t.Delay,
@@ -97,11 +100,12 @@ const (
 	HTTP     TaskType = "http"
 	Wait     TaskType = "wait"
 	Template TaskType = "template"
-	Group   TaskType = "group"
-	Git     TaskType = "git"
-	Prompt  TaskType = "prompt"
-	Confirm TaskType = "confirm"
-	Print   TaskType = "print"
+	Group    TaskType = "group"
+	Git      TaskType = "git"
+	Prompt   TaskType = "prompt"
+	Confirm  TaskType = "confirm"
+	Print    TaskType = "print"
+	SetVar   TaskType = "set"
 )
 
 // ToLower returns the task type normalized to lowercase for case-insensitive comparisons.

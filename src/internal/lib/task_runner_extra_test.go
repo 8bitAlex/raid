@@ -262,3 +262,70 @@ func TestExecuteTasks_concurrentErrorCollected(t *testing.T) {
 		t.Fatal("expected error when concurrent and sequential tasks both fail")
 	}
 }
+
+// --- execSetVar ---
+
+func TestExecuteTask_setVar_setsEnv(t *testing.T) {
+	os.Unsetenv("RAID_TEST_VAR")
+	t.Cleanup(func() { os.Unsetenv("RAID_TEST_VAR") })
+
+	task := Task{Type: SetVar, Var: "RAID_TEST_VAR", Value: "hello"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	if got := os.Getenv("RAID_TEST_VAR"); got != "hello" {
+		t.Errorf("RAID_TEST_VAR = %q, want %q", got, "hello")
+	}
+}
+
+func TestExecuteTask_setVar_expandsValue(t *testing.T) {
+	os.Setenv("RAID_BASE", "world")
+	os.Unsetenv("RAID_TEST_VAR")
+	t.Cleanup(func() {
+		os.Unsetenv("RAID_BASE")
+		os.Unsetenv("RAID_TEST_VAR")
+	})
+
+	task := Task{Type: SetVar, Var: "RAID_TEST_VAR", Value: "hello-$RAID_BASE"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	if got := os.Getenv("RAID_TEST_VAR"); got != "hello-world" {
+		t.Errorf("RAID_TEST_VAR = %q, want %q", got, "hello-world")
+	}
+}
+
+func TestExecuteTask_setVar_missingVar(t *testing.T) {
+	task := Task{Type: SetVar, Value: "something"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error when var is empty, got nil")
+	}
+}
+
+func TestExecuteTask_setVar_visibleToSubsequentTasks(t *testing.T) {
+	os.Unsetenv("RAID_TEST_VAR")
+	t.Cleanup(func() { os.Unsetenv("RAID_TEST_VAR") })
+
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.txt")
+	srcFile := filepath.Join(dir, "tmpl.txt")
+	if err := os.WriteFile(srcFile, []byte("$RAID_TEST_VAR"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tasks := []Task{
+		{Type: SetVar, Var: "RAID_TEST_VAR", Value: "persisted"},
+		{Type: Template, Src: srcFile, Dest: outFile},
+	}
+	if err := ExecuteTasks(tasks); err != nil {
+		t.Fatalf("ExecuteTasks error: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "persisted" {
+		t.Errorf("downstream task saw %q, want %q", got, "persisted")
+	}
+}

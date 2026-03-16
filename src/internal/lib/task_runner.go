@@ -132,6 +132,8 @@ func ExecuteTask(task Task) error {
 		return execConfirm(task)
 	case Print:
 		return execPrint(task)
+	case SetVar:
+		return execSetVar(task)
 	default:
 		return fmt.Errorf("invalid task type: %s", task.Type)
 	}
@@ -533,6 +535,14 @@ func execPrint(task Task) error {
 	return nil
 }
 
+
+func execSetVar(task Task) error {
+	if task.Var == "" {
+		return fmt.Errorf("var is required for Set task")
+	}
+	task = task.Expand()
+	return os.Setenv(task.Var, task.Value)
+}
 
 // withDefaultDir returns a copy of tasks with path set to dir on any Shell task
 // that does not already have an explicit path. Used to apply profile-level (home)
