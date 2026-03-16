@@ -21,7 +21,7 @@ jobs:
         run: |
           VERSION=$(awk -F= '/^version=/{print $2}' src/resources/app.properties)
           TAG="v${VERSION}"
-          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "::error::Tag ${TAG} already exists as a git tag. Bump the version in src/resources/app.properties."
             exit 1
           fi
