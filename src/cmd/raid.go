@@ -82,9 +82,7 @@ func Execute() {
 	}()
 
 	applyConfigFlag(os.Args)
-	if !info {
-		raid.Initialize()
-	}
+	raid.Initialize()
 
 	// For info commands wait up to 1.5s; for regular commands do a non-blocking
 	// check so startup is not delayed.
