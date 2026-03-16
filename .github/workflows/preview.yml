@@ -21,7 +21,17 @@ jobs:
           VERSION=$(awk -F= '/^version=/{print $2}' src/resources/app.properties)
           echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Check if tag exists
+        id: tag
+        run: |
+          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create and push preview tag
+        if: steps.tag.outputs.exists == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
