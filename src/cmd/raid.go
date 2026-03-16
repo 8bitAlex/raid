@@ -83,7 +83,15 @@ func Execute() {
 	}()
 
 	applyConfigFlag(os.Args)
-	raid.Initialize()
+	var cmds []lib.Command
+	if info {
+		// Best-effort, read-only load: no config file creation, no warnings.
+		// User commands will appear in help if the config already exists.
+		cmds = raid.QuietGetCommands()
+	} else {
+		raid.Initialize()
+		cmds = raid.GetCommands()
+	}
 
 	// For info commands wait up to 1.5s; for regular commands do a non-blocking
 	// check so startup is not delayed.
@@ -117,7 +125,7 @@ func Execute() {
 		}
 	}
 
-	registerUserCommands(rootCmd, raid.GetCommands())
+	registerUserCommands(rootCmd, cmds)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Failed to execute root command: %v", err)

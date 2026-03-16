@@ -33,6 +33,18 @@ func InitConfig() error {
 	return nil
 }
 
+// initConfigReadOnly configures viper from the config file only if it already
+// exists. Returns false if the file is absent or cannot be read, with no
+// files created and no errors surfaced.
+func initConfigReadOnly() bool {
+	path := sys.ExpandPath(getPath())
+	if !sys.FileExists(path) {
+		return false
+	}
+	viper.SetConfigFile(path)
+	return viper.ReadInConfig() == nil
+}
+
 func getOrCreateConfigFile() (string, error) {
 	path := sys.ExpandPath(getPath())
 	if !sys.FileExists(path) {

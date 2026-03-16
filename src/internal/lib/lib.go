@@ -38,6 +38,20 @@ type OnInstall struct {
 
 var context *Context
 
+// QuietLoad attempts a best-effort, read-only profile load. It does not create
+// config files, does not emit warnings, and returns nil if the config is absent
+// or loading fails. Intended for info-command paths (--help, --version) where
+// user-command registration is opportunistic and side effects are undesirable.
+func QuietLoad() []Command {
+	if !initConfigReadOnly() {
+		return nil
+	}
+	if err := ForceLoad(); err != nil {
+		return nil
+	}
+	return GetCommands()
+}
+
 // Load initializes the context from the active profile, using cached results if available.
 func Load() error {
 	if context == nil {
