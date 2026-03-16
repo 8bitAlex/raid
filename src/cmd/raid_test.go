@@ -6,6 +6,28 @@ import (
 	"github.com/8bitalex/raid/src/raid"
 )
 
+func TestBaseVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{"stable release", "1.2.3", "1.2.3"},
+		{"beta release", "1.2.3-beta", "1.2.3-beta"},
+		{"preview build", "1.2.3-preview", "1.2.3"},
+		{"beta preview build", "1.2.3-beta-preview", "1.2.3-beta"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := baseVersion(tt.version)
+			if got != tt.want {
+				t.Errorf("baseVersion(%q) = %q, want %q", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsInfoCommand(t *testing.T) {
 	tests := []struct {
 		name string
