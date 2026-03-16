@@ -104,7 +104,7 @@ func Execute() {
 	}
 
 	version, _ := raid.GetProperty(raid.PropertyVersion)
-	if latest != "" && latest != version {
+	if latest != "" && latest != baseVersion(version) {
 		var label string
 		if raid.Environment(environment) == raid.EnvironmentPreview {
 			label = "Preview update"
@@ -136,6 +136,13 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Failed to execute root command: %v", err)
 	}
+}
+
+// baseVersion strips "-preview" and anything following it from a version string
+// so that preview builds compare correctly against their corresponding release tag.
+func baseVersion(version string) string {
+	base, _, _ := strings.Cut(version, "-preview")
+	return base
 }
 
 // applyConfigFlag scans args for --config / -c so the config path is set
