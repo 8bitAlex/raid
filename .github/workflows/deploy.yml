@@ -39,6 +39,12 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Fail if tag already exists
+        if: steps.tag.outputs.exists == 'true'
+        run: |
+          echo "::error::Tag ${{ steps.version.outputs.tag }} already exists. Bump the version in src/resources/app.properties."
+          exit 1
+
       - name: Create and push tag
         if: steps.tag.outputs.exists == 'false'
         run: |
