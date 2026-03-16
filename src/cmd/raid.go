@@ -116,23 +116,29 @@ func Execute() {
 		}
 	}
 
+	registerUserCommands(rootCmd)
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("Failed to execute root command: %v", err)
+	}
+}
+
+// registerUserCommands adds user-defined commands from the active profile to root.
+// Reserved built-in names are skipped with a warning.
+func registerUserCommands(root *cobra.Command) {
 	for _, cmd := range raid.GetCommands() {
 		if reservedNames[cmd.Name] {
 			fmt.Fprintf(os.Stderr, "warning: command '%s' conflicts with a built-in subcommand and will be ignored\n", cmd.Name)
 			continue
 		}
 		name := cmd.Name
-		rootCmd.AddCommand(&cobra.Command{
+		root.AddCommand(&cobra.Command{
 			Use:   name,
 			Short: cmd.Usage,
 			RunE: func(c *cobra.Command, args []string) error {
 				return raid.ExecuteCommand(name, args)
 			},
 		})
-	}
-
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Failed to execute root command: %v", err)
 	}
 }
 

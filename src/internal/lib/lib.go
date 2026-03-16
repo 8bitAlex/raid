@@ -38,6 +38,12 @@ type OnInstall struct {
 
 var context *Context
 
+// GetContext returns the active context. Intended for use in tests.
+func GetContext() *Context { return context }
+
+// SetContext replaces the active context. Intended for use in tests.
+func SetContext(c *Context) { context = c }
+
 // Load initializes the context from the active profile, using cached results if available.
 func Load() error {
 	if context == nil {

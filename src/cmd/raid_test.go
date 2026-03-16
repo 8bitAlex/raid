@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/raid"
+	"github.com/spf13/cobra"
 )
 
 func TestBaseVersion(t *testing.T) {
@@ -108,6 +112,93 @@ func TestApplyConfigFlag(t *testing.T) {
 
 			if got := *raid.ConfigPath; got != tt.wantPath {
 				t.Errorf("applyConfigFlag() ConfigPath = %q, want %q", got, tt.wantPath)
+			}
+		})
+	}
+}
+
+// --- registerUserCommands ---
+
+// newTestRoot returns a minimal cobra root command suitable for registration tests.
+func newTestRoot() *cobra.Command {
+	return &cobra.Command{Use: "raid"}
+}
+
+// helpOutput captures the help text produced by root.
+func helpOutput(root *cobra.Command) string {
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	_ = root.Help()
+	return buf.String()
+}
+
+// withCommands sets lib.context to a profile containing the given commands and
+// restores the original context when the test ends.
+func withCommands(t *testing.T, cmds []lib.Command) {
+	t.Helper()
+	old := lib.GetContext()
+	lib.SetContext(&lib.Context{Profile: lib.Profile{Commands: cmds}})
+	t.Cleanup(func() { lib.SetContext(old) })
+}
+
+func TestRegisterUserCommands_emptyProfile(t *testing.T) {
+	withCommands(t, nil)
+	root := newTestRoot()
+	registerUserCommands(root)
+	if len(root.Commands()) != 0 {
+		t.Errorf("expected no subcommands, got %d", len(root.Commands()))
+	}
+}
+
+func TestRegisterUserCommands_appearsInHelp(t *testing.T) {
+	withCommands(t, []lib.Command{
+		{Name: "deploy", Usage: "Deploy all services"},
+		{Name: "sync", Usage: "Sync repositories"},
+	})
+	root := newTestRoot()
+	registerUserCommands(root)
+
+	out := helpOutput(root)
+	for _, want := range []string{"deploy", "Deploy all services", "sync", "Sync repositories"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help output missing %q\n\nfull output:\n%s", want, out)
+		}
+	}
+}
+
+func TestRegisterUserCommands_reservedNameSkipped(t *testing.T) {
+	withCommands(t, []lib.Command{
+		{Name: "install", Usage: "should be skipped"},
+		{Name: "deploy", Usage: "should appear"},
+	})
+	root := newTestRoot()
+	registerUserCommands(root)
+
+	cmds := root.Commands()
+	if len(cmds) != 1 || cmds[0].Name() != "deploy" {
+		t.Errorf("expected only 'deploy', got %v", func() []string {
+			names := make([]string, len(cmds))
+			for i, c := range cmds {
+				names[i] = c.Name()
+			}
+			return names
+		}())
+	}
+}
+
+// Regression: user commands must appear in help output for every invocation
+// type, including info commands (no args, --help, help) and unknown commands.
+func TestRegisterUserCommands_visibleForAllInvocationTypes(t *testing.T) {
+	withCommands(t, []lib.Command{{Name: "build", Usage: "Build services"}})
+
+	invocations := []string{"(no args)", "--help", "help", "unknown-cmd"}
+	for _, inv := range invocations {
+		t.Run(inv, func(t *testing.T) {
+			root := newTestRoot()
+			registerUserCommands(root)
+			if !strings.Contains(helpOutput(root), "build") {
+				t.Errorf("'build' command missing from help output for invocation %q", inv)
 			}
 		})
 	}
