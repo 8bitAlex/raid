@@ -70,6 +70,13 @@ func GetCommands() []lib.Command {
 	return lib.GetCommands()
 }
 
+// QuietGetCommands performs a best-effort, read-only profile load and returns
+// the available commands. It does not create config files or emit warnings, and
+// returns nil if the config is absent or loading fails.
+func QuietGetCommands() []lib.Command {
+	return lib.QuietLoad()
+}
+
 // ExecuteCommand runs the named command from the active profile.
 func ExecuteCommand(name string, args []string) error {
 	return lib.ExecuteCommand(name, args)

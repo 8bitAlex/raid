@@ -11,6 +11,7 @@ import (
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/spf13/cobra"
@@ -82,8 +83,14 @@ func Execute() {
 	}()
 
 	applyConfigFlag(os.Args)
-	if !info {
+	var cmds []lib.Command
+	if info {
+		// Best-effort, read-only load: no config file creation, no warnings.
+		// User commands will appear in help if the config already exists.
+		cmds = raid.QuietGetCommands()
+	} else {
 		raid.Initialize()
+		cmds = raid.GetCommands()
 	}
 
 	// For info commands wait up to 1.5s; for regular commands do a non-blocking
@@ -118,23 +125,29 @@ func Execute() {
 		}
 	}
 
-	for _, cmd := range raid.GetCommands() {
+	registerUserCommands(rootCmd, cmds)
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("Failed to execute root command: %v", err)
+	}
+}
+
+// registerUserCommands adds user-defined commands to root.
+// Reserved built-in names are skipped with a warning.
+func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
+	for _, cmd := range cmds {
 		if reservedNames[cmd.Name] {
 			fmt.Fprintf(os.Stderr, "warning: command '%s' conflicts with a built-in subcommand and will be ignored\n", cmd.Name)
 			continue
 		}
 		name := cmd.Name
-		rootCmd.AddCommand(&cobra.Command{
+		root.AddCommand(&cobra.Command{
 			Use:   name,
 			Short: cmd.Usage,
 			RunE: func(c *cobra.Command, args []string) error {
 				return raid.ExecuteCommand(name, args)
 			},
 		})
-	}
-
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Failed to execute root command: %v", err)
 	}
 }
 

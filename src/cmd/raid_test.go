@@ -1,7 +1,12 @@
 package cmd
 
 import (
+	"bytes"
+	"strings"
 	"testing"
+
+	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/spf13/cobra"
 
 	"github.com/8bitalex/raid/src/raid"
 )
@@ -108,6 +113,98 @@ func TestApplyConfigFlag(t *testing.T) {
 
 			if got := *raid.ConfigPath; got != tt.wantPath {
 				t.Errorf("applyConfigFlag() ConfigPath = %q, want %q", got, tt.wantPath)
+			}
+		})
+	}
+}
+
+// --- registerUserCommands ---
+
+// newTestRoot returns a minimal cobra root command suitable for registration tests.
+func newTestRoot() *cobra.Command {
+	return &cobra.Command{Use: "raid"}
+}
+
+// helpOutput captures the help text produced by root.
+func helpOutput(root *cobra.Command) string {
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	_ = root.Help()
+	return buf.String()
+}
+
+func TestRegisterUserCommands_emptyProfile(t *testing.T) {
+	root := newTestRoot()
+	registerUserCommands(root, nil)
+	if len(root.Commands()) != 0 {
+		t.Errorf("expected no subcommands, got %d", len(root.Commands()))
+	}
+}
+
+func TestRegisterUserCommands_appearsInHelp(t *testing.T) {
+	root := newTestRoot()
+	registerUserCommands(root, []lib.Command{
+		{Name: "deploy", Usage: "Deploy all services"},
+		{Name: "sync", Usage: "Sync repositories"},
+	})
+
+	out := helpOutput(root)
+	for _, want := range []string{"deploy", "Deploy all services", "sync", "Sync repositories"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help output missing %q\n\nfull output:\n%s", want, out)
+		}
+	}
+}
+
+func TestRegisterUserCommands_reservedNameSkipped(t *testing.T) {
+	root := newTestRoot()
+	registerUserCommands(root, []lib.Command{
+		{Name: "install", Usage: "should be skipped"},
+		{Name: "deploy", Usage: "should appear"},
+	})
+
+	cmds := root.Commands()
+	if len(cmds) != 1 || cmds[0].Name() != "deploy" {
+		t.Errorf("expected only 'deploy', got %v", func() []string {
+			names := make([]string, len(cmds))
+			for i, c := range cmds {
+				names[i] = c.Name()
+			}
+			return names
+		}())
+	}
+}
+
+// Regression: user commands must appear in output for every invocation type,
+// including info commands (no args, --help, help) and unknown subcommands.
+// Each subtest drives Cobra via SetArgs + Execute() so the full Cobra dispatch
+// path is exercised rather than calling Help() directly.
+func TestRegisterUserCommands_visibleForAllInvocationTypes(t *testing.T) {
+	cmds := []lib.Command{{Name: "build", Usage: "Build services"}}
+
+	tests := []struct {
+		inv  string
+		args []string
+	}{
+		{"no args", []string{}},
+		{"--help flag", []string{"--help"}},
+		{"help subcommand", []string{"help"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.inv, func(t *testing.T) {
+			root := newTestRoot()
+			registerUserCommands(root, cmds)
+
+			var buf bytes.Buffer
+			root.SetOut(&buf)
+			root.SetErr(&buf)
+			root.SetArgs(tt.args)
+			_ = root.Execute() // error expected for unknown-cmd; ignore it
+
+			if !strings.Contains(buf.String(), "build") {
+				t.Errorf("'build' missing from output for invocation %q\noutput:\n%s", tt.inv, buf.String())
 			}
 		})
 	}
