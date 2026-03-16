@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/8bitalex/raid/src/internal/sys"
 )
@@ -40,17 +41,37 @@ func GetCommands() []Command {
 }
 
 // ExecuteCommand runs the tasks for the named command, applying any output configuration.
-// Args are exposed as RAID_ARG_1, RAID_ARG_2, ... environment variables.
+// Args are exposed as RAID_ARG_1, RAID_ARG_2, ... environment variables for the duration
+// of the command and are unset afterwards.
 func ExecuteCommand(name string, args []string) error {
+	var found Command
+	for _, cmd := range GetCommands() {
+		if cmd.Name == name {
+			found = cmd
+			break
+		}
+	}
+	if found.IsZero() {
+		return fmt.Errorf("command '%s' not found", name)
+	}
+
+	clearRaidArgs()
+	defer clearRaidArgs()
 	for i, arg := range args {
 		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
 	}
-	for _, cmd := range GetCommands() {
-		if cmd.Name == name {
-			return runCommand(cmd)
+
+	return runCommand(found)
+}
+
+// clearRaidArgs unsets all RAID_ARG_* environment variables.
+func clearRaidArgs() {
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(key, "RAID_ARG_") {
+			os.Unsetenv(key)
 		}
 	}
-	return fmt.Errorf("command '%s' not found", name)
 }
 
 func runCommand(cmd Command) error {

@@ -107,28 +107,96 @@ func TestExecuteCommand_taskFailure(t *testing.T) {
 
 func TestExecuteCommand_argsSetAsEnvVars(t *testing.T) {
 	setupTestConfig(t)
-	origOut := commandStdout
-	commandStdout = io.Discard
-	t.Cleanup(func() {
-		commandStdout = origOut
-		os.Unsetenv("RAID_ARG_1")
-		os.Unsetenv("RAID_ARG_2")
-	})
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
 
+	outFile := filepath.Join(t.TempDir(), "args.txt")
 	context = &Context{
 		Profile: Profile{
-			Commands: []Command{{Name: "noop", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+			Commands: []Command{{Name: "capture", Tasks: []Task{
+				{Type: Shell, Cmd: "printf '%s\\n%s' \"$RAID_ARG_1\" \"$RAID_ARG_2\" > " + outFile},
+			}}},
 		},
 	}
 
-	if err := ExecuteCommand("noop", []string{"foo", "bar"}); err != nil {
+	if err := ExecuteCommand("capture", []string{"foo", "bar"}); err != nil {
 		t.Fatalf("ExecuteCommand() error: %v", err)
 	}
-	if got := os.Getenv("RAID_ARG_1"); got != "foo" {
-		t.Errorf("RAID_ARG_1 = %q, want %q", got, "foo")
+
+	// Args must be available during execution.
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
 	}
-	if got := os.Getenv("RAID_ARG_2"); got != "bar" {
-		t.Errorf("RAID_ARG_2 = %q, want %q", got, "bar")
+	lines := strings.SplitN(string(data), "\n", 2)
+	if lines[0] != "foo" {
+		t.Errorf("RAID_ARG_1 during exec = %q, want %q", lines[0], "foo")
+	}
+	if len(lines) < 2 || lines[1] != "bar" {
+		t.Errorf("RAID_ARG_2 during exec = %q, want %q", func() string {
+			if len(lines) < 2 {
+				return ""
+			}
+			return lines[1]
+		}(), "bar")
+	}
+
+	// Args must be cleared after execution.
+	if got := os.Getenv("RAID_ARG_1"); got != "" {
+		t.Errorf("RAID_ARG_1 after exec = %q, want cleared", got)
+	}
+	if got := os.Getenv("RAID_ARG_2"); got != "" {
+		t.Errorf("RAID_ARG_2 after exec = %q, want cleared", got)
+	}
+}
+
+func TestExecuteCommand_staleArgsCleared(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	outFile := filepath.Join(t.TempDir(), "args.txt")
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "capture", Tasks: []Task{
+				{Type: Shell, Cmd: "printf '%s' \"$RAID_ARG_2\" > " + outFile},
+			}}},
+		},
+	}
+
+	// First call with two args, second call with one — RAID_ARG_2 must not bleed through.
+	if err := ExecuteCommand("capture", []string{"first", "stale"}); err != nil {
+		t.Fatalf("first ExecuteCommand() error: %v", err)
+	}
+	if err := ExecuteCommand("capture", []string{"second"}); err != nil {
+		t.Fatalf("second ExecuteCommand() error: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if got := string(data); got != "" {
+		t.Errorf("RAID_ARG_2 on second call = %q, want empty (stale value leaked)", got)
+	}
+}
+
+func TestExecuteCommand_notFoundDoesNotSetArgs(t *testing.T) {
+	setupTestConfig(t)
+	os.Unsetenv("RAID_ARG_1")
+	t.Cleanup(func() { os.Unsetenv("RAID_ARG_1") })
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "other", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+		},
+	}
+
+	_ = ExecuteCommand("nonexistent", []string{"should-not-be-set"})
+	if got := os.Getenv("RAID_ARG_1"); got != "" {
+		t.Errorf("RAID_ARG_1 set to %q after not-found error, want empty", got)
 	}
 }
 
