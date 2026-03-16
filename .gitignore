@@ -28,3 +28,8 @@ go.work.sum
 # AI assistant files
 CLAUDE.md
 .claude/
+
+# Docusaurus files
+/build
+.docusaurus
+node_modules
