@@ -20,7 +20,7 @@ jobs:
           echo "::error::Deploy cancelled. Check the box to confirm the version has been bumped in src/resources/app.properties."
           exit 1
 
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
 
@@ -47,11 +47,11 @@ jobs:
           git tag ${{ steps.version.outputs.tag }}
           git push origin ${{ steps.version.outputs.tag }}
 
-      - uses: actions/setup-go@v5.4.0
+      - uses: actions/setup-go@v6.3.0
         with:
           go-version: "1.24.4"
 
-      - uses: goreleaser/goreleaser-action@v6.3.0
+      - uses: goreleaser/goreleaser-action@v7.0.0
         with:
           version: "~> v2"
           args: release --clean
