@@ -79,7 +79,7 @@ func expandRaid(s string) string {
 	return os.Expand(s, func(key string) string {
 		raidVarsMu.RLock()
 		defer raidVarsMu.RUnlock()
-		if v, ok := raidVars[key]; ok {
+		if v, ok := raidVars[strings.ToUpper(key)]; ok {
 			return v
 		}
 		return os.Getenv(key)

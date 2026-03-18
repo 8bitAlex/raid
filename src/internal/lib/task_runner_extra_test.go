@@ -341,6 +341,18 @@ func TestExecuteTask_setVar_visibleToSubsequentTasks(t *testing.T) {
 	}
 }
 
+func TestExpandRaid_caseInsensitiveLookup(t *testing.T) {
+	overrideRaidVarsPath(t)
+	if err := ExecuteTask(Task{Type: SetVar, Var: "RAID_CASE_TEST", Value: "hello"}); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	for _, ref := range []string{"$RAID_CASE_TEST", "$raid_case_test", "$Raid_Case_Test"} {
+		if got := expandRaid(ref); got != "hello" {
+			t.Errorf("expandRaid(%q) = %q, want %q", ref, got, "hello")
+		}
+	}
+}
+
 func TestExpandRaid_setVarOverridesOSEnv(t *testing.T) {
 	overrideRaidVarsPath(t)
 	os.Setenv("RAID_OVERRIDE_TEST", "from-os")

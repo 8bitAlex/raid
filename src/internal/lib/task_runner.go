@@ -542,6 +542,7 @@ func execSetVar(task Task) error {
 		return fmt.Errorf("var is required for Set task")
 	}
 	task = task.Expand()
+	task.Var = strings.ToUpper(task.Var)
 
 	path := raidVarsPath()
 	f, err := sys.CreateFile(path)
