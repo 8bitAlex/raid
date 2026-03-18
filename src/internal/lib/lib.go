@@ -39,8 +39,8 @@ var context *Context
 const raidVarsFileName = "vars"
 
 var (
-	raidVarsMu          sync.RWMutex
-	raidVars            = map[string]string{}
+	raidVarsMu           sync.RWMutex
+	raidVars             = map[string]string{}
 	raidVarsOverridePath string // set in tests to redirect the vars file
 )
 
@@ -66,12 +66,6 @@ func loadRaidVars() {
 	for k, v := range m {
 		raidVars[strings.ToUpper(k)] = v
 	}
-}
-
-func setRaidVar(key, value string) {
-	raidVarsMu.Lock()
-	defer raidVarsMu.Unlock()
-	raidVars[strings.ToUpper(key)] = value
 }
 
 // expandRaid expands $VAR and ${VAR} references, checking the raid var store
