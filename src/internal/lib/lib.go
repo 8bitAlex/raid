@@ -58,19 +58,20 @@ func loadRaidVars() {
 	}
 	m, err := godotenv.Read(path)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "raid: failed to load persisted vars from %s: %v\n", path, err)
 		return
 	}
 	raidVarsMu.Lock()
 	defer raidVarsMu.Unlock()
 	for k, v := range m {
-		raidVars[k] = v
+		raidVars[strings.ToUpper(k)] = v
 	}
 }
 
 func setRaidVar(key, value string) {
 	raidVarsMu.Lock()
 	defer raidVarsMu.Unlock()
-	raidVars[key] = value
+	raidVars[strings.ToUpper(key)] = value
 }
 
 // expandRaid expands $VAR and ${VAR} references, checking the raid var store

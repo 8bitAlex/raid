@@ -17,6 +17,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var raidVarsMu sync.Mutex
+
 // commandStdout and commandStderr are the output writers used by task execution.
 // ExecuteCommand replaces these temporarily when a command's Out field is set.
 var (
@@ -545,19 +547,47 @@ func execSetVar(task Task) error {
 	task.Var = strings.ToUpper(task.Var)
 
 	path := raidVarsPath()
+
+	// Serialize access to the shared vars file to avoid lost updates when
+	// multiple Set tasks run concurrently.
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+
 	f, err := sys.CreateFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to create vars file: %w", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close vars file: %w", err)
+	}
 
 	m, err := godotenv.Read(path)
 	if err != nil {
 		return fmt.Errorf("failed to read vars file: %w", err)
 	}
 	m[task.Var] = task.Value
-	if err := godotenv.Write(m, path); err != nil {
-		return fmt.Errorf("failed to write vars file: %w", err)
+
+	// Write updated vars atomically: write to a temporary file in the same
+	// directory and then rename it over the original.
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, ".raid-vars-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp vars file: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	// Ensure the temp file is removed if we hit an error before a successful rename.
+	defer os.Remove(tmpName)
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp vars file: %w", err)
+	}
+
+	if err := godotenv.Write(m, tmpName); err != nil {
+		return fmt.Errorf("failed to write temp vars file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("failed to replace vars file: %w", err)
 	}
 
 	setRaidVar(task.Var, task.Value)
