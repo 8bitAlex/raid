@@ -225,6 +225,7 @@ Tasks are the unit of work in raid. They appear in environments, install steps, 
 | `Prompt` | Prompt the user for input and store it in a variable |
 | `Confirm` | Prompt the user for a yes/no confirmation |
 | `Group` | Execute a named task group by `ref` |
+| `Set` | Set an environment variable to a value |
 
 All task types support two optional modifiers:
 
@@ -340,6 +341,28 @@ Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful
 ```yaml
 - type: Confirm
   message: "This will reset the production database. Continue?"
+```
+
+### Set
+
+Set a variable to a static or derived value, making it available to all subsequent tasks. Values persist across runs and take precedence over `.env` files and OS environment variables.
+
+```yaml
+- type: Set
+  var: DEPLOY_TARGET
+  value: production         # supports $VAR and ${VAR} expansion
+```
+
+```yaml
+# Build a derived value from earlier Prompt input
+- type: Prompt
+  var: VERSION
+  message: "Version to deploy:"
+- type: Set
+  var: IMAGE_TAG
+  value: "myapp:$VERSION"
+- type: Shell
+  cmd: docker push $IMAGE_TAG
 ```
 
 ---

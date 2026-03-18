@@ -148,6 +148,18 @@
                     {
                         "type": "object",
                         "properties": {
+                            "type": { "type": "string", "const": "Set" },
+                            "concurrent": { "$ref": "#/$defs/concurrent" },
+                            "condition": { "$ref": "#/$defs/condition" },
+                            "var": { "type": "string", "description": "Environment variable name to set" },
+                            "value": { "type": "string", "description": "Value to assign. Supports $VAR and ${VAR} substitution." }
+                        },
+                        "required": ["type", "var", "value"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
                             "type": { "type": "string", "const": "Print" },
                             "concurrent": { "$ref": "#/$defs/concurrent" },
                             "condition": { "$ref": "#/$defs/condition" },

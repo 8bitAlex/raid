@@ -262,3 +262,127 @@ func TestExecuteTasks_concurrentErrorCollected(t *testing.T) {
 		t.Fatal("expected error when concurrent and sequential tasks both fail")
 	}
 }
+
+// --- execSetVar ---
+
+// overrideRaidVarsPath redirects the vars file to a temp location for test isolation.
+func overrideRaidVarsPath(t *testing.T) {
+	t.Helper()
+	tmp := filepath.Join(t.TempDir(), "vars")
+	orig := raidVarsOverridePath
+	raidVarsOverridePath = tmp
+	t.Cleanup(func() {
+		raidVarsOverridePath = orig
+		raidVarsMu.Lock()
+		raidVars = map[string]string{}
+		raidVarsMu.Unlock()
+	})
+}
+
+func TestExecuteTask_setVar_storesInMemory(t *testing.T) {
+	overrideRaidVarsPath(t)
+	task := Task{Type: SetVar, Var: "RAID_TEST_VAR", Value: "hello"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	raidVarsMu.RLock()
+	got := raidVars["RAID_TEST_VAR"]
+	raidVarsMu.RUnlock()
+	if got != "hello" {
+		t.Errorf("RAID_TEST_VAR = %q, want %q", got, "hello")
+	}
+}
+
+func TestExecuteTask_setVar_expandsValue(t *testing.T) {
+	overrideRaidVarsPath(t)
+	os.Setenv("RAID_BASE", "world")
+	t.Cleanup(func() { os.Unsetenv("RAID_BASE") })
+
+	task := Task{Type: SetVar, Var: "RAID_TEST_VAR", Value: "hello-$RAID_BASE"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	raidVarsMu.RLock()
+	got := raidVars["RAID_TEST_VAR"]
+	raidVarsMu.RUnlock()
+	if got != "hello-world" {
+		t.Errorf("RAID_TEST_VAR = %q, want %q", got, "hello-world")
+	}
+}
+
+func TestExecuteTask_setVar_missingVar(t *testing.T) {
+	task := Task{Type: SetVar, Value: "something"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error when var is empty, got nil")
+	}
+}
+
+func TestExecuteTask_setVar_visibleToSubsequentTasks(t *testing.T) {
+	overrideRaidVarsPath(t)
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.txt")
+	srcFile := filepath.Join(dir, "tmpl.txt")
+	if err := os.WriteFile(srcFile, []byte("$RAID_TEST_VAR"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	tasks := []Task{
+		{Type: SetVar, Var: "RAID_TEST_VAR", Value: "persisted"},
+		{Type: Template, Src: srcFile, Dest: outFile},
+	}
+	if err := ExecuteTasks(tasks); err != nil {
+		t.Fatalf("ExecuteTasks error: %v", err)
+	}
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "persisted" {
+		t.Errorf("downstream task saw %q, want %q", got, "persisted")
+	}
+}
+
+func TestExpandRaid_caseInsensitiveLookup(t *testing.T) {
+	overrideRaidVarsPath(t)
+	if err := ExecuteTask(Task{Type: SetVar, Var: "RAID_CASE_TEST", Value: "hello"}); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	for _, ref := range []string{"$RAID_CASE_TEST", "$raid_case_test", "$Raid_Case_Test"} {
+		if got := expandRaid(ref); got != "hello" {
+			t.Errorf("expandRaid(%q) = %q, want %q", ref, got, "hello")
+		}
+	}
+}
+
+func TestExpandRaid_setVarOverridesOSEnv(t *testing.T) {
+	overrideRaidVarsPath(t)
+	os.Setenv("RAID_OVERRIDE_TEST", "from-os")
+	t.Cleanup(func() { os.Unsetenv("RAID_OVERRIDE_TEST") })
+
+	// Set task should win over the OS env value.
+	if err := ExecuteTask(Task{Type: SetVar, Var: "RAID_OVERRIDE_TEST", Value: "from-set"}); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	if got := expandRaid("$RAID_OVERRIDE_TEST"); got != "from-set" {
+		t.Errorf("expandRaid = %q, want %q", got, "from-set")
+	}
+}
+
+func TestExpandRaid_setVarOverridesDotEnv(t *testing.T) {
+	overrideRaidVarsPath(t)
+	// Simulate a .env load: the value is in the OS environment.
+	os.Setenv("RAID_DOTENV_TEST", "from-dotenv")
+	t.Cleanup(func() { os.Unsetenv("RAID_DOTENV_TEST") })
+
+	// Before Set, OS env value is visible.
+	if got := expandRaid("$RAID_DOTENV_TEST"); got != "from-dotenv" {
+		t.Errorf("before Set: expandRaid = %q, want %q", got, "from-dotenv")
+	}
+
+	// After Set, raid vars take precedence.
+	if err := ExecuteTask(Task{Type: SetVar, Var: "RAID_DOTENV_TEST", Value: "from-set"}); err != nil {
+		t.Fatalf("ExecuteTask(SetVar) error: %v", err)
+	}
+	if got := expandRaid("$RAID_DOTENV_TEST"); got != "from-set" {
+		t.Errorf("after Set: expandRaid = %q, want %q", got, "from-set")
+	}
+}

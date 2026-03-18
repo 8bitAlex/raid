@@ -3,7 +3,6 @@ package lib
 
 import (
 	"bytes"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,13 +11,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/8bitalex/raid/schemas"
 	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/joho/godotenv"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
-
-//go:embed schemas/*.json
-var schemaFS embed.FS
 
 const (
 	yamlSep            = "---"
@@ -37,6 +35,57 @@ type OnInstall struct {
 }
 
 var context *Context
+
+const raidVarsFileName = "vars"
+
+var (
+	raidVarsMu          sync.RWMutex
+	raidVars            = map[string]string{}
+	raidVarsOverridePath string // set in tests to redirect the vars file
+)
+
+func raidVarsPath() string {
+	if raidVarsOverridePath != "" {
+		return raidVarsOverridePath
+	}
+	return filepath.Join(sys.GetHomeDir(), ConfigDirName, raidVarsFileName)
+}
+
+func loadRaidVars() {
+	path := raidVarsPath()
+	if !sys.FileExists(path) {
+		return
+	}
+	m, err := godotenv.Read(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "raid: failed to load persisted vars from %s: %v\n", path, err)
+		return
+	}
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+	for k, v := range m {
+		raidVars[strings.ToUpper(k)] = v
+	}
+}
+
+func setRaidVar(key, value string) {
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+	raidVars[strings.ToUpper(key)] = value
+}
+
+// expandRaid expands $VAR and ${VAR} references, checking the raid var store
+// first and falling back to the OS environment.
+func expandRaid(s string) string {
+	return os.Expand(s, func(key string) string {
+		raidVarsMu.RLock()
+		defer raidVarsMu.RUnlock()
+		if v, ok := raidVars[strings.ToUpper(key)]; ok {
+			return v
+		}
+		return os.Getenv(key)
+	})
+}
 
 // QuietLoad attempts a best-effort, read-only profile load. It does not create
 // config files, does not emit warnings, and returns nil if the config is absent
@@ -62,6 +111,10 @@ func Load() error {
 
 // ForceLoad rebuilds the context from the active profile, ignoring any cached state.
 func ForceLoad() error {
+	raidVarsMu.Lock()
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+	loadRaidVars()
 	p := GetProfile()
 	if p.IsZero() {
 		context = &Context{Env: GetEnv()}
@@ -194,12 +247,12 @@ func validateWithEmbeddedSchema(path, schemaName string) error {
 	}
 
 	c := jsonschema.NewCompiler()
-	entries, err := schemaFS.ReadDir("schemas")
+	entries, err := schemas.FS.ReadDir(".")
 	if err != nil {
 		return fmt.Errorf("failed to read embedded schemas: %w", err)
 	}
 	for _, entry := range entries {
-		data, err := schemaFS.ReadFile("schemas/" + entry.Name())
+		data, err := schemas.FS.ReadFile(entry.Name())
 		if err != nil {
 			return fmt.Errorf("failed to read embedded schema %s: %w", entry.Name(), err)
 		}

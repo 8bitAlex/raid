@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/joho/godotenv"
 )
 
 // commandStdout and commandStderr are the output writers used by task execution.
@@ -132,6 +133,8 @@ func ExecuteTask(task Task) error {
 		return execConfirm(task)
 	case Print:
 		return execPrint(task)
+	case SetVar:
+		return execSetVar(task)
 	default:
 		return fmt.Errorf("invalid task type: %s", task.Type)
 	}
@@ -335,7 +338,7 @@ func execTemplate(task Task) error {
 		return fmt.Errorf("failed to read template '%s': %w", task.Src, err)
 	}
 
-	rendered := os.ExpandEnv(string(data))
+	rendered := expandRaid(string(data))
 
 	if err := os.MkdirAll(filepath.Dir(task.Dest), 0755); err != nil {
 		return fmt.Errorf("failed to create directory for '%s': %w", task.Dest, err)
@@ -515,11 +518,10 @@ func execConfirm(task Task) error {
 	return nil
 }
 
-
 func execPrint(task Task) error {
 	msg := task.Message
 	if !task.Literal {
-		msg = os.ExpandEnv(msg)
+		msg = expandRaid(msg)
 	}
 
 	if task.Color != "" {
@@ -533,6 +535,60 @@ func execPrint(task Task) error {
 	return nil
 }
 
+func execSetVar(task Task) error {
+	if task.Var == "" {
+		return fmt.Errorf("var is required for Set task")
+	}
+	task = task.Expand()
+	task.Var = strings.ToUpper(task.Var)
+
+	path := raidVarsPath()
+
+	// Serialize access to the shared vars file to avoid lost updates when
+	// multiple Set tasks run concurrently.
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+
+	f, err := sys.CreateFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to create vars file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close vars file: %w", err)
+	}
+
+	m, err := godotenv.Read(path)
+	if err != nil {
+		return fmt.Errorf("failed to read vars file: %w", err)
+	}
+	m[task.Var] = task.Value
+
+	// Write updated vars atomically: write to a temporary file in the same
+	// directory and then rename it over the original.
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, ".raid-vars-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp vars file: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	// Ensure the temp file is removed if we hit an error before a successful rename.
+	defer os.Remove(tmpName)
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp vars file: %w", err)
+	}
+
+	if err := godotenv.Write(m, tmpName); err != nil {
+		return fmt.Errorf("failed to write temp vars file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("failed to replace vars file: %w", err)
+	}
+
+	raidVars[task.Var] = task.Value
+	return nil
+}
 
 // withDefaultDir returns a copy of tasks with path set to dir on any Shell task
 // that does not already have an explicit path. Used to apply profile-level (home)

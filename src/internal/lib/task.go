@@ -45,9 +45,11 @@ type Task struct {
 	Branch string `json:"branch,omitempty"`
 	// Prompt / Confirm / Print
 	Message string `json:"message,omitempty"`
-	// Prompt
+	// Prompt / SetVar
 	Var     string `json:"var,omitempty"`
 	Default string `json:"default,omitempty"`
+	// SetVar
+	Value string `json:"value,omitempty"`
 	// Print
 	Color string `json:"color,omitempty"`
 	// Retry
@@ -66,22 +68,23 @@ func (t Task) Expand() Task {
 		Type:       t.Type,
 		Concurrent: t.Concurrent,
 		Condition:  t.Condition,
-		Cmd:        sys.Expand(t.Cmd),
+		Cmd:        expandRaid(t.Cmd),
 		Literal:    t.Literal,
 		Shell:      t.Shell,
-		Path:       sys.ExpandPath(t.Path),
-		Runner:     sys.ExpandPath(t.Runner),
-		URL:        sys.Expand(t.URL),
-		Dest:       sys.ExpandPath(t.Dest),
+		Path:       sys.ExpandPath(expandRaid(t.Path)),
+		Runner:     sys.ExpandPath(expandRaid(t.Runner)),
+		URL:        expandRaid(t.URL),
+		Dest:       sys.ExpandPath(expandRaid(t.Dest)),
 		Timeout:    t.Timeout,
-		Src:        sys.ExpandPath(t.Src),
+		Src:        sys.ExpandPath(expandRaid(t.Src)),
 		Ref:        t.Ref,
 		Parallel:   t.Parallel,
 		Op:         t.Op,
-		Branch:     sys.Expand(t.Branch),
-		Message:    sys.Expand(t.Message),
+		Branch:     expandRaid(t.Branch),
+		Message:    expandRaid(t.Message),
 		Var:        t.Var,
-		Default:    sys.Expand(t.Default),
+		Default:    expandRaid(t.Default),
+		Value:      expandRaid(t.Value),
 		Color:      t.Color,
 		Attempts:   t.Attempts,
 		Delay:      t.Delay,
@@ -97,11 +100,12 @@ const (
 	HTTP     TaskType = "http"
 	Wait     TaskType = "wait"
 	Template TaskType = "template"
-	Group   TaskType = "group"
-	Git     TaskType = "git"
-	Prompt  TaskType = "prompt"
-	Confirm TaskType = "confirm"
-	Print   TaskType = "print"
+	Group    TaskType = "group"
+	Git      TaskType = "git"
+	Prompt   TaskType = "prompt"
+	Confirm  TaskType = "confirm"
+	Print    TaskType = "print"
+	SetVar   TaskType = "set"
 )
 
 // ToLower returns the task type normalized to lowercase for case-insensitive comparisons.
