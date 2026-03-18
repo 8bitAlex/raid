@@ -1,12 +1,32 @@
 name: Preview
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '0 0 * * *'
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check for recent commits
+        id: changes
+        run: |
+          COUNT=$(git log --since="24 hours ago" --oneline | wc -l)
+          if [ "$COUNT" -gt "0" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
   preview:
+    needs: check
+    if: needs.check.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
