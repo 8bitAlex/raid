@@ -17,8 +17,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var raidVarsMu sync.Mutex
-
 // commandStdout and commandStderr are the output writers used by task execution.
 // ExecuteCommand replaces these temporarily when a command's Out field is set.
 var (
@@ -520,7 +518,6 @@ func execConfirm(task Task) error {
 	return nil
 }
 
-
 func execPrint(task Task) error {
 	msg := task.Message
 	if !task.Literal {
@@ -537,7 +534,6 @@ func execPrint(task Task) error {
 	fmt.Fprintln(commandStdout, msg)
 	return nil
 }
-
 
 func execSetVar(task Task) error {
 	if task.Var == "" {
@@ -590,7 +586,7 @@ func execSetVar(task Task) error {
 		return fmt.Errorf("failed to replace vars file: %w", err)
 	}
 
-	setRaidVar(task.Var, task.Value)
+	raidVars[task.Var] = task.Value
 	return nil
 }
 
