@@ -345,7 +345,7 @@ Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful
 
 ### Set
 
-Set an environment variable to a static or derived value, making it available to all subsequent tasks. Unlike shell commands, which run in their own subprocess environment, `Set` persists the value in the raid process for the lifetime of the command.
+Set a variable to a static or derived value, making it available to all subsequent tasks. Values persist across runs and take precedence over `.env` files and OS environment variables.
 
 ```yaml
 - type: Set

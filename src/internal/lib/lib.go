@@ -13,6 +13,7 @@ import (
 
 	"github.com/8bitalex/raid/schemas"
 	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/joho/godotenv"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
@@ -34,6 +35,56 @@ type OnInstall struct {
 }
 
 var context *Context
+
+const raidVarsFileName = "vars"
+
+var (
+	raidVarsMu          sync.RWMutex
+	raidVars            = map[string]string{}
+	raidVarsOverridePath string // set in tests to redirect the vars file
+)
+
+func raidVarsPath() string {
+	if raidVarsOverridePath != "" {
+		return raidVarsOverridePath
+	}
+	return filepath.Join(sys.GetHomeDir(), ConfigDirName, raidVarsFileName)
+}
+
+func loadRaidVars() {
+	path := raidVarsPath()
+	if !sys.FileExists(path) {
+		return
+	}
+	m, err := godotenv.Read(path)
+	if err != nil {
+		return
+	}
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+	for k, v := range m {
+		raidVars[k] = v
+	}
+}
+
+func setRaidVar(key, value string) {
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+	raidVars[key] = value
+}
+
+// expandRaid expands $VAR and ${VAR} references, checking the raid var store
+// first and falling back to the OS environment.
+func expandRaid(s string) string {
+	return os.Expand(s, func(key string) string {
+		raidVarsMu.RLock()
+		defer raidVarsMu.RUnlock()
+		if v, ok := raidVars[key]; ok {
+			return v
+		}
+		return os.Getenv(key)
+	})
+}
 
 // QuietLoad attempts a best-effort, read-only profile load. It does not create
 // config files, does not emit warnings, and returns nil if the config is absent
@@ -59,6 +110,10 @@ func Load() error {
 
 // ForceLoad rebuilds the context from the active profile, ignoring any cached state.
 func ForceLoad() error {
+	raidVarsMu.Lock()
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+	loadRaidVars()
 	p := GetProfile()
 	if p.IsZero() {
 		context = &Context{Env: GetEnv()}

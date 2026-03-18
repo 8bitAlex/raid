@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/joho/godotenv"
 )
 
 // commandStdout and commandStderr are the output writers used by task execution.
@@ -337,7 +338,7 @@ func execTemplate(task Task) error {
 		return fmt.Errorf("failed to read template '%s': %w", task.Src, err)
 	}
 
-	rendered := os.ExpandEnv(string(data))
+	rendered := expandRaid(string(data))
 
 	if err := os.MkdirAll(filepath.Dir(task.Dest), 0755); err != nil {
 		return fmt.Errorf("failed to create directory for '%s': %w", task.Dest, err)
@@ -521,7 +522,7 @@ func execConfirm(task Task) error {
 func execPrint(task Task) error {
 	msg := task.Message
 	if !task.Literal {
-		msg = os.ExpandEnv(msg)
+		msg = expandRaid(msg)
 	}
 
 	if task.Color != "" {
@@ -541,7 +542,25 @@ func execSetVar(task Task) error {
 		return fmt.Errorf("var is required for Set task")
 	}
 	task = task.Expand()
-	return os.Setenv(task.Var, task.Value)
+
+	path := raidVarsPath()
+	f, err := sys.CreateFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to create vars file: %w", err)
+	}
+	f.Close()
+
+	m, err := godotenv.Read(path)
+	if err != nil {
+		return fmt.Errorf("failed to read vars file: %w", err)
+	}
+	m[task.Var] = task.Value
+	if err := godotenv.Write(m, path); err != nil {
+		return fmt.Errorf("failed to write vars file: %w", err)
+	}
+
+	setRaidVar(task.Var, task.Value)
+	return nil
 }
 
 // withDefaultDir returns a copy of tasks with path set to dir on any Shell task
