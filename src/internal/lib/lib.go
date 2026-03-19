@@ -44,6 +44,41 @@ var (
 	raidVarsOverridePath string // set in tests to redirect the vars file
 )
 
+// commandSession holds environment variables exported by Shell tasks for the
+// duration of a single command execution. It is nil when no command is active.
+type commandSessionStore struct {
+	mu       sync.RWMutex
+	vars     map[string]string
+	baseline map[string]string // env+raidVars snapshot taken at session start
+}
+
+var commandSession *commandSessionStore
+
+// startSession initialises a fresh session store, snapshotting the current
+// environment and raidVars so that Shell-task exports can be diffed later.
+func startSession() {
+	baseline := make(map[string]string)
+	for _, kv := range os.Environ() {
+		k, v, _ := strings.Cut(kv, "=")
+		baseline[k] = v
+	}
+	raidVarsMu.RLock()
+	for k, v := range raidVars {
+		baseline[k] = v
+	}
+	raidVarsMu.RUnlock()
+
+	commandSession = &commandSessionStore{
+		vars:     make(map[string]string),
+		baseline: baseline,
+	}
+}
+
+// endSession clears the active session store.
+func endSession() {
+	commandSession = nil
+}
+
 func raidVarsPath() string {
 	if raidVarsOverridePath != "" {
 		return raidVarsOverridePath
@@ -68,16 +103,58 @@ func loadRaidVars() {
 	}
 }
 
-// expandRaid expands $VAR and ${VAR} references, checking the raid var store
-// first and falling back to the OS environment.
+// expandRaid expands $VAR and ${VAR} references. Lookup order:
+//  1. raidVars (Set tasks) — highest priority
+//  2. commandSession vars (exports from Shell tasks in the current command)
+//  3. OS environment — lowest priority
 func expandRaid(s string) string {
 	return os.Expand(s, func(key string) string {
 		raidVarsMu.RLock()
-		defer raidVarsMu.RUnlock()
-		if v, ok := raidVars[strings.ToUpper(key)]; ok {
+		v, ok := raidVars[strings.ToUpper(key)]
+		raidVarsMu.RUnlock()
+		if ok {
 			return v
 		}
+		if commandSession != nil {
+			commandSession.mu.RLock()
+			v, ok = commandSession.vars[key]
+			commandSession.mu.RUnlock()
+			if ok {
+				return v
+			}
+		}
 		return os.Getenv(key)
+	})
+}
+
+// expandRaidForShell is like expandRaid but leaves variables that cannot be
+// resolved as literal "$key" tokens so the shell subprocess can expand them
+// itself. This prevents shell-local variable references (e.g. ${WORD} set
+// earlier in the same script) from being silently replaced with empty strings.
+func expandRaidForShell(s string) string {
+	return os.Expand(s, func(key string) string {
+		raidVarsMu.RLock()
+		v, ok := raidVars[strings.ToUpper(key)]
+		raidVarsMu.RUnlock()
+		if ok {
+			return v
+		}
+		if commandSession != nil {
+			commandSession.mu.RLock()
+			v, ok = commandSession.vars[key]
+			commandSession.mu.RUnlock()
+			if ok {
+				return v
+			}
+		}
+		if v, ok := os.LookupEnv(key); ok {
+			return v
+		}
+		// Unknown — pass through using ${key} so that parameter expansions
+		// like ${FOO:-default} or ${BAR:+val} are reconstructed exactly as
+		// written rather than becoming the invalid $FOO:-default form.
+		// For a simple identifier key this is equivalent to $key in the shell.
+		return "${" + key + "}"
 	})
 }
 

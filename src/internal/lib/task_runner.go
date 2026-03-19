@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -71,7 +72,7 @@ func ExecuteTasks(tasks []Task) error {
 			go func(task Task) {
 				defer wg.Done()
 				if err := ExecuteTask(task); err != nil {
-					errorChan <- fmt.Errorf("failed to execute task '%s': %w", task.Type, err)
+					errorChan <- err
 				}
 			}(task)
 		} else {
@@ -79,11 +80,11 @@ func ExecuteTasks(tasks []Task) error {
 				// Wait for any already-started concurrent tasks before returning.
 				wg.Wait()
 				close(errorChan)
-				errs := []error{fmt.Errorf("failed to execute task '%s': %w", task.Type, err)}
+				errs := []error{err}
 				for e := range errorChan {
 					errs = append(errs, e)
 				}
-				return fmt.Errorf("some tasks failed to execute: %v", errs)
+				return errors.Join(errs...)
 			}
 		}
 	}
@@ -91,16 +92,12 @@ func ExecuteTasks(tasks []Task) error {
 	wg.Wait()
 	close(errorChan)
 
-	var errors []error
+	var errs []error
 	for err := range errorChan {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("some tasks failed to execute: %v", errors)
-	}
-
-	return nil
+	return errors.Join(errs...)
 }
 
 func ExecuteTask(task Task) error {
@@ -142,25 +139,99 @@ func ExecuteTask(task Task) error {
 
 func execShell(task Task) error {
 	if !task.Literal {
-		task = task.Expand()
+		// Expand Path and Shell with the standard expander, but expand Cmd
+		// with the shell-aware expander so that variables not known to raid
+		// (e.g. shell-local vars set earlier in the same script) are left as
+		// "$VAR" tokens for the shell to resolve, rather than silently becoming
+		// empty strings.
+		task.Path = sys.ExpandPath(expandRaid(task.Path))
+		task.Shell = expandRaid(task.Shell)
+		task.Cmd = expandRaidForShell(task.Cmd)
 	}
 	if task.Cmd == "" {
 		return fmt.Errorf("cmd is required for Shell task")
 	}
 
 	shell := getShell(task.Shell)
-	cmd := exec.Command(shell[0], append(shell[1:], task.Cmd)...)
+	cmdStr := task.Cmd
+
+	// When a session is active and we're not on Windows, wrap the command so
+	// that the full environment after execution is dumped to a temp file.
+	// This lets us capture variables exported by the shell command and make
+	// them available to subsequent tasks in the same command run.
+	var tmpFile string
+	if commandSession != nil && sys.GetPlatform() != sys.Windows {
+		if f, err := os.CreateTemp("", ".raid-session-*"); err == nil {
+			tmpFile = f.Name()
+			f.Close()
+			// Register an EXIT trap so the environment is dumped on all exit
+			// paths — including early exits from `exit N`, `set -e`, or any
+			// signal that terminates the shell. The trap captures $? before
+			// running env so the original exit code is preserved.
+			cmdStr = fmt.Sprintf(
+				"__raid_tmp='%s'\ntrap '__raid_exit=$?; env > \"$__raid_tmp\"; exit $__raid_exit' EXIT\n%s",
+				tmpFile, task.Cmd,
+			)
+		}
+	}
+
+	cmd := exec.Command(shell[0], append(shell[1:], cmdStr)...)
 	if task.Path != "" {
 		cmd.Dir = sys.ExpandPath(task.Path)
 	}
 	setCmdOutput(cmd)
 
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to execute shell command '%s': %w", task.Cmd, err)
+	runErr := cmd.Run()
+
+	if tmpFile != "" {
+		defer os.Remove(tmpFile)
+		if data, err := os.ReadFile(tmpFile); err == nil {
+			updateSessionFromEnv(data)
+		}
 	}
 
+	if runErr != nil {
+		return fmt.Errorf("failed to execute shell command '%s': %w", task.Cmd, runErr)
+	}
 	return nil
+}
+
+// updateSessionFromEnv parses the output of `env` and updates the session to
+// reflect variables that differ from the baseline. When a variable that was
+// previously captured in the session is seen with its baseline value again
+// (i.e. a later task reset it), the entry is removed so the baseline value
+// is used rather than a stale override from an earlier task.
+func updateSessionFromEnv(data []byte) {
+	if commandSession == nil {
+		return
+	}
+	after := parseEnvLines(string(data))
+
+	commandSession.mu.Lock()
+	defer commandSession.mu.Unlock()
+	for k, v := range after {
+		baseVal, inBase := commandSession.baseline[k]
+		if !inBase || baseVal != v {
+			commandSession.vars[k] = v
+		} else {
+			// Value matches the baseline — remove any stale session entry so
+			// a reversion by a later task is not hidden behind an older value.
+			delete(commandSession.vars, k)
+		}
+	}
+}
+
+// parseEnvLines parses newline-separated KEY=VALUE pairs as produced by `env`.
+// Values may contain '=' characters; only the first '=' is used as delimiter.
+func parseEnvLines(output string) map[string]string {
+	result := make(map[string]string)
+	for _, line := range strings.Split(output, "\n") {
+		k, v, found := strings.Cut(line, "=")
+		if found && k != "" {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 func getShell(shell string) []string {
