@@ -196,8 +196,11 @@ func execShell(task Task) error {
 	return nil
 }
 
-// updateSessionFromEnv parses the output of `env` and stores any variables
-// that are new or changed relative to the session baseline.
+// updateSessionFromEnv parses the output of `env` and updates the session to
+// reflect variables that differ from the baseline. When a variable that was
+// previously captured in the session is seen with its baseline value again
+// (i.e. a later task reset it), the entry is removed so the baseline value
+// is used rather than a stale override from an earlier task.
 func updateSessionFromEnv(data []byte) {
 	if commandSession == nil {
 		return
@@ -210,6 +213,10 @@ func updateSessionFromEnv(data []byte) {
 		baseVal, inBase := commandSession.baseline[k]
 		if !inBase || baseVal != v {
 			commandSession.vars[k] = v
+		} else {
+			// Value matches the baseline — remove any stale session entry so
+			// a reversion by a later task is not hidden behind an older value.
+			delete(commandSession.vars, k)
 		}
 	}
 }

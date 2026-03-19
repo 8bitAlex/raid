@@ -116,6 +116,32 @@ func TestUpdateSessionFromEnv_addsChangedBaselineVars(t *testing.T) {
 	}
 }
 
+func TestUpdateSessionFromEnv_removesStaleEntryOnReversion(t *testing.T) {
+	os.Setenv("RAID_REVERT_VAR", "baseline")
+	defer os.Unsetenv("RAID_REVERT_VAR")
+
+	startSession()
+	defer endSession()
+
+	// First update: variable overridden.
+	updateSessionFromEnv([]byte("RAID_REVERT_VAR=overridden\n"))
+	commandSession.mu.RLock()
+	if commandSession.vars["RAID_REVERT_VAR"] != "overridden" {
+		commandSession.mu.RUnlock()
+		t.Fatal("expected overridden value in session after first update")
+	}
+	commandSession.mu.RUnlock()
+
+	// Second update: variable reverted to baseline value.
+	updateSessionFromEnv([]byte("RAID_REVERT_VAR=baseline\n"))
+	commandSession.mu.RLock()
+	_, exists := commandSession.vars["RAID_REVERT_VAR"]
+	commandSession.mu.RUnlock()
+	if exists {
+		t.Error("session should not retain stale value after variable reverts to baseline")
+	}
+}
+
 func TestUpdateSessionFromEnv_nilSession(t *testing.T) {
 	// Should be a no-op without panicking.
 	commandSession = nil
