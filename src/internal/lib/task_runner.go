@@ -72,7 +72,7 @@ func ExecuteTasks(tasks []Task) error {
 			go func(task Task) {
 				defer wg.Done()
 				if err := ExecuteTask(task); err != nil {
-					errorChan <- fmt.Errorf("failed to execute task '%s': %w", task.Type, err)
+					errorChan <- err
 				}
 			}(task)
 		} else {
@@ -164,9 +164,14 @@ func execShell(task Task) error {
 		if f, err := os.CreateTemp("", ".raid-session-*"); err == nil {
 			tmpFile = f.Name()
 			f.Close()
-			// Run the command in a group so multi-line scripts work, preserve
-			// the exit code, dump env, then exit with the original code.
-			cmdStr = fmt.Sprintf("{\n%s\n}; __raid_exit=$?; env > '%s'; exit $__raid_exit", task.Cmd, tmpFile)
+			// Register an EXIT trap so the environment is dumped on all exit
+			// paths — including early exits from `exit N`, `set -e`, or any
+			// signal that terminates the shell. The trap captures $? before
+			// running env so the original exit code is preserved.
+			cmdStr = fmt.Sprintf(
+				"__raid_tmp='%s'\ntrap '__raid_exit=$?; env > \"$__raid_tmp\"; exit $__raid_exit' EXIT\n%s",
+				tmpFile, task.Cmd,
+			)
 		}
 	}
 

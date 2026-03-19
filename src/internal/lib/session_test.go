@@ -145,12 +145,36 @@ func TestExpandRaidForShell_knownOSEnvVar(t *testing.T) {
 	}
 }
 
-func TestExpandRaidForShell_unknownVarPreserved(t *testing.T) {
-	// A variable that exists nowhere should be left as a $VAR token, not "".
+func TestExpandRaidForShell_unknownSimpleVarPreserved(t *testing.T) {
+	// A simple unknown variable should come back as ${VAR} (equivalent to $VAR
+	// in the shell but always uses the braced form for consistency).
 	os.Unsetenv("RAID_DEFINITELY_UNDEFINED_XYZ")
 	got := expandRaidForShell("echo $RAID_DEFINITELY_UNDEFINED_XYZ")
-	if !strings.Contains(got, "$RAID_DEFINITELY_UNDEFINED_XYZ") {
-		t.Errorf("unknown var should be preserved; got %q", got)
+	if got != "echo ${RAID_DEFINITELY_UNDEFINED_XYZ}" {
+		t.Errorf("unknown var = %q, want %q", got, "echo ${RAID_DEFINITELY_UNDEFINED_XYZ}")
+	}
+}
+
+func TestExpandRaidForShell_parameterExpansionPreserved(t *testing.T) {
+	// Shell parameter expansions like ${FOO:-default} must survive intact.
+	// os.Expand extracts the key as "FOO:-default"; wrapping it back in ${}
+	// reconstructs the original form exactly.
+	os.Unsetenv("RAID_PARAM_EXP_VAR")
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"${RAID_PARAM_EXP_VAR:-fallback}", "${RAID_PARAM_EXP_VAR:-fallback}"},
+		{"${RAID_PARAM_EXP_VAR:+present}", "${RAID_PARAM_EXP_VAR:+present}"},
+		{"${RAID_PARAM_EXP_VAR:?error msg}", "${RAID_PARAM_EXP_VAR:?error msg}"},
+		{"${RAID_PARAM_EXP_VAR:0:5}", "${RAID_PARAM_EXP_VAR:0:5}"},
+		{"${#RAID_PARAM_EXP_VAR}", "${#RAID_PARAM_EXP_VAR}"},
+	}
+	for _, tc := range cases {
+		got := expandRaidForShell(tc.input)
+		if got != tc.want {
+			t.Errorf("expandRaidForShell(%q) = %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }
 
@@ -273,6 +297,85 @@ func TestShellSession_exportedVarFlowsToSetThenShell(t *testing.T) {
 	got := strings.TrimSpace(buf.String())
 	if got != "Hello, World!" {
 		t.Errorf("final echo = %q, want %q", got, "Hello, World!")
+	}
+}
+
+func TestShellSession_earlyExitStillCapturesEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("session capture not supported on Windows")
+	}
+	setupTestConfig(t)
+	overrideRaidVarsPath(t)
+
+	commandStdout = bytes.NewBuffer(nil)
+	t.Cleanup(func() { commandStdout = os.Stdout })
+
+	// The script exports a variable then calls `exit 0` explicitly — the env
+	// dump must still happen via the EXIT trap, not the sequential append.
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{
+				Name: "early",
+				Tasks: []Task{
+					{Type: Shell, Literal: true, Cmd: "export EARLY_VAR=captured\nexit 0\n"},
+					{Type: SetVar, Var: "RESULT", Value: "$EARLY_VAR"},
+					{Type: Shell, Cmd: "echo $RESULT"},
+				},
+			}},
+		},
+	}
+
+	var buf bytes.Buffer
+	origOut := commandStdout
+	commandStdout = &buf
+	t.Cleanup(func() { commandStdout = origOut })
+
+	if err := ExecuteCommand("early", nil); err != nil {
+		t.Fatalf("ExecuteCommand error: %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "captured" {
+		t.Errorf("echo = %q, want %q", got, "captured")
+	}
+}
+
+func TestShellSession_setECapturesEnvBeforeFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("session capture not supported on Windows")
+	}
+	setupTestConfig(t)
+	overrideRaidVarsPath(t)
+
+	// With set -e, a failing command causes an immediate exit. The EXIT trap
+	// must still capture whatever was exported before the failure.
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{
+				Name: "sete",
+				Tasks: []Task{
+					{Type: Shell, Literal: true, Cmd: "set -e\nexport BEFORE_FAIL=yes\nfalse\nexport AFTER_FAIL=no\n"},
+				},
+			}},
+		},
+	}
+
+	// The command fails (false exits 1), but BEFORE_FAIL must be captured.
+	_ = ExecuteCommand("sete", nil)
+
+	commandSession = &commandSessionStore{
+		vars:     map[string]string{},
+		baseline: map[string]string{},
+	}
+	// Manually verify via a direct ExecuteTask + session pair.
+	startSession()
+	defer endSession()
+	_ = ExecuteTask(Task{Type: Shell, Literal: true, Cmd: "set -e\nexport SETE_VAR=hello\nfalse\n"})
+
+	commandSession.mu.RLock()
+	got := commandSession.vars["SETE_VAR"]
+	commandSession.mu.RUnlock()
+
+	if got != "hello" {
+		t.Errorf("SETE_VAR = %q, want %q — EXIT trap should capture env even after set -e failure", got, "hello")
 	}
 }
 

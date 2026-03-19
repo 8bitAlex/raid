@@ -150,8 +150,11 @@ func expandRaidForShell(s string) string {
 		if v, ok := os.LookupEnv(key); ok {
 			return v
 		}
-		// Unknown — pass through as a shell variable reference.
-		return "$" + key
+		// Unknown — pass through using ${key} so that parameter expansions
+		// like ${FOO:-default} or ${BAR:+val} are reconstructed exactly as
+		// written rather than becoming the invalid $FOO:-default form.
+		// For a simple identifier key this is equivalent to $key in the shell.
+		return "${" + key + "}"
 	})
 }
 
