@@ -149,18 +149,73 @@ func execShell(task Task) error {
 	}
 
 	shell := getShell(task.Shell)
-	cmd := exec.Command(shell[0], append(shell[1:], task.Cmd)...)
+	cmdStr := task.Cmd
+
+	// When a session is active and we're not on Windows, wrap the command so
+	// that the full environment after execution is dumped to a temp file.
+	// This lets us capture variables exported by the shell command and make
+	// them available to subsequent tasks in the same command run.
+	var tmpFile string
+	if commandSession != nil && sys.GetPlatform() != sys.Windows {
+		if f, err := os.CreateTemp("", ".raid-session-*"); err == nil {
+			tmpFile = f.Name()
+			f.Close()
+			// Run the command in a group so multi-line scripts work, preserve
+			// the exit code, dump env, then exit with the original code.
+			cmdStr = fmt.Sprintf("{\n%s\n}; __raid_exit=$?; env > '%s'; exit $__raid_exit", task.Cmd, tmpFile)
+		}
+	}
+
+	cmd := exec.Command(shell[0], append(shell[1:], cmdStr)...)
 	if task.Path != "" {
 		cmd.Dir = sys.ExpandPath(task.Path)
 	}
 	setCmdOutput(cmd)
 
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to execute shell command '%s': %w", task.Cmd, err)
+	runErr := cmd.Run()
+
+	if tmpFile != "" {
+		defer os.Remove(tmpFile)
+		if data, err := os.ReadFile(tmpFile); err == nil {
+			updateSessionFromEnv(data)
+		}
 	}
 
+	if runErr != nil {
+		return fmt.Errorf("failed to execute shell command '%s': %w", task.Cmd, runErr)
+	}
 	return nil
+}
+
+// updateSessionFromEnv parses the output of `env` and stores any variables
+// that are new or changed relative to the session baseline.
+func updateSessionFromEnv(data []byte) {
+	if commandSession == nil {
+		return
+	}
+	after := parseEnvLines(string(data))
+
+	commandSession.mu.Lock()
+	defer commandSession.mu.Unlock()
+	for k, v := range after {
+		baseVal, inBase := commandSession.baseline[k]
+		if !inBase || baseVal != v {
+			commandSession.vars[k] = v
+		}
+	}
+}
+
+// parseEnvLines parses newline-separated KEY=VALUE pairs as produced by `env`.
+// Values may contain '=' characters; only the first '=' is used as delimiter.
+func parseEnvLines(output string) map[string]string {
+	result := make(map[string]string)
+	for _, line := range strings.Split(output, "\n") {
+		k, v, found := strings.Cut(line, "=")
+		if found && k != "" {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 func getShell(shell string) []string {

@@ -61,6 +61,9 @@ func ExecuteCommand(name string, args []string) error {
 		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
 	}
 
+	startSession()
+	defer endSession()
+
 	return runCommand(found)
 }
 
