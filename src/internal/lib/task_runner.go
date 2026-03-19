@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -79,11 +80,11 @@ func ExecuteTasks(tasks []Task) error {
 				// Wait for any already-started concurrent tasks before returning.
 				wg.Wait()
 				close(errorChan)
-				errs := []error{fmt.Errorf("failed to execute task '%s': %w", task.Type, err)}
+				errs := []error{err}
 				for e := range errorChan {
 					errs = append(errs, e)
 				}
-				return fmt.Errorf("some tasks failed to execute: %v", errs)
+				return errors.Join(errs...)
 			}
 		}
 	}
@@ -91,16 +92,12 @@ func ExecuteTasks(tasks []Task) error {
 	wg.Wait()
 	close(errorChan)
 
-	var errors []error
+	var errs []error
 	for err := range errorChan {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("some tasks failed to execute: %v", errors)
-	}
-
-	return nil
+	return errors.Join(errs...)
 }
 
 func ExecuteTask(task Task) error {

@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -37,7 +38,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	version, err := raid.GetProperty(raid.PropertyVersion)
 	if err != nil {
-		log.Fatalf("app.properties: %v", err)
+		fmt.Fprintln(os.Stderr, "raid: app.properties:", err)
+		os.Exit(1)
 	}
 	rootCmd.Version = version
 	rootCmd.Long = "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories."
@@ -125,10 +127,17 @@ func Execute() {
 		}
 	}
 
+	rootCmd.SilenceErrors = true
+	rootCmd.SilenceUsage = true
 	registerUserCommands(rootCmd, cmds)
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Failed to execute root command: %v", err)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+		fmt.Fprintln(os.Stderr, "raid:", err)
+		os.Exit(1)
 	}
 }
 
