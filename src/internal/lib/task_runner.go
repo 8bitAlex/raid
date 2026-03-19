@@ -139,7 +139,14 @@ func ExecuteTask(task Task) error {
 
 func execShell(task Task) error {
 	if !task.Literal {
-		task = task.Expand()
+		// Expand Path and Shell with the standard expander, but expand Cmd
+		// with the shell-aware expander so that variables not known to raid
+		// (e.g. shell-local vars set earlier in the same script) are left as
+		// "$VAR" tokens for the shell to resolve, rather than silently becoming
+		// empty strings.
+		task.Path = sys.ExpandPath(expandRaid(task.Path))
+		task.Shell = expandRaid(task.Shell)
+		task.Cmd = expandRaidForShell(task.Cmd)
 	}
 	if task.Cmd == "" {
 		return fmt.Errorf("cmd is required for Shell task")

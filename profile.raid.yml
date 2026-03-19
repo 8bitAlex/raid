@@ -10,7 +10,27 @@ environments:
   - name: dev
     tasks:
       - type: Shell
-        cmd: echo "Hello, world! - From raid"
+        cmd: |
+          WORD="Hello, World!"
+          export WORD
+          echo $WORD
       - type: Set
         var: GREET
-        value: "HELLO!"
+        value: $WORD
+      - type: Shell
+        cmd: echo $GREET && exit 1
+
+commands:
+  - name: test
+    tasks:
+      - type: Shell
+        cmd: |
+          WORD="Hello, World!"
+          export WORD
+          echo ${WORD}
+          echo "This is a test command."
+      - type: Set
+        var: GREET
+        value: $WORD
+      - type: Shell
+        cmd: echo $GREET

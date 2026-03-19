@@ -127,6 +127,34 @@ func expandRaid(s string) string {
 	})
 }
 
+// expandRaidForShell is like expandRaid but leaves variables that cannot be
+// resolved as literal "$key" tokens so the shell subprocess can expand them
+// itself. This prevents shell-local variable references (e.g. ${WORD} set
+// earlier in the same script) from being silently replaced with empty strings.
+func expandRaidForShell(s string) string {
+	return os.Expand(s, func(key string) string {
+		raidVarsMu.RLock()
+		v, ok := raidVars[strings.ToUpper(key)]
+		raidVarsMu.RUnlock()
+		if ok {
+			return v
+		}
+		if commandSession != nil {
+			commandSession.mu.RLock()
+			v, ok = commandSession.vars[key]
+			commandSession.mu.RUnlock()
+			if ok {
+				return v
+			}
+		}
+		if v, ok := os.LookupEnv(key); ok {
+			return v
+		}
+		// Unknown — pass through as a shell variable reference.
+		return "$" + key
+	})
+}
+
 // QuietLoad attempts a best-effort, read-only profile load. It does not create
 // config files, does not emit warnings, and returns nil if the config is absent
 // or loading fails. Intended for info-command paths (--help, --version) where
