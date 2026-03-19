@@ -249,6 +249,27 @@ Run a command string in a configurable shell.
   path: ~/project  # optional: working directory. Defaults to ~ for profile tasks, repo dir for repo tasks
 ```
 
+**Shell variable propagation** — variables exported inside a Shell task are automatically captured and made available to subsequent tasks in the same command run. This means you can compute a value in one Shell task and reference it in a later `Set` task or another Shell task:
+
+```yaml
+commands:
+  - name: release
+    tasks:
+      - type: Shell
+        cmd: |
+          VERSION=$(git describe --tags --abbrev=0)
+          export VERSION
+      - type: Set
+        var: RELEASE_TAG
+        value: myapp:$VERSION   # $VERSION was exported above
+      - type: Shell
+        cmd: docker push $RELEASE_TAG
+```
+
+Shell-local variables used within the same task (never exported) are resolved by the shell itself and are not visible to later tasks.
+
+**Exit code propagation** — when a Shell task exits with a non-zero status, raid stops executing the current command and exits with the same exit code. No additional noise is printed beyond what the shell command itself wrote to stderr.
+
 ### Script
 
 Execute a script file directly.
@@ -345,7 +366,7 @@ Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful
 
 ### Set
 
-Set a variable to a static or derived value, making it available to all subsequent tasks. Values persist across runs and take precedence over `.env` files and OS environment variables.
+Set a variable to a static or derived value, making it available to all subsequent tasks. Values persist across runs in `~/.raid/vars`.
 
 ```yaml
 - type: Set
@@ -364,6 +385,11 @@ Set a variable to a static or derived value, making it available to all subseque
 - type: Shell
   cmd: docker push $IMAGE_TAG
 ```
+
+**Variable precedence** (highest to lowest):
+1. `Set` task values
+2. Variables exported by Shell tasks in the current command run
+3. OS environment variables
 
 ---
 
