@@ -14,21 +14,17 @@ environments:
           WORD="Hello, World!"
           export WORD
           echo $WORD
-      - type: Set
-        var: GREET
-        value: $WORD
-      - type: Shell
-        cmd: echo $GREET && exit 1
 
 commands:
   - name: test
     tasks:
       - type: Shell
+        literal: true
         cmd: |
           WORD="Hello, World!"
-          export WORD
-          echo ${WORD}
+          echo $WORD
           echo "This is a test command."
+          export WORD
       - type: Set
         var: GREET
         value: $WORD
