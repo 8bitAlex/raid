@@ -1,47 +1,71 @@
 ---
 sidebar_position: 1
+slug: /intro
 ---
 
-# Tutorial Intro
+# Getting Started
 
-Let's discover **Docusaurus in less than 5 minutes**.
+Raid is a CLI tool that lets you define your entire development environment — repositories, install steps, environment configs, and team commands — in a single YAML profile. Check it in, share it with the team, and anyone can go from a blank machine to a fully running environment with one command.
 
-## Getting Started
+## Install
 
-Get started by **creating a new site**.
-
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
-
-### What you'll need
-
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
-
-## Generate a new site
-
-Generate a new Docusaurus site using the **classic template**.
-
-The classic template will automatically be added to your project after you run the command:
-
+**Homebrew**
 ```bash
-npm init docusaurus@latest my-website classic
+brew install 8bitalex/tap/raid
 ```
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
-
-The command also installs all necessary dependencies you need to run Docusaurus.
-
-## Start your site
-
-Run the development server:
-
+**Script**
 ```bash
-cd my-website
-npm run start
+curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash
 ```
 
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
+## Create a profile
 
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
+Run the interactive wizard to create your first profile:
 
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+```bash
+raid profile create
+```
+
+The wizard asks for a profile name and walks you through adding repositories. Each repository needs a name, a Git URL, and a local path.
+
+You can also write the profile file manually and register it:
+
+```bash
+raid profile add ./my-profile.yaml
+```
+
+See [Profile Configuration](./profile) for the full file format.
+
+## Install your environment
+
+Once a profile is active, clone all repositories and run their install tasks:
+
+```bash
+raid install
+```
+
+Raid clones all repositories concurrently, then runs profile-level install tasks followed by each repository's install tasks in profile order.
+
+To install a single repository:
+
+```bash
+raid install <repo-name>
+```
+
+## Run a command
+
+If your profile or any of its repositories define custom commands, they are available immediately:
+
+```bash
+raid <command>
+```
+
+Run `raid --help` to see all available commands, including any defined in the active profile.
+
+## Next steps
+
+- [Profile Configuration](./profile) — repositories, environments, and commands
+- [Task Types](./tasks) — everything a task can do
+- [Environments](./environments) — switch between dev, staging, and production
+- [Command Reference](./commands) — built-in commands
