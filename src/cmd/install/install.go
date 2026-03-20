@@ -10,7 +10,7 @@ import (
 var maxThreads int
 
 func init() {
-	Command.Flags().IntVarP(&maxThreads, "threads", "t", 0, "Maximum number of concurrent threads (0 = unlimited)")
+	Command.Flags().IntVarP(&maxThreads, "threads", "t", 0, "Maximum number of concurrent clone threads (0 = unlimited)")
 }
 
 var Command = &cobra.Command{
@@ -21,12 +21,12 @@ var Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
 			if err := raid.InstallRepo(args[0]); err != nil {
-				log.Fatalf("Installation failed: %v\n", err)
+				log.Fatalf("Installation failed: %v", err)
 			}
 			return
 		}
 		if err := raid.Install(maxThreads); err != nil {
-			log.Fatalf("Installation failed: %v\n", err)
+			log.Fatalf("Installation failed: %v", err)
 		}
 	},
 }

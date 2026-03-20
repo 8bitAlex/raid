@@ -423,7 +423,17 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 	// Pre-existing .git dir skips the actual clone.
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	outFile := filepath.Join(dir, "install.txt")
+	// Save and restore raidVars so this test doesn't bleed into others.
+	raidVarsMu.Lock()
+	saved := raidVars
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+	t.Cleanup(func() {
+		raidVarsMu.Lock()
+		raidVars = saved
+		raidVarsMu.Unlock()
+	})
+
 	context = &Context{
 		Profile: Profile{
 			Name: "test",
@@ -434,7 +444,7 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 					Path: dir,
 					URL:  "http://example.com",
 					Install: OnInstall{
-						Tasks: []Task{{Type: Shell, Cmd: "touch " + outFile}},
+						Tasks: []Task{{Type: SetVar, Var: "INSTALL_RAN", Value: "yes"}},
 					},
 				},
 				// Second repo — should NOT be installed.
@@ -446,7 +456,10 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 	if err := InstallRepo("target"); err != nil {
 		t.Fatalf("InstallRepo() error: %v", err)
 	}
-	if _, err := os.Stat(outFile); os.IsNotExist(err) {
+	raidVarsMu.RLock()
+	val := raidVars["INSTALL_RAN"]
+	raidVarsMu.RUnlock()
+	if val != "yes" {
 		t.Error("install task for target repo did not run")
 	}
 }
@@ -457,13 +470,23 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	profileTaskFile := filepath.Join(dir, "profile-task.txt")
+	// Save and restore raidVars so this test doesn't bleed into others.
+	raidVarsMu.Lock()
+	saved := raidVars
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+	t.Cleanup(func() {
+		raidVarsMu.Lock()
+		raidVars = saved
+		raidVarsMu.Unlock()
+	})
+
 	context = &Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
 			Install: OnInstall{
-				Tasks: []Task{{Type: Shell, Cmd: "touch " + profileTaskFile}},
+				Tasks: []Task{{Type: SetVar, Var: "PROFILE_RAN", Value: "yes"}},
 			},
 			Repositories: []Repo{
 				{Name: "repo1", Path: dir, URL: "http://example.com"},
@@ -474,7 +497,10 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 	if err := InstallRepo("repo1"); err != nil {
 		t.Fatalf("InstallRepo() error: %v", err)
 	}
-	if _, err := os.Stat(profileTaskFile); !os.IsNotExist(err) {
+	raidVarsMu.RLock()
+	_, set := raidVars["PROFILE_RAN"]
+	raidVarsMu.RUnlock()
+	if set {
 		t.Error("InstallRepo() should not run profile-level install tasks")
 	}
 }

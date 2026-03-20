@@ -275,8 +275,9 @@ func Install(maxThreads int) error {
 		semaphore = make(chan struct{}, maxThreads)
 	}
 
+	// Phase 1: clone all repos concurrently, throttled by semaphore.
 	var wg sync.WaitGroup
-	errorChan := make(chan error, len(profile.Repositories))
+	cloneErrs := make(chan error, len(profile.Repositories))
 
 	for _, repo := range profile.Repositories {
 		wg.Add(1)
@@ -284,27 +285,38 @@ func Install(maxThreads int) error {
 			defer wg.Done()
 			if semaphore != nil {
 				semaphore <- struct{}{}
-				defer func() { <-semaphore }()
 			}
-			if err := installRepo(repo); err != nil {
-				errorChan <- err
+			err := CloneRepository(repo)
+			if semaphore != nil {
+				<-semaphore
+			}
+			if err != nil {
+				cloneErrs <- fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
 			}
 		}(repo)
 	}
 
 	wg.Wait()
-	close(errorChan)
+	close(cloneErrs)
 
 	var errs []error
-	for err := range errorChan {
+	for err := range cloneErrs {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("some repositories failed to install: %v", errs)
+		return fmt.Errorf("some repositories failed to clone: %v", errs)
 	}
 
+	// Phase 2: run profile-level install tasks before any repo tasks.
 	if err := ExecuteTasks(withDefaultDir(profile.Install.Tasks, sys.GetHomeDir())); err != nil {
 		return fmt.Errorf("failed to execute install tasks: %w", err)
+	}
+
+	// Phase 3: run each repo's install tasks sequentially in profile order.
+	for _, repo := range profile.Repositories {
+		if err := ExecuteTasks(withDefaultDir(repo.Install.Tasks, sys.ExpandPath(repo.Path))); err != nil {
+			return fmt.Errorf("failed to execute install tasks for '%s': %w", repo.Name, err)
+		}
 	}
 
 	return nil

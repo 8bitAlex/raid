@@ -84,6 +84,8 @@ Clone all repositories in the active profile and run any configured install task
 - `raid install` — clone all repos and run install tasks
 - `raid install <repo>` — clone and install a single named repository only (profile-level install tasks are not run)
 
+Clones run concurrently. Use `-t` to cap the number of concurrent clone threads; repo install tasks always run concurrently regardless of `-t`.
+
 ### `raid env`
 
 - `raid env <name>` — apply a named environment: writes `.env` files into each repo and runs environment tasks
