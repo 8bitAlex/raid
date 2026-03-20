@@ -3,7 +3,7 @@ name: Docs Build and Test
 on:
   pull_request:
     branches:
-      - gh-pages
+      - docsite-source
 
 jobs:
   build:
