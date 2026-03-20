@@ -13,8 +13,8 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://8bitalex.github.io',
-  baseUrl: '/raid/',
+  url: 'https://raidcli.dev',
+  baseUrl: '/',
 
   organizationName: '8bitalex',
   projectName: 'raid',
