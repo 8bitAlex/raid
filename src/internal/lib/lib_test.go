@@ -3,6 +3,7 @@ package lib
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -391,6 +392,108 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 	err := Install(0)
 	if err == nil {
 		t.Fatal("Install() expected error from failing repo install task")
+	}
+}
+
+func TestInstallRepo_notFound(t *testing.T) {
+	setupTestConfig(t)
+	context = &Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/path",
+			Repositories: []Repo{
+				{Name: "repo1", Path: t.TempDir(), URL: "http://example.com"},
+			},
+		},
+	}
+
+	err := InstallRepo("doesnotexist")
+	if err == nil {
+		t.Fatal("InstallRepo() expected error for unknown repo name")
+	}
+	if !strings.Contains(err.Error(), "doesnotexist") {
+		t.Errorf("error %q should mention the missing repo name", err.Error())
+	}
+}
+
+func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	// Pre-existing .git dir skips the actual clone.
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+
+	outFile := filepath.Join(dir, "install.txt")
+	context = &Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/path",
+			Repositories: []Repo{
+				{
+					Name: "target",
+					Path: dir,
+					URL:  "http://example.com",
+					Install: OnInstall{
+						Tasks: []Task{{Type: Shell, Cmd: "touch " + outFile}},
+					},
+				},
+				// Second repo — should NOT be installed.
+				{Name: "other", Path: t.TempDir(), URL: "http://example.com"},
+			},
+		},
+	}
+
+	if err := InstallRepo("target"); err != nil {
+		t.Fatalf("InstallRepo() error: %v", err)
+	}
+	if _, err := os.Stat(outFile); os.IsNotExist(err) {
+		t.Error("install task for target repo did not run")
+	}
+}
+
+func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+
+	profileTaskFile := filepath.Join(dir, "profile-task.txt")
+	context = &Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/path",
+			Install: OnInstall{
+				Tasks: []Task{{Type: Shell, Cmd: "touch " + profileTaskFile}},
+			},
+			Repositories: []Repo{
+				{Name: "repo1", Path: dir, URL: "http://example.com"},
+			},
+		},
+	}
+
+	if err := InstallRepo("repo1"); err != nil {
+		t.Fatalf("InstallRepo() error: %v", err)
+	}
+	if _, err := os.Stat(profileTaskFile); !os.IsNotExist(err) {
+		t.Error("InstallRepo() should not run profile-level install tasks")
+	}
+}
+
+func TestInstallRepo_noContext(t *testing.T) {
+	setupTestConfig(t)
+	context = nil
+
+	if err := InstallRepo("any"); err == nil {
+		t.Fatal("InstallRepo() expected error when context is nil")
+	}
+}
+
+func TestInstallRepo_noProfile(t *testing.T) {
+	setupTestConfig(t)
+	context = &Context{Profile: Profile{}}
+
+	if err := InstallRepo("any"); err == nil {
+		t.Fatal("InstallRepo() expected error when profile is zero")
 	}
 }
 

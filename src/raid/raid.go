@@ -65,6 +65,11 @@ func Install(maxThreads int) error {
 	return lib.Install(maxThreads)
 }
 
+// InstallRepo clones a single named repository and runs its install tasks.
+func InstallRepo(name string) error {
+	return lib.InstallRepo(name)
+}
+
 // GetCommands returns all commands available in the active profile.
 func GetCommands() []lib.Command {
 	return lib.GetCommands()
