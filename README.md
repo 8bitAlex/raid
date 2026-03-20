@@ -4,7 +4,7 @@
 
 # Raid — Distributed Development Orchestration
 ![Latest](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2F8bitAlex%2Fraid%2Fmain%2Fsrc%2Fresources%2Fapp.properties&search=version%3D(.%2B)&replace=%241&label=Latest&color=blue)
-![Stable](https://img.shields.io/github/v/tag/8bitAlex/raid?label=Stable&color=green&sort=semver)
+![Stable](https://img.shields.io/github/v/release/8bitAlex/raid?label=Stable&color=green)
 <p>
 
 ![Windows](https://img.shields.io/badge/Windows-Yes-blue?logo=windows)
