@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Task Types
 
-Tasks are the unit of work in raid. They appear in install steps, commands, environments, and groups. Every task has a `type` field and type-specific fields.
+Tasks are the unit of work in raid. They appear in install steps, commands, environments, and task groups. Every task has a `type` field and type-specific fields. Task types are case-insensitive.
 
 ## Common fields
 
@@ -19,40 +19,40 @@ These fields apply to all task types.
 ### Conditions
 
 ```yaml
-- type: shell
+- type: Shell
   cmd: brew install nvm
   condition:
     platform: darwin          # darwin, linux, or windows
     exists: /usr/local/bin/nvm   # skip if path already exists
-    cmd: which nvm              # skip if command succeeds
+    cmd: which nvm              # skip if command exits 0
 ```
 
 All specified condition fields must pass for the task to run.
 
 ---
 
-## shell
+## Shell
 
 Run a shell command.
 
 ```yaml
-- type: shell
+- type: Shell
   cmd: npm install
 ```
 
 ```yaml
-- type: shell
+- type: Shell
   cmd: |
     echo "Building..."
     npm run build
-  dir: ~/dev/frontend     # working directory (defaults to home dir or repo root)
-  shell: /bin/zsh         # override the shell (default: /bin/sh)
-  literal: true           # skip variable expansion
+  path: ~/dev/frontend     # working directory (defaults to home dir or repo root)
+  shell: zsh               # override the shell (bash, sh, zsh, powershell, pwsh, ps, cmd)
+  literal: true            # skip variable expansion
 ```
 
 **Variable expansion** — `$VAR` and `${VAR}` references in `cmd` are expanded using:
-1. Variables set by `set` tasks (highest priority)
-2. Variables exported by earlier `shell` tasks in the same command session
+1. Variables set by `Set` tasks (highest priority)
+2. Variables exported by earlier `Shell` tasks in the same command session
 3. OS environment variables
 
 Shell-local variables and parameter expansions like `${FOO:-default}` are passed through to the shell intact.
@@ -62,179 +62,180 @@ Shell-local variables and parameter expansions like `${FOO:-default}` are passed
 **Exporting variables** — use `export` in your script to make a variable available to later tasks in the same command run:
 
 ```yaml
-- type: shell
+- type: Shell
   cmd: |
     export API_URL=$(cat .env | grep API_URL | cut -d= -f2)
-- type: shell
+- type: Shell
   cmd: echo "API is at $API_URL"
 ```
 
 ---
 
-## set
+## Set
 
 Set a variable that persists for the duration of the command session and can be used in subsequent tasks.
 
 ```yaml
-- type: set
+- type: Set
   var: ENVIRONMENT
   value: production
-```
-
-```yaml
-- type: set
-  var: REGION
-  default: us-east-1   # used if the variable is not already set
 ```
 
 Variables set this way take precedence over exported shell variables and OS environment variables.
 
 ---
 
-## print
+## Print
 
 Print a message to the terminal.
 
 ```yaml
-- type: print
+- type: Print
   message: "Installing dependencies..."
 ```
 
 ```yaml
-- type: print
+- type: Print
   message: "Done!"
-  color: green    # green, red, yellow, blue, cyan, magenta, white
+  color: green    # red, green, yellow, blue, cyan, white
 ```
 
-Use `print` to structure long task sequences with clear section headers.
+Use `Print` to structure long task sequences with clear section headers.
 
 ---
 
-## template
+## Template
 
 Render a template file and write it to a destination.
 
 ```yaml
-- type: template
+- type: Template
   src: ./configs/app.config.tmpl
   dest: ~/dev/api/.env
 ```
 
-Template files support `$VAR` and `${VAR}` substitution using the same variable lookup order as `shell` tasks. Variables that are not set expand to an empty string.
+Template files support `$VAR` and `${VAR}` substitution using the same variable lookup order as `Shell` tasks. Variables that are not set expand to an empty string.
 
 ---
 
-## script
+## Script
 
 Run a script file.
 
 ```yaml
-- type: script
+- type: Script
   path: ./scripts/setup.sh
 ```
 
 ```yaml
-- type: script
+- type: Script
   path: ./setup.py
-  runner: python3
+  runner: python3   # bash, sh, zsh, python, python2, python3, node, powershell
 ```
 
 If `runner` is omitted, the script is executed directly (requires a shebang line or executable permission).
 
 ---
 
-## git
+## Git
 
 Perform a git operation on a repository.
 
 ```yaml
-- type: git
+- type: Git
   op: pull
-  dir: ~/dev/api
+  path: ~/dev/api
 ```
 
 ```yaml
-- type: git
+- type: Git
   op: checkout
   branch: main
-  dir: ~/dev/api
+  path: ~/dev/api
 ```
 
 | `op` | Description |
 |---|---|
 | `pull` | Pull latest changes |
 | `checkout` | Checkout a branch |
+| `fetch` | Fetch from remote |
+| `reset` | Reset to HEAD |
 
 ---
 
-## group
+## Group
 
-Execute a named group of tasks defined in the profile's `groups` section.
+Execute a named task group defined in the profile's `task_groups` section.
 
 ```yaml
-- type: group
+- type: Group
   ref: install-deps
 ```
 
 ```yaml
-- type: group
+- type: Group
   ref: build-all
   parallel: true    # run the group's tasks in parallel
 ```
 
 ---
 
-## prompt
+## Prompt
 
 Prompt the user for input and store the result in a variable.
 
 ```yaml
-- type: prompt
-  message: "Enter your API key"
+- type: Prompt
   var: API_KEY
+  message: "Enter your API key"
 ```
 
 ```yaml
-- type: prompt
-  message: "Enter your username"
+- type: Prompt
   var: USERNAME
+  message: "Enter your username"
   default: admin
 ```
 
 ---
 
-## confirm
+## Confirm
 
-Ask the user to confirm before continuing.
+Ask the user to confirm before continuing. If the user answers no, remaining tasks are skipped.
 
 ```yaml
-- type: confirm
+- type: Confirm
   message: "This will reset your database. Continue?"
 ```
 
-If the user answers no, the remaining tasks are skipped.
-
 ---
 
-## http
+## HTTP
 
 Download a file from a URL.
 
 ```yaml
-- type: http
+- type: HTTP
   url: https://example.com/config.json
   dest: ~/dev/api/config.json
 ```
 
 ---
 
-## wait
+## Wait
 
-Pause execution for a duration.
+Poll a URL or TCP endpoint until it responds, or until the timeout is reached.
 
 ```yaml
-- type: wait
-  timeout: 5s
+- type: Wait
+  url: http://localhost:3000/health
+  timeout: 30s
+```
+
+```yaml
+- type: Wait
+  url: localhost:5432   # TCP host:port
+  timeout: 1m
 ```
 
 ---
@@ -245,14 +246,14 @@ Mark adjacent tasks with `concurrent: true` to run them in parallel. Raid collec
 
 ```yaml
 tasks:
-  - type: shell
+  - type: Shell
     cmd: npm install
-    dir: ~/dev/api
+    path: ~/dev/api
     concurrent: true
-  - type: shell
+  - type: Shell
     cmd: npm install
-    dir: ~/dev/frontend
+    path: ~/dev/frontend
     concurrent: true
-  - type: print
+  - type: Print
     message: "Dependencies installed"   # runs after both npm installs finish
 ```

@@ -4,38 +4,80 @@ sidebar_position: 4
 
 # Environments
 
-Environments let you define named configurations — sets of `.env` files and tasks — that can be applied across all repositories at once. Switching from local to staging to production is a single command.
+Environments let you define named configurations — sets of variables and tasks — that can be applied across all repositories at once. Switching from local to staging to production is a single command.
 
 ## Define environments
 
-Environments are defined in the profile under each repository.
+Environments are defined at the **top level of the profile**, as a list. Each environment has a `name`, optional `variables`, and optional `tasks`.
 
-```yaml
+```yaml title="profile.yaml"
+name: platform
+
+environments:
+  - name: local
+    variables:
+      - name: LOG_LEVEL
+        value: debug
+    tasks:
+      - type: Shell
+        cmd: docker-compose up -d db
+  - name: staging
+    variables:
+      - name: LOG_LEVEL
+        value: info
+    tasks:
+      - type: Print
+        message: "Switched to staging"
+  - name: production
+    variables:
+      - name: LOG_LEVEL
+        value: warn
+    tasks:
+      - type: Confirm
+        message: "Switch to production?"
+
 repositories:
   - name: api
     url: git@github.com:my-org/api.git
     path: ~/dev/api
-    environments:
-      local:
-        envFile: ./envs/local.env
-        tasks:
-          - type: shell
-            cmd: docker-compose up -d
-      staging:
-        envFile: ./envs/staging.env
-        tasks:
-          - type: shell
-            cmd: echo "Pointed at staging"
-      production:
-        envFile: ./envs/production.env
-        tasks:
-          - type: confirm
-            message: "You are switching to production. Continue?"
+```
+
+Individual repositories can also define their own environments in their `raid.yaml`. These are merged with the profile-level environments when applied.
+
+```yaml title="~/dev/api/raid.yaml"
+environments:
+  - name: local
+    variables:
+      - name: DATABASE_URL
+        value: postgres://localhost:5432/api_dev
+      - name: API_PORT
+        value: "3000"
+    tasks:
+      - type: Shell
+        cmd: docker-compose up -d db
+  - name: staging
+    variables:
+      - name: DATABASE_URL
+        value: postgres://staging-db.internal:5432/api
+      - name: API_PORT
+        value: "443"
+  - name: production
+    variables:
+      - name: DATABASE_URL
+        value: postgres://prod-db.internal:5432/api
+      - name: API_PORT
+        value: "443"
+    tasks:
+      - type: Confirm
+        message: "Point API at production database?"
+      - type: Shell
+        cmd: ./scripts/rotate-api-key.sh
 ```
 
 | Field | Description |
 |---|---|
-| `envFile` | Path to a `.env` file to write into the repository root |
+| `name` | Environment name used with `raid env <name>` |
+| `variables` | List of `{name, value}` pairs to set when the environment is activated |
 | `tasks` | Tasks to run when this environment is applied |
 
 ## Apply an environment
@@ -43,10 +85,6 @@ repositories:
 ```bash
 raid env staging
 ```
-
-This iterates over every repository in the active profile and for each one:
-1. Writes the `envFile` contents to `.env` in the repository root
-2. Runs the environment's `tasks`
 
 ## Check the active environment
 
@@ -62,30 +100,23 @@ raid env list
 
 ## Tips
 
-**Keep `envFile` paths relative to the profile file.** This makes the profile portable across machines.
+**Use `Confirm` tasks for production.** A confirmation gate before switching to a production environment prevents accidents.
 
-**Use `confirm` tasks for production.** A confirmation gate before switching to a production environment prevents accidents.
+**Use `Prompt` and `Template` for developer-specific values.** If values differ per developer (e.g. local ports), prompt for them at apply-time.
 
-```yaml
-production:
-  envFile: ./envs/production.env
-  tasks:
-    - type: confirm
-      message: "Switch ALL repos to production?"
-    - type: shell
-      cmd: ./scripts/rotate-creds.sh
-```
-
-**Use `set` and `template` tasks for dynamic values.** If environment values differ per developer (e.g. local ports), generate them from a template rather than committing the final `.env`.
-
-```yaml
-local:
-  tasks:
-    - type: prompt
-      message: "Local API port"
-      var: API_PORT
-      default: "3000"
-    - type: template
-      src: ./envs/local.env.tmpl
-      dest: ~/dev/api/.env
+```yaml title="~/dev/api/raid.yaml"
+environments:
+  - name: local
+    tasks:
+      - type: Prompt
+        var: DB_PORT
+        message: "Local database port"
+        default: "5432"
+      - type: Prompt
+        var: API_PORT
+        message: "Local API port"
+        default: "3000"
+      - type: Template
+        src: ./envs/local.env.tmpl
+        dest: ~/dev/api/.env
 ```
