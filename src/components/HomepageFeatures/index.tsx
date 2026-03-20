@@ -4,54 +4,64 @@ import Heading from '@theme/Heading';
 import styles from './styles.module.css';
 
 type FeatureItem = {
+  icon: string;
   title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    icon: '⚡',
+    title: 'One-command onboarding',
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        <code>raid install</code> clones every repo in your profile and runs
+        their install tasks concurrently. A new teammate is fully set up before
+        they finish their coffee.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    icon: '📋',
+    title: 'Tribal knowledge, codified',
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Every setup step, script, and gotcha lives in <code>raid.yaml</code>{' '}
+        alongside the code. No wiki to update, no Slack thread to dig through —
+        the repo <em>is</em> the runbook.
       </>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    icon: '🛠️',
+    title: 'Shared team commands',
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Define custom commands once in your profile — <code>raid deploy</code>,{' '}
+        <code>raid migrate</code>, whatever your team needs. Everyone gets the
+        same commands without any extra setup.
+      </>
+    ),
+  },
+  {
+    icon: '🌍',
+    title: 'Environment switching',
+    description: (
+      <>
+        <code>raid env staging</code> writes the right <code>.env</code> files
+        into every repo and runs environment tasks across all of them at once.
+        Switch contexts in seconds, not minutes.
       </>
     ),
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({icon, title, description}: FeatureItem) {
   return (
-    <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
-      </div>
-      <div className="text--center padding-horiz--md">
-        <Heading as="h3">{title}</Heading>
-        <p>{description}</p>
-      </div>
+    <div className={clsx('col col--3', styles.feature)}>
+      <div className={styles.featureIcon}>{icon}</div>
+      <Heading as="h3" className={styles.featureTitle}>{title}</Heading>
+      <p className={styles.featureDesc}>{description}</p>
     </div>
   );
 }

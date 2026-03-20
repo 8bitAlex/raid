@@ -33,7 +33,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/8bitalex/raid/tree/gh-pages/',
+          editUrl: 'https://github.com/8bitalex/raid/tree/docsite-source/',
         },
         blog: false,
         theme: {

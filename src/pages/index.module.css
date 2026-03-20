@@ -1,23 +1,153 @@
-/**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- */
-
 .heroBanner {
-  padding: 4rem 0;
+  padding: 5rem 0 3rem;
   text-align: center;
+  background: radial-gradient(ellipse at 60% 0%, rgba(79, 70, 229, 0.12) 0%, transparent 70%),
+              var(--ifm-background-color);
   position: relative;
   overflow: hidden;
 }
 
+[data-theme='dark'] .heroBanner {
+  background: radial-gradient(ellipse at 60% 0%, rgba(79, 70, 229, 0.25) 0%, transparent 70%),
+              var(--ifm-background-color);
+}
+
 @media screen and (max-width: 996px) {
   .heroBanner {
-    padding: 2rem;
+    padding: 3rem 1rem 2rem;
   }
+}
+
+.heroTitle {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 1.25rem;
+  color: var(--ifm-font-color-base);
+}
+
+@media screen and (max-width: 996px) {
+  .heroTitle {
+    font-size: 2rem;
+  }
+}
+
+.heroSubtitle {
+  font-size: 1.25rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 2rem;
+  line-height: 1.6;
 }
 
 .buttons {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+  margin-bottom: 3rem;
+  flex-wrap: wrap;
+}
+
+.buttonGhost {
+  border: 2px solid var(--ifm-color-emphasis-400);
+  color: var(--ifm-font-color-base);
+}
+
+.buttonGhost:hover {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+/* Terminal */
+.terminal {
+  max-width: 600px;
+  margin: 0 auto;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  text-align: left;
+  background: #1e1e2e;
+}
+
+.terminalBar {
+  background: #313244;
+  padding: 0.6rem 1rem;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #585b70;
+}
+
+.dot:first-child { background: #f38ba8; }
+.dot:nth-child(2) { background: #f9e2af; }
+.dot:nth-child(3) { background: #a6e3a1; }
+
+.terminalBody {
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #cdd6f4;
+  background: #1e1e2e;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Install section */
+.install {
+  padding: 4rem 0;
+  background: var(--ifm-color-emphasis-100);
+  text-align: center;
+}
+
+.installTitle {
+  font-size: 1.75rem;
+  margin-bottom: 2rem;
+}
+
+.installOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.installOption {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  text-align: left;
+}
+
+.installLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ifm-color-emphasis-600);
+  min-width: 70px;
+}
+
+.installCmd {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.875rem;
+  background: none;
+  color: var(--ifm-color-primary);
+  padding: 0;
+  overflow-x: auto;
+  white-space: nowrap;
 }
