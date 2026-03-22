@@ -14,7 +14,7 @@ A platform has two services. Each service needs different variables per environm
 
 Profile-level environments define shared variables and tasks that apply across all repos. Repo-specific variables and tasks are defined in each repo's own `raid.yaml`.
 
-```yaml title="platform-profile.yaml"
+```yaml title="platform.raid.yaml"
 name: platform
 
 repositories:
@@ -124,32 +124,7 @@ raid env
 raid env list
 ```
 
-### What `raid env staging` does
-
-```
-Applying environment 'staging'...
-Switched to staging
-
-Running repo environment tasks...
-✓ api       applied 4 variables
-✓ frontend  applied 2 variables
-
-Done.
-```
-
-For production, the `Confirm` tasks gate the switch:
-
-```
-Applying environment 'production'...
-? Switch ALL services to production? (y/N) y
-
-Running repo environment tasks...
-? Point API at production database? (y/N) y
-✓ [api] rotate-api-key.sh
-? Point frontend at production APIs? (y/N) y
-
-Done.
-```
+For production, the `Confirm` tasks in the profile and each repo's `raid.yaml` will gate the switch before any variables or tasks are applied.
 
 ## Dynamic local environments
 
