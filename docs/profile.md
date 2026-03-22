@@ -9,46 +9,46 @@ A profile is a YAML file that describes your full development environment: which
 ## File format
 
 ```yaml
-name: my-team
+name: "my-team"
 
 repositories:
-  - name: api
-    url: git@github.com:my-org/api.git
-    path: ~/dev/api
-  - name: frontend
-    url: git@github.com:my-org/frontend.git
-    path: ~/dev/frontend
+  - name: "api"
+    url: "git@github.com:my-org/api.git"
+    path: "~/dev/api"
+  - name: "frontend"
+    url: "git@github.com:my-org/frontend.git"
+    path: "~/dev/frontend"
 
 environments:
-  - name: local
+  - name: "local"
     variables:
-      - name: LOG_LEVEL
-        value: debug
+      - name: "LOG_LEVEL"
+        value: "debug"
     tasks:
       - type: Shell
-        cmd: docker-compose up -d
-  - name: staging
+        cmd: "docker-compose up -d"
+  - name: "staging"
     variables:
-      - name: LOG_LEVEL
-        value: info
+      - name: "LOG_LEVEL"
+        value: "info"
 
 install:
   tasks:
     - type: Print
       message: "All repos cloned. Running global setup..."
     - type: Shell
-      cmd: brew bundle --file=~/Brewfile
+      cmd: "brew bundle --file=~/Brewfile"
 
 commands:
-  - name: test-all
-    usage: Run tests across all repos
+  - name: "test-all"
+    usage: "Run tests across all repos"
     tasks:
       - type: Shell
-        cmd: npm test
-        path: ~/dev/api
+        cmd: "npm test"
+        path: "~/dev/api"
       - type: Shell
-        cmd: npm test
-        path: ~/dev/frontend
+        cmd: "npm test"
+        path: "~/dev/frontend"
 ```
 
 ## Top-level fields
@@ -68,13 +68,13 @@ Each repository entry defines a repo to clone and optionally what to run after c
 
 ```yaml
 repositories:
-  - name: api
-    url: git@github.com:my-org/api.git
-    path: ~/dev/api
+  - name: "api"
+    url: "git@github.com:my-org/api.git"
+    path: "~/dev/api"
     install:
       tasks:
         - type: Shell
-          cmd: npm install
+          cmd: "npm install"
 ```
 
 | Field | Required | Description |
@@ -92,17 +92,17 @@ Environments are defined as a list at the **top level of the profile**. Each env
 
 ```yaml
 environments:
-  - name: local
+  - name: "local"
     variables:
-      - name: API_HOST
-        value: localhost
+      - name: "API_HOST"
+        value: "localhost"
     tasks:
       - type: Shell
-        cmd: docker-compose up -d db
-  - name: production
+        cmd: "docker-compose up -d db"
+  - name: "production"
     variables:
-      - name: API_HOST
-        value: api.my-org.com
+      - name: "API_HOST"
+        value: "api.my-org.com"
     tasks:
       - type: Confirm
         message: "Switch to production?"
@@ -118,7 +118,7 @@ Individual repositories can define their own environment configuration in their 
 install:
   tasks:
     - type: Shell
-      cmd: ./scripts/link-configs.sh
+      cmd: "./scripts/link-configs.sh"
 ```
 
 ## Commands
@@ -127,12 +127,12 @@ Custom commands are available as `raid <name>`. They run the defined task sequen
 
 ```yaml
 commands:
-  - name: deploy
-    usage: Deploy all services
+  - name: "deploy"
+    usage: "Deploy all services"
     tasks:
       - type: Shell
-        cmd: ./deploy.sh
-        path: ~/dev/api
+        cmd: "./deploy.sh"
+        path: "~/dev/api"
 ```
 
 See [Task Types](./tasks) for everything a task can do.
@@ -145,14 +145,14 @@ Task groups are reusable task sequences referenced from commands using a `Group`
 task_groups:
   install-deps:
     - type: Shell
-      cmd: npm install
+      cmd: "npm install"
 
 commands:
-  - name: setup
-    usage: Install dependencies
+  - name: "setup"
+    usage: "Install dependencies"
     tasks:
       - type: Group
-        ref: install-deps
+        ref: "install-deps"
 ```
 
 ## Per-repo configuration (`raid.yaml`)
@@ -160,22 +160,25 @@ commands:
 Repositories can define their own commands and environments by committing a `raid.yaml` at their root. These are automatically merged into the active profile when it loads.
 
 ```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
 commands:
-  - name: migrate
-    usage: Run database migrations
+  - name: "migrate"
+    usage: "Run database migrations"
     tasks:
       - type: Shell
-        cmd: go run ./cmd/migrate
+        cmd: "go run ./cmd/migrate"
 
 environments:
-  - name: local
+  - name: "local"
     variables:
-      - name: DATABASE_URL
-        value: postgres://localhost:5432/api_dev
-  - name: staging
+      - name: "DATABASE_URL"
+        value: "postgres://localhost:5432/api_dev"
+  - name: "staging"
     variables:
-      - name: DATABASE_URL
-        value: postgres://staging-db.internal:5432/api
+      - name: "DATABASE_URL"
+        value: "postgres://staging-db.internal:5432/api"
 ```
 
 ## Registering and switching profiles

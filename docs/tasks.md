@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Task Types
 
-Tasks are the unit of work in raid. They appear in install steps, commands, environments, and task groups. Every task has a `type` field and type-specific fields. Task types are case-insensitive.
+Tasks are the unit of work in raid. They appear in install steps, commands, environments, and task groups. Every task has a `type` field and type-specific fields. Task types are case-sensitive and must be written in Title Case as shown.
 
 ## Common fields
 
@@ -20,11 +20,11 @@ These fields apply to all task types.
 
 ```yaml
 - type: Shell
-  cmd: brew install nvm
+  cmd: "brew install nvm"
   condition:
-    platform: darwin          # darwin, linux, or windows
-    exists: /usr/local/bin/nvm   # skip if path already exists
-    cmd: which nvm              # skip if command exits 0
+    platform: "darwin"          # darwin, linux, or windows
+    exists: "/usr/local/bin/nvm"   # skip if path already exists
+    cmd: "which nvm"              # skip if command exits 0
 ```
 
 All specified condition fields must pass for the task to run.
@@ -37,7 +37,7 @@ Run a shell command.
 
 ```yaml
 - type: Shell
-  cmd: npm install
+  cmd: "npm install"
 ```
 
 ```yaml
@@ -45,8 +45,8 @@ Run a shell command.
   cmd: |
     echo "Building..."
     npm run build
-  path: ~/dev/frontend     # working directory (defaults to home dir or repo root)
-  shell: zsh               # override the shell (bash, sh, zsh, powershell, pwsh, ps, cmd)
+  path: "~/dev/frontend"     # working directory (defaults to home dir or repo root)
+  shell: "zsh"               # override the shell (bash, sh, zsh, powershell, pwsh, ps, cmd)
   literal: true            # skip variable expansion
 ```
 
@@ -66,7 +66,7 @@ Shell-local variables and parameter expansions like `${FOO:-default}` are passed
   cmd: |
     export API_URL=$(cat .env | grep API_URL | cut -d= -f2)
 - type: Shell
-  cmd: echo "API is at $API_URL"
+  cmd: 'echo "API is at $API_URL"'
 ```
 
 ---
@@ -77,8 +77,8 @@ Set a variable that persists for the duration of the command session and can be 
 
 ```yaml
 - type: Set
-  var: ENVIRONMENT
-  value: production
+  var: "ENVIRONMENT"
+  value: "production"
 ```
 
 Variables set this way take precedence over exported shell variables and OS environment variables.
@@ -97,7 +97,7 @@ Print a message to the terminal.
 ```yaml
 - type: Print
   message: "Done!"
-  color: green    # red, green, yellow, blue, cyan, white
+  color: "green"    # red, green, yellow, blue, cyan, white
 ```
 
 Use `Print` to structure long task sequences with clear section headers.
@@ -110,8 +110,8 @@ Render a template file and write it to a destination.
 
 ```yaml
 - type: Template
-  src: ./configs/app.config.tmpl
-  dest: ~/dev/api/.env
+  src: "./configs/app.config.tmpl"
+  dest: "~/dev/api/.env"
 ```
 
 Template files support `$VAR` and `${VAR}` substitution using the same variable lookup order as `Shell` tasks. Variables that are not set expand to an empty string.
@@ -124,13 +124,13 @@ Run a script file.
 
 ```yaml
 - type: Script
-  path: ./scripts/setup.sh
+  path: "./scripts/setup.sh"
 ```
 
 ```yaml
 - type: Script
-  path: ./setup.py
-  runner: python3   # bash, sh, zsh, python, python2, python3, node, powershell
+  path: "./setup.py"
+  runner: "python3"   # bash, sh, zsh, python, python2, python3, node, powershell
 ```
 
 If `runner` is omitted, the script is executed directly (requires a shebang line or executable permission).
@@ -143,15 +143,15 @@ Perform a git operation on a repository.
 
 ```yaml
 - type: Git
-  op: pull
-  path: ~/dev/api
+  op: "pull"
+  path: "~/dev/api"
 ```
 
 ```yaml
 - type: Git
-  op: checkout
-  branch: main
-  path: ~/dev/api
+  op: "checkout"
+  branch: "main"
+  path: "~/dev/api"
 ```
 
 | `op` | Description |
@@ -169,12 +169,12 @@ Execute a named task group defined in the profile's `task_groups` section.
 
 ```yaml
 - type: Group
-  ref: install-deps
+  ref: "install-deps"
 ```
 
 ```yaml
 - type: Group
-  ref: build-all
+  ref: "build-all"
   parallel: true    # run the group's tasks in parallel
 ```
 
@@ -186,15 +186,15 @@ Prompt the user for input and store the result in a variable.
 
 ```yaml
 - type: Prompt
-  var: API_KEY
+  var: "API_KEY"
   message: "Enter your API key"
 ```
 
 ```yaml
 - type: Prompt
-  var: USERNAME
+  var: "USERNAME"
   message: "Enter your username"
-  default: admin
+  default: "admin"
 ```
 
 ---
@@ -216,8 +216,8 @@ Download a file from a URL.
 
 ```yaml
 - type: HTTP
-  url: https://example.com/config.json
-  dest: ~/dev/api/config.json
+  url: "https://example.com/config.json"
+  dest: "~/dev/api/config.json"
 ```
 
 ---
@@ -228,14 +228,14 @@ Poll a URL or TCP endpoint until it responds, or until the timeout is reached.
 
 ```yaml
 - type: Wait
-  url: http://localhost:3000/health
-  timeout: 30s
+  url: "http://localhost:3000/health"
+  timeout: "30s"
 ```
 
 ```yaml
 - type: Wait
-  url: localhost:5432   # TCP host:port
-  timeout: 1m
+  url: "localhost:5432"   # TCP host:port
+  timeout: "1m"
 ```
 
 ---
@@ -247,12 +247,12 @@ Mark adjacent tasks with `concurrent: true` to run them in parallel. Raid collec
 ```yaml
 tasks:
   - type: Shell
-    cmd: npm install
-    path: ~/dev/api
+    cmd: "npm install"
+    path: "~/dev/api"
     concurrent: true
   - type: Shell
-    cmd: npm install
-    path: ~/dev/frontend
+    cmd: "npm install"
+    path: "~/dev/frontend"
     concurrent: true
   - type: Print
     message: "Dependencies installed"   # runs after both npm installs finish

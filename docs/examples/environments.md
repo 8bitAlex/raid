@@ -18,10 +18,10 @@ Profile-level environments define shared variables and tasks that apply across a
 name: "platform"
 
 repositories:
-  - name: api
+  - name: "api"
     url: "git@github.com:my-org/api.git"
     path: "~/dev/api"
-  - name: frontend
+  - name: "frontend"
     url: "git@github.com:my-org/frontend.git"
     path: "~/dev/frontend"
 
@@ -45,6 +45,9 @@ environments:
 Each repo defines its own environment variables and additional tasks in its `raid.yaml`:
 
 ```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
 environments:
   - name: "local"
     variables:
@@ -58,7 +61,7 @@ environments:
         value: "debug"
     tasks:
       - type: Shell
-        cmd: docker-compose up -d db
+        cmd: "docker-compose up -d db"
   - name: "staging"
     variables:
       - name: "DATABASE_URL"
@@ -87,6 +90,9 @@ environments:
 ```
 
 ```yaml title="~/dev/frontend/raid.yaml"
+name: "frontend"
+branch: "main"
+
 environments:
   - name: "local"
     variables:
@@ -131,6 +137,9 @@ For production, the `Confirm` tasks in the profile and each repo's `raid.yaml` w
 If local values differ between developers (ports, paths, credentials), use `Prompt` and `Template` tasks instead of hardcoded `variables` to generate values at apply-time:
 
 ```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
 environments:
   - name: "local"
     tasks:

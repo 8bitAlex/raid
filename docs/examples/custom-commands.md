@@ -21,7 +21,7 @@ commands:
         path: "./scripts/deploy.sh staging"
       - type: Print
         message: "Deployed."
-        color: green
+        color: "green"
 ```
 
 ```bash
@@ -74,12 +74,12 @@ install:
       - type: Shell
         cmd: "brew install postgresql"
         condition:
-          platform: darwin
+          platform: "darwin"
           cmd: "! which psql"
       - type: Shell
         cmd: "sudo apt-get install -y postgresql"
         condition:
-          platform: linux
+          platform: "linux"
           cmd: "! which psql"
       - type: Shell
         cmd: "createdb api_dev"
@@ -116,7 +116,7 @@ commands:
         concurrent: true
       - type: Print
         message: "All tests passed"
-        color: green
+        color: "green"
 ```
 
 ```bash
@@ -149,7 +149,7 @@ commands:
     usage: "Pull all repos and reinstall dependencies"
     tasks:
       - type: Group
-        ref: pull-all
+        ref: "pull-all"
       - type: Shell
         cmd: "npm install"
         path: "~/dev/frontend"
@@ -158,7 +158,7 @@ commands:
     usage: "Pull latest and deploy"
     tasks:
       - type: Group
-        ref: pull-all
+        ref: "pull-all"
       - type: Shell
         cmd: "./scripts/deploy.sh"
 ```
@@ -170,12 +170,15 @@ commands:
 Commands can also live in individual repository `raid.yaml` files, scoped to that service. They are automatically available when the profile is loaded.
 
 ```yaml title="~/dev/api/raid.yaml"
+name: api
+branch: main
+
 commands:
   - name: "migrate"
     usage: "Run pending database migrations"
     tasks:
       - type: Set
-        var: ENV
+        var: "ENV"
         value: "local"
       - type: Confirm
         message: "Run migrations against $ENV?"

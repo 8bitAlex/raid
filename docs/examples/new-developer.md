@@ -47,7 +47,7 @@ install:
     - type: Shell
       cmd: "brew bundle"
       condition:
-        platform: darwin
+        platform: "darwin"
     - type: Shell
       cmd: "raid env local"
     - type: Print
