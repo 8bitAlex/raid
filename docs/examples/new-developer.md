@@ -129,7 +129,7 @@ raid api-dev
 raid fe-dev
 ```
 
-All three repos clone concurrently. If one already exists it is skipped. Repo install tasks run next, followed by profile-level install tasks.
+All three repos clone concurrently. If one already exists it is skipped. Profile-level install tasks run next, followed by repo-level install tasks.
 
 ## Adding new team members later
 
