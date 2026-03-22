@@ -12,8 +12,8 @@ A command that runs a deploy script with a confirmation gate:
 
 ```yaml title="profile.raid.yaml"
 commands:
-  - name: deploy
-    usage: Deploy the API to staging
+  - name: "deploy"
+    usage: "Deploy the API to staging"
     tasks:
       - type: Confirm
         message: "Deploy API to staging?"
@@ -36,22 +36,22 @@ Use `Set` to define a variable, then reference it in later tasks or future comma
 
 ```yaml
 commands:
-  - name: release
-    usage: Tag and push a release
+  - name: "release"
+    usage: "Tag and push a release"
     tasks:
       - type: Prompt
-        var: VERSION
+        var: "VERSION"
         message: "Release version (e.g. 1.4.0)"
       - type: Shell
         cmd: |
           git tag v$VERSION
           git push origin v$VERSION
           export VERSION=$VERSION
-        path: ~/dev/api
+        path: "~/dev/api"
       - type: Shell
         cmd: |
           export COMMIT=$(git rev-parse --short HEAD)
-        path: ~/dev/api
+        path: "~/dev/api"
       - type: Print
         message: "Released v$VERSION at $COMMIT"
 ```
@@ -72,17 +72,17 @@ Run tasks only on certain platforms or when a file or command exists:
 install:
     tasks:
       - type: Shell
-        cmd: brew install postgresql
+        cmd: "brew install postgresql"
         condition:
           platform: darwin
           cmd: "! which psql"
       - type: Shell
-        cmd: sudo apt-get install -y postgresql
+        cmd: "sudo apt-get install -y postgresql"
         condition:
           platform: linux
           cmd: "! which psql"
       - type: Shell
-        cmd: createdb api_dev
+        cmd: "createdb api_dev"
         condition:
           cmd: "! psql -lqt | grep api_dev"
       - type: Print
@@ -97,22 +97,22 @@ Mark adjacent tasks `concurrent: true` to run them in parallel. Raid waits for a
 
 ```yaml
 commands:
-  - name: test-all
-    usage: Run tests across all services in parallel
+  - name: "test-all"
+    usage: "Run tests across all services in parallel"
     tasks:
       - type: Print
         message: "Running tests..."
       - type: Shell
-        cmd: go test ./...
-        path: ~/dev/api
+        cmd: "go test ./..."
+        path: "~/dev/api"
         concurrent: true
       - type: Shell
-        cmd: npm test
-        path: ~/dev/frontend
+        cmd: "npm test"
+        path: "~/dev/frontend"
         concurrent: true
       - type: Shell
-        cmd: pytest
-        path: ~/dev/data-service
+        cmd: "pytest"
+        path: "~/dev/data-service"
         concurrent: true
       - type: Print
         message: "All tests passed"
@@ -136,31 +136,31 @@ Extract repeated sequences into a named group and reference them from multiple c
 task_groups:
   pull-all:
     - type: Shell
-      cmd: git pull
-      path: ~/dev/api
+      cmd: "git pull"
+      path: "~/dev/api"
       concurrent: true
     - type: Shell
-      cmd: git pull
-      path: ~/dev/frontend
+      cmd: "git pull"
+      path: "~/dev/frontend"
       concurrent: true
 
 commands:
-  - name: sync
-    usage: Pull all repos and reinstall dependencies
+  - name: "sync"
+    usage: "Pull all repos and reinstall dependencies"
     tasks:
       - type: Group
         ref: pull-all
       - type: Shell
-        cmd: npm install
-        path: ~/dev/frontend
+        cmd: "npm install"
+        path: "~/dev/frontend"
 
-  - name: deploy
-    usage: Pull latest and deploy
+  - name: "deploy"
+    usage: "Pull latest and deploy"
     tasks:
       - type: Group
         ref: pull-all
       - type: Shell
-        cmd: ./scripts/deploy.sh
+        cmd: "./scripts/deploy.sh"
 ```
 
 ---
@@ -171,22 +171,22 @@ Commands can also live in individual repository `raid.yaml` files, scoped to tha
 
 ```yaml title="~/dev/api/raid.yaml"
 commands:
-  - name: migrate
-    usage: Run pending database migrations
+  - name: "migrate"
+    usage: "Run pending database migrations"
     tasks:
       - type: Set
         var: ENV
-        value: local
+        value: "local"
       - type: Confirm
         message: "Run migrations against $ENV?"
       - type: Shell
-        cmd: go run ./cmd/migrate --env=$ENV
+        cmd: "go run ./cmd/migrate --env=$ENV"
 
-  - name: seed
-    usage: Seed the database with test data
+  - name: "seed"
+    usage: "Seed the database with test data"
     tasks:
       - type: Shell
-        cmd: go run ./cmd/seed
+        cmd: "go run ./cmd/seed"
         condition:
           cmd: "psql $DATABASE_URL -c '\\dt' | grep -q users"
 ```
