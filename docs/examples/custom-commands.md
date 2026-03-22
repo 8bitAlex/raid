@@ -4,22 +4,21 @@ sidebar_position: 3
 
 # Custom Commands
 
-Define shared commands like `test`, `patch`, or `proxy` that every developer on the team can run without knowing the underlying scripts. This example shows several patterns: simple commands, variable passing between tasks, conditional steps, and parallel execution.
+Define shared commands like `test`, `patch`, or `proxy` that every developer on the team can run globally without knowing the underlying scripts. This example shows several patterns: simple commands, variable passing between tasks, conditional steps, and parallel execution.
 
 ## Simple command
 
 A command that runs a deploy script with a confirmation gate:
 
-```yaml title="profile.yaml"
+```yaml title="profile.raid.yaml"
 commands:
   - name: deploy
     usage: Deploy the API to staging
     tasks:
       - type: Confirm
         message: "Deploy API to staging?"
-      - type: Shell
-        cmd: ./scripts/deploy.sh staging
-        path: ~/dev/api
+      - type: Script
+        path: "./scripts/deploy.sh staging"
       - type: Print
         message: "Deployed."
         color: green
@@ -33,7 +32,7 @@ raid deploy
 
 ## Passing variables between tasks
 
-Use `Set` to define a variable, then reference it in later tasks. Use `Shell` exports to capture dynamic values like git SHAs or generated tokens.
+Use `Set` to define a variable, then reference it in later tasks or future command executions. Use `Shell` exports to capture dynamic values like git SHAs or generated tokens.
 
 ```yaml
 commands:
@@ -47,6 +46,7 @@ commands:
         cmd: |
           git tag v$VERSION
           git push origin v$VERSION
+          export VERSION=$VERSION
         path: ~/dev/api
       - type: Shell
         cmd: |
@@ -69,9 +69,7 @@ raid release
 Run tasks only on certain platforms or when a file or command exists:
 
 ```yaml
-commands:
-  - name: setup-dev
-    usage: First-time developer setup
+install:
     tasks:
       - type: Shell
         cmd: brew install postgresql
