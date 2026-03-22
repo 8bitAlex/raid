@@ -33,3 +33,6 @@ CLAUDE.md
 /build
 .docusaurus
 node_modules
+
+# System files
+.DS_Store
