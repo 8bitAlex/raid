@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Raid',
   tagline: 'Distributed development environment orchestration tool',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   future: {
     v4: true,
@@ -49,6 +49,10 @@ const config: Config = {
     },
     navbar: {
       title: 'Raid',
+      logo: {
+        alt: 'Raid logo',
+        src: 'img/logo.svg',
+      },
       items: [
         {
           type: 'docSidebar',
