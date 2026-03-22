@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # New Developer Onboarding
 
-The most common raid use case: a developer joins the team and needs to get their machine set up from scratch.
+Get a new developer from a blank machine to a fully running environment with a single command.
 
 ## Scenario
 
@@ -14,25 +14,18 @@ The team has three repositories — an API, a frontend, and a shared config libr
 
 The team commits this file to an internal `dev-environment` repo:
 
-```yaml title="team-profile.yaml"
+```yaml title="acme.raid.yaml"
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
 name: acme-platform
 
 repositories:
   - name: api
     url: git@github.com:acme/api.git
     path: ~/dev/acme/api
-    install:
-      tasks:
-        - type: Shell
-          cmd: go mod download
 
   - name: frontend
     url: git@github.com:acme/frontend.git
     path: ~/dev/acme/frontend
-    install:
-      tasks:
-        - type: Shell
-          cmd: npm install
 
   - name: shared-config
     url: git@github.com:acme/shared-config.git
@@ -40,6 +33,11 @@ repositories:
 
 environments:
   - name: local
+    variables:
+      - name: API_URL
+        value: http://localhost:3000
+      - name: FRONTEND_PORT
+        value: "8080"
     tasks:
       - type: Print
         message: "Local environment applied"
@@ -50,8 +48,11 @@ install:
       cmd: brew bundle
       condition:
         platform: darwin
+    - type: Shell
+      cmd: raid env local
     - type: Print
-      message: "Setup complete. Run 'raid env local' to configure your environment."
+      message: "Setup complete."
+
 ```
 
 ## Per-repo configs
@@ -59,6 +60,10 @@ install:
 Each repo ships its own `raid.yaml` defining the commands and environment variables specific to that service:
 
 ```yaml title="~/dev/acme/api/raid.yaml"
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
+name: api
+branch: main
+
 commands:
   - name: api-dev
     usage: Start the API in development mode
@@ -87,6 +92,10 @@ environments:
 ```
 
 ```yaml title="~/dev/acme/frontend/raid.yaml"
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
+name: frontend
+branch: main
+
 commands:
   - name: fe-dev
     usage: Start the frontend dev server
@@ -107,7 +116,7 @@ environments:
 
 ```bash
 # 1. Register the team profile
-raid profile add ~/profiles/acme-platform.yaml
+raid profile add ~/profiles/acme.raid.yaml
 
 # 2. Clone everything and run install tasks
 raid install
@@ -120,23 +129,7 @@ raid api-dev
 raid fe-dev
 ```
 
-### What `raid install` does
-
-```
-Cloning repositories...
-✓ api             → ~/dev/acme/api
-✓ frontend        → ~/dev/acme/frontend
-✓ shared-config   → ~/dev/acme/shared-config
-
-Running install tasks...
-✓ go mod download       (api)
-✓ npm install           (frontend)
-✓ brew bundle           (profile)
-
-Setup complete. Run 'raid env local' to configure your environment.
-```
-
-All three repos clone concurrently. If one already exists, it is skipped.
+All three repos clone concurrently. If one already exists it is skipped. Repo install tasks run next, followed by profile-level install tasks.
 
 ## Adding new team members later
 

@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Custom Commands
 
-Raid commands let you encode multi-step workflows — deploys, migrations, test runs — as named commands that every developer gets automatically. This example shows several patterns: simple scripts, variable passing between tasks, conditional steps, and parallel execution.
+Define shared commands like `test`, `patch`, or `proxy` that every developer on the team can run without knowing the underlying scripts. This example shows several patterns: simple commands, variable passing between tasks, conditional steps, and parallel execution.
 
 ## Simple command
 
