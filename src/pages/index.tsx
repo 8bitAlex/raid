@@ -1,37 +1,24 @@
-import type {ReactNode} from 'react';
-import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import TerminalDemo from '@site/src/components/TerminalDemo';
 import Heading from '@theme/Heading';
+import Layout from '@theme/Layout';
+import clsx from 'clsx';
+import type { ReactNode } from 'react';
 
 import styles from './index.module.css';
-
-const terminal = `$ raid install
-
-  Cloning repositories...
-  ✓ api-service       → ~/dev/api-service
-  ✓ frontend          → ~/dev/frontend
-  ✓ shared-libs       → ~/dev/shared-libs
-
-  Running install tasks...
-  ✓ npm install       (api-service)
-  ✓ npm install       (frontend)
-  ✓ brew install node (shared-libs)
-
-  Done in 12s`;
 
 function HomepageHeader() {
   return (
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className={styles.heroTitle}>
-          Stop explaining setup.<br />Start shipping.
+          Your team's dev workflow,<br />as config.
         </Heading>
         <p className={styles.heroSubtitle}>
-          Codify your team's dev environment into a single YAML profile.<br />
-          New teammates go from zero to running with one command.
+          Define commands, environments, and scripts in YAML that lives with your code.<br />
+          Run anything without reading docs or asking another dev.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/intro">
@@ -43,14 +30,7 @@ function HomepageHeader() {
             View on GitHub
           </Link>
         </div>
-        <div className={styles.terminal}>
-          <div className={styles.terminalBar}>
-            <span className={styles.dot} />
-            <span className={styles.dot} />
-            <span className={styles.dot} />
-          </div>
-          <pre className={styles.terminalBody}>{terminal}</pre>
-        </div>
+        <TerminalDemo />
       </div>
     </header>
   );
