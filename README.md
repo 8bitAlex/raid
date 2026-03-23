@@ -2,7 +2,7 @@
 [![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
 [![Go Report Card](https://goreportcard.com/badge/github.com/8bitAlex/raid)](https://goreportcard.com/report/github.com/8bitAlex/raid)
 
-# Raid — Distributed Development Orchestration
+# Raid
 ![Latest](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2F8bitAlex%2Fraid%2Fmain%2Fsrc%2Fresources%2Fapp.properties&search=version%3D(.%2B)&replace=%241&label=Latest&color=blue)
 ![Stable](https://img.shields.io/github/v/release/8bitAlex/raid?label=Stable&color=green)
 <p>
@@ -11,23 +11,48 @@
 ![macOS](https://img.shields.io/badge/macOS-Yes-lightgrey?logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-Yes-yellow?logo=linux)
 
-`Raid` is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories.
+---
 
-Tribal knowledge codified into the repo itself — onboarding becomes a single command.
+Every complex system has the same problem. There's a Confluence page from two years ago, a Slack thread with the "actual" way to start the proxy, a bash script that lives on one person's machine, and a handful of developers who've memorized what everyone else has to ask about. Running the test suite, patching a dependency, switching to staging, deploying a service — each one is a small excavation through wikis, READMEs, and tribal knowledge. It works until someone leaves, or until the script quietly breaks.
 
-📖 For a deeper look at the goals and design, see the [design proposal blog post](https://alexsalerno.dev/blog/raid-design-proposal?utm_source=chatgpt.com).
+**Raid replaces all of it.** Define your team's commands, environments, and workflows as YAML that lives in the repository — versioned, shared, and executable. Anyone can run `raid test`, `raid patch`, or `raid deploy` correctly, consistently, without reading docs or asking another dev.
+
+```bash
+raid test       # run the test suite — however this repo defines that
+raid patch      # apply a patch — whatever that means for this service
+raid env local  # switch everything to local — all repos, all at once
+raid install    # clone all repos and set up the full environment
+```
+
+The config commits with the code. When the process changes, the command changes with it — one place, not scattered across wikis, scripts, and memory.
+
+📖 For the full design rationale, see the [design proposal](https://alexsalerno.dev/blog/raid-design-proposal).
+
+---
+
+## How it works
+
+A **profile** describes your full system: which repos to clone, what environments exist, and what commands the team uses. It lives in a YAML file you register with raid once.
+
+Each **repository** can commit its own `raid.yaml` at its root, defining the commands and environment config specific to that service. Raid merges these automatically when the profile loads.
+
+When a developer runs any raid command, it executes against the right repo, in the right environment, with the right variables — no manual steps, no guessing.
+
+---
 
 ## Key Features
 
-- **Portable YAML Configurations** — define environments, tasks, and dependencies in version-controlled YAML files that live alongside your code.
-- **Multiple Profiles** — switch between project setups or team configurations with isolated profiles.
-- **Rich Task Runner** — 12 built-in task types covering shell commands, scripts, HTTP downloads, service health checks, git operations, template rendering, user prompts, and more.
-- **Environment Management** — define and apply consistent development environments for all contributors.
-- **Custom Commands** — codify repeated operational tasks (patch, proxy, verify, deploy) as first-class `raid <name>` subcommands that live alongside your configuration.
+- **Commands that live with the code** — `raid test`, `raid patch`, `raid proxy` — define once in YAML, run anywhere. No more tracking down scripts or asking how something works.
+- **Consistent environments** — define local, staging, and production environments once. `raid env staging` applies the right variables and tasks across every repo in a single command.
+- **Full system orchestration** — manage any number of repos as a single unit. Clone, configure, and run them together or individually.
+- **Rich task runner** — 11 built-in task types: shell commands, scripts, HTTP downloads, git operations, health checks, template rendering, prompts, confirmations, and more.
+- **Portable** — config is just YAML in the repo. Works on macOS, Linux, and Windows.
+
+---
 
 ## Development Status
 
-`Raid` is currently in the **prototype stage**. Core functionality is still being explored and iterated on — expect frequent changes and incomplete features.
+Raid is currently in the **prototype stage**. Core functionality is still being explored and iterated on — expect frequent changes and incomplete features.
 
 Feedback, issues, and contributions are welcome as the project takes shape.
 
@@ -83,12 +108,12 @@ Manage profiles. A profile is a named collection of repositories and environment
 
 ### `raid install`
 
-Clone all repositories in the active profile and run any configured install tasks. Already-cloned repos are skipped. Use `-t` to limit concurrent clone threads.
+Clone all repositories in the active profile and run any configured install tasks. Already-cloned repos are skipped.
 
 - `raid install` — clone all repos and run install tasks
 - `raid install <repo>` — clone and install a single named repository only (profile-level install tasks are not run)
 
-Clones run concurrently. Use `-t` to cap the number of concurrent clone threads; repo install tasks always run concurrently regardless of `-t`.
+Clones run concurrently. Use `-t` to cap the number of concurrent clone threads.
 
 ### `raid env`
 
@@ -105,7 +130,8 @@ Check the current configuration for issues and get suggestions for fixing them. 
 Run a custom command defined in the active profile or any of its repositories.
 
 ```bash
-raid build        # run the "build" command
+raid test         # run the "test" command
+raid patch        # run the "patch" command
 raid deploy       # run the "deploy" command
 ```
 
@@ -192,7 +218,7 @@ Multiple profiles can be defined in a single file using YAML document separators
 
 ### Repository (`raid.yaml`)
 
-Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and tasks. These are merged with the profile configuration at load time. Committing this file to each repo is the recommended way to share knowledge with your team.
+Individual repositories can carry their own `raid.yaml` at their root to define repo-specific environments and commands. These are merged with the profile configuration at load time. Committing this file to each repo is the primary way knowledge is shared — the command for running tests, applying patches, or starting a proxy lives here instead of in a wiki.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
@@ -224,17 +250,17 @@ Tasks are the unit of work in raid. They appear in environments, install steps, 
 
 | Type | Description |
 |------|-------------|
-| `Shell` | Run a shell command |
-| `Script` | Execute a script file |
+| `Confirm` | Prompt the user for a yes/no confirmation |
 | `Git` | Run a git operation (`pull`, `clone`, etc.) |
+| `Group` | Execute a named task group by `ref` |
 | `HTTP` | Download a file from a URL |
-| `Wait` | Poll a URL or address until it responds |
-| `Template` | Render a template file |
 | `Print` | Print a message to the console |
 | `Prompt` | Prompt the user for input and store it in a variable |
-| `Confirm` | Prompt the user for a yes/no confirmation |
-| `Group` | Execute a named task group by `ref` |
+| `Script` | Execute a script file |
 | `Set` | Set an environment variable to a value |
+| `Shell` | Run a shell command |
+| `Template` | Render a template file |
+| `Wait` | Poll a URL or address until it responds |
 
 All task types support two optional modifiers:
 
@@ -245,6 +271,107 @@ condition:         # skip this task unless all conditions are met
   exists: ~/.config/myapp  # only if this path exists
   cmd: which docker        # only if this command exits 0
 ```
+
+### Confirm
+
+Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful before destructive operations.
+
+```yaml
+- type: Confirm
+  message: "This will reset the production database. Continue?"
+```
+
+### Git
+
+Perform a git operation in a repository directory.
+
+```yaml
+- type: Git
+  op: pull          # pull, checkout, fetch, reset
+  branch: main      # required for checkout; optional for pull, fetch, reset
+  path: ~/Developer/myrepo  # optional, defaults to current directory
+```
+
+### Group
+
+Execute a named task group defined in the profile's `task_groups`. Supports optional parallel and retry modifiers.
+
+```yaml
+- type: Group
+  ref: verify-services
+  parallel: true   # optional: run all tasks in the group concurrently
+  attempts: 3      # optional: retry the group on failure
+  delay: 5s        # optional: delay between retries (default: 1s)
+```
+
+### HTTP
+
+Download a file from a URL.
+
+```yaml
+- type: HTTP
+  url: https://example.com/config.json
+  dest: ~/.config/myapp/config.json
+```
+
+### Print
+
+Print a formatted message to stdout. Useful for labelling steps in long task sequences.
+
+```yaml
+- type: Print
+  message: "Deploying $APP_VERSION to production..."
+  color: yellow    # optional: red, green, yellow, blue, cyan, white
+  literal: false   # optional: skip env var expansion
+```
+
+### Prompt
+
+Ask the user for input and store the result in an environment variable for use by downstream tasks.
+
+```yaml
+- type: Prompt
+  var: TARGET_ENV
+  message: "Which environment? (dev/staging/prod)"
+  default: dev     # optional: used when user presses enter with no input
+```
+
+### Script
+
+Execute a script file directly.
+
+```yaml
+- type: Script
+  path: ./scripts/setup.sh
+  runner: bash     # optional: bash, sh, zsh, python, python3, node, powershell
+```
+
+### Set
+
+Set a variable to a static or derived value, making it available to all subsequent tasks. Values persist across runs in `~/.raid/vars`.
+
+```yaml
+- type: Set
+  var: DEPLOY_TARGET
+  value: production         # supports $VAR and ${VAR} expansion
+```
+
+```yaml
+# Build a derived value from earlier Prompt input
+- type: Prompt
+  var: VERSION
+  message: "Version to deploy:"
+- type: Set
+  var: IMAGE_TAG
+  value: "myapp:$VERSION"
+- type: Shell
+  cmd: docker push $IMAGE_TAG
+```
+
+**Variable precedence** (highest to lowest):
+1. `Set` task values
+2. Variables exported by Shell tasks in the current command run
+3. OS environment variables
 
 ### Shell
 
@@ -279,24 +406,14 @@ Shell-local variables used within the same task (never exported) are resolved by
 
 **Exit code propagation** — when a Shell task exits with a non-zero status, raid stops executing the current command and exits with the same exit code. No additional noise is printed beyond what the shell command itself wrote to stderr.
 
-### Script
+### Template
 
-Execute a script file directly.
-
-```yaml
-- type: Script
-  path: ./scripts/setup.sh
-  runner: bash     # optional: bash, sh, zsh, python, python3, node, powershell
-```
-
-### HTTP
-
-Download a file from a URL.
+Render a file by substituting `$VAR` and `${VAR}` references with environment variable values.
 
 ```yaml
-- type: HTTP
-  url: https://example.com/config.json
-  dest: ~/.config/myapp/config.json
+- type: Template
+  src: ./config/app.env.template
+  dest: ~/.config/myapp/app.env
 ```
 
 ### Wait
@@ -308,97 +425,6 @@ Poll an HTTP(S) URL or TCP address until it responds, then continue.
   url: http://localhost:8080/health  # or TCP: localhost:5432
   timeout: 60s                       # optional, default: 30s
 ```
-
-### Template
-
-Render a file by substituting `$VAR` and `${VAR}` references with environment variable values.
-
-```yaml
-- type: Template
-  src: ./config/app.env.template
-  dest: ~/.config/myapp/app.env
-```
-
-### Group
-
-Execute a named task group defined in the profile's `task_groups`. Supports optional parallel and retry modifiers.
-
-```yaml
-- type: Group
-  ref: verify-services
-  parallel: true   # optional: run all tasks in the group concurrently
-  attempts: 3      # optional: retry the group on failure
-  delay: 5s        # optional: delay between retries (default: 1s)
-```
-
-### Git
-
-Perform a git operation in a repository directory.
-
-```yaml
-- type: Git
-  op: pull          # pull, checkout, fetch, reset
-  branch: main      # required for checkout; optional for pull, fetch, reset
-  path: ~/Developer/myrepo  # optional, defaults to current directory
-```
-
-### Print
-
-Print a formatted message to stdout. Useful for labelling steps in long task sequences.
-
-```yaml
-- type: Print
-  message: "Deploying $APP_VERSION to production..."
-  color: yellow    # optional: red, green, yellow, blue, cyan, white
-  literal: false   # optional: skip env var expansion
-```
-
-### Prompt
-
-Ask the user for input and store the result in an environment variable for use by downstream tasks.
-
-```yaml
-- type: Prompt
-  var: TARGET_ENV
-  message: "Which environment? (dev/staging/prod)"
-  default: dev     # optional: used when user presses enter with no input
-```
-
-### Confirm
-
-Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful before destructive operations.
-
-```yaml
-- type: Confirm
-  message: "This will reset the production database. Continue?"
-```
-
-### Set
-
-Set a variable to a static or derived value, making it available to all subsequent tasks. Values persist across runs in `~/.raid/vars`.
-
-```yaml
-- type: Set
-  var: DEPLOY_TARGET
-  value: production         # supports $VAR and ${VAR} expansion
-```
-
-```yaml
-# Build a derived value from earlier Prompt input
-- type: Prompt
-  var: VERSION
-  message: "Version to deploy:"
-- type: Set
-  var: IMAGE_TAG
-  value: "myapp:$VERSION"
-- type: Shell
-  cmd: docker push $IMAGE_TAG
-```
-
-**Variable precedence** (highest to lowest):
-1. `Set` task values
-2. Variables exported by Shell tasks in the current command run
-3. OS environment variables
 
 ---
 
@@ -452,13 +478,13 @@ raid deploy staging v1.2.3   # $RAID_ARG_1=staging, $RAID_ARG_2=v1.2.3
 
 ## Best Practices
 
-**Commit `raid.yaml` to each repo.** This is how setup knowledge gets shared — anyone with raid can run `raid install` and get a working environment without reading a wiki.
+**Commit `raid.yaml` to each repo.** The command for running tests, applying a patch, or starting the proxy belongs in the repo — not in a wiki, a Slack thread, or someone's memory. Anyone with raid picks it up automatically.
 
-**Use `commands` to codify team workflows.** Repeated operational tasks — patching, proxying, deploying, verifying — belong in `commands`, not in Slack messages or shared scripts. Anyone on the team can run `raid deploy` without knowing the steps. Use `groups` for reusable internal sequences that commands and other tasks compose from.
+**Use `commands` to codify team workflows.** Repeated operational tasks — patching, proxying, deploying, verifying — belong in `commands`. Anyone on the team can run `raid deploy` without knowing the steps. Use `task_groups` for reusable internal sequences that commands compose from.
 
 **Gate destructive steps with `Confirm`.** Any task sequence that resets data, force-pushes, or modifies production should begin with a `Confirm` task to prevent accidental runs.
 
-**Use `Print` to structure long sequences.** Clear section headers make install and deploy output readable at a glance, especially for new team members.
+**Use `Print` to structure long sequences.** Clear section headers make install and deploy output readable at a glance.
 
 **Keep profiles in a dotfiles repo.** Profile files reference your repos and environments. Storing them in a private dotfiles repo keeps them version-controlled and accessible across machines.
 
