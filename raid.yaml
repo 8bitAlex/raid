@@ -2,11 +2,3 @@
 
 name: raid
 branch: main
-
-environments:
-  - name: dev
-    tasks:
-      - type: Shell
-        cmd: echo "Hello, world! - From raid"
-      - type: Script
-        path: ./docs/examples/hello.sh
