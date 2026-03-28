@@ -14,11 +14,11 @@ function HomepageHeader() {
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className={styles.heroTitle}>
-          Your team's dev workflow,<br />as config.
+          Your workflow<br />as a config.
         </Heading>
         <p className={styles.heroSubtitle}>
-          Define commands, environments, and scripts in YAML that lives with your code.<br />
-          Run anything without reading docs or asking another dev.
+          Stop fighting your tools. Start writing code.<br />
+          Define setup, tasks, and environments in YAML — right in your repo.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/intro">
