@@ -7,12 +7,100 @@ slug: /overview
 
 Raid is a CLI tool that lets you define your entire development environment — repositories, install steps, environment configs, and team commands — in a single YAML profile. Check it in, share it with the team, and anyone can go from a blank machine to a fully running environment with one command.
 
-# Key Concepts
+## Key Concepts
 
-## Profiles
+### Profiles
 
-## Environments
+A **profile** is a YAML file that describes everything about your development environment: which repositories to clone, what to run during setup, how to handle environments, and what commands are available to the team.
 
-## Tasks
+Profiles are shared — check one into a repo, host it at a URL, or distribute it however your team prefers. When a teammate runs `raid profile add`, they get the same setup as everyone else.
 
-## Commands
+```yaml
+name: "platform"
+
+repositories:
+  - name: "api"
+    url: "git@github.com:my-org/api.git"
+    path: "~/dev/api"
+  - name: "frontend"
+    url: "git@github.com:my-org/frontend.git"
+    path: "~/dev/frontend"
+```
+
+→ See [Profile Configuration](/docs/features/profiles)
+
+---
+
+### Environments
+
+**Environments** are named configurations — sets of variables and tasks — that can be applied across all repositories at once. Switching from local to staging is a single command: `raid env staging`.
+
+Each environment can write `.env` files, run setup scripts, or prompt for confirmation before applying. Repositories define their own environment variables in their `raid.yaml`, which are merged with the profile-level environment when applied.
+
+```yaml
+environments:
+  - name: "local"
+    variables:
+      - name: "LOG_LEVEL"
+        value: "debug"
+    tasks:
+      - type: Shell
+        cmd: "docker-compose up -d db"
+  - name: "production"
+    tasks:
+      - type: Confirm
+        message: "Switch to production?"
+```
+
+→ See [Environments](/docs/features/environments)
+
+---
+
+### Tasks
+
+**Tasks** are the unit of work in raid. They appear in install steps, commands, and environment definitions. Every task has a `type` and type-specific fields.
+
+Raid ships with task types for running shell commands, rendering templates, prompting for input, waiting for services, performing git operations, and more.
+
+```yaml
+tasks:
+  - type: Shell
+    cmd: "npm install"
+  - type: Wait
+    url: "http://localhost:3000/health"
+    timeout: "30s"
+  - type: Print
+    message: "Ready."
+    color: "green"
+```
+
+→ See [Task Types](/docs/features/tasks)
+
+---
+
+### Commands
+
+**Commands** are custom CLI commands defined in your profile or in a repository's `raid.yaml`. Once defined, they're available to everyone on the team as `raid <name>`.
+
+Use commands to encode team workflows — deployments, migrations, test runs — so no one has to remember the exact steps or ask a colleague.
+
+```yaml
+commands:
+  - name: "deploy"
+    usage: "Deploy all services to staging"
+    tasks:
+      - type: Shell
+        cmd: "./scripts/deploy.sh"
+        path: "~/dev/api"
+```
+
+→ See [Custom Commands](/docs/usage/custom)
+
+---
+
+## Next steps
+
+- [Getting Started](/docs/start) — install raid and set up your first profile
+- [Profile Configuration](/docs/features/profiles) — full profile file format
+- [Task Types](/docs/features/tasks) — everything a task can do
+- [Command Reference](/docs/references/commands) — built-in commands
