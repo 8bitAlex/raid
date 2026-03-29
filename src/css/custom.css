@@ -10,6 +10,11 @@
   --docusaurus-highlighted-code-line-bg: rgba(79, 70, 229, 0.1);
 }
 
+.subtitle {
+  opacity: 0.5;
+  font-size: 0.85em;
+}
+
 .header-github-link::before {
   content: '';
   width: 24px;
