@@ -155,3 +155,118 @@
 .copyButton:hover {
   color: var(--ifm-font-color-base);
 }
+
+/* Comparison section */
+.comparison {
+  padding: 1rem 0 4rem 0;
+  background: var(--ifm-background-color);
+  text-align: center;
+}
+
+.comparisonTitle {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  max-width: 736px;
+  margin: 0 auto;
+}
+
+.comparisonTable {
+  width: 100%;
+  display: inline-table;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  background: var(--ifm-background-color);
+}
+
+.thFeature {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ifm-color-emphasis-600);
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+  background: var(--ifm-color-emphasis-100);
+}
+
+.thRaid {
+  padding: 1rem 1.25rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(79, 70, 229, 0.3);
+  background: rgba(79, 70, 229, 0.08);
+}
+
+.raidBadge {
+  display: inline-block;
+  background: var(--ifm-color-primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.thOther {
+  padding: 1rem 1.25rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ifm-color-emphasis-600);
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+  background: var(--ifm-color-emphasis-100);
+}
+
+.tableRow {
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.tableRow:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.tableRow:hover .colRaid {
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.featureLabel {
+  padding: 0.75rem 1.25rem;
+  text-align: left;
+  color: var(--ifm-font-color-base);
+  font-size: 0.9rem;
+}
+
+.cell {
+  text-align: center;
+  padding: 0.75rem 1.25rem;
+}
+
+.colRaid {
+  background: rgba(79, 70, 229, 0.06);
+}
+
+.iconYes {
+  color: #16a34a;
+}
+
+.iconPartial {
+  color: var(--ifm-color-emphasis-500);
+}
+
+.iconNo {
+  color: #dc2626;
+}

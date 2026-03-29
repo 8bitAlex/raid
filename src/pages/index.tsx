@@ -5,7 +5,7 @@ import TerminalDemo from '@site/src/components/TerminalDemo';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import { Check, Copy, Star } from 'lucide-react';
+import { Check, Copy, Minus, Star, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import styles from './index.module.css';
@@ -90,7 +90,60 @@ function InstallSection() {
         <Heading as="h2" className={styles.installTitle}>Install</Heading>
         <div className={styles.installOptions}>
           <InstallOption label="Homebrew" cmd="brew install 8bitalex/tap/raid" />
-          <InstallOption label="Script" cmd="curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash" />
+          <InstallOption label="Script" cmd="curl -fsSL https://raidcli.dev/install.sh | bash" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type Support = 'yes' | 'no' | 'partial';
+
+const comparisonFeatures: { label: string; raid: Support; make: Support; just: Support; mise: Support }[] = [
+  { label: 'Multi-repo orchestration', raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
+  { label: 'Team profile sharing',     raid: 'yes', make: 'no',      just: 'no',      mise: 'no'      },
+  { label: 'One-command onboarding',   raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
+  { label: 'Environment switching',    raid: 'yes', make: 'no',      just: 'no',      mise: 'yes'     },
+  { label: 'Custom task runner',       raid: 'yes', make: 'yes',     just: 'yes',     mise: 'yes'     },
+  { label: 'YAML config',              raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
+  { label: 'No DSL to learn',          raid: 'yes', make: 'no',      just: 'partial', mise: 'yes'     },
+  { label: 'Concurrent task execution',raid: 'yes', make: 'partial', just: 'no',      mise: 'no'      },
+];
+
+function SupportIcon({ value }: { value: Support }) {
+  if (value === 'yes') return <Check size={16} className={styles.iconYes} />;
+  if (value === 'partial') return <Minus size={16} className={styles.iconPartial} />;
+  return <X size={16} className={styles.iconNo} />;
+}
+
+function ComparisonSection() {
+  return (
+    <section className={styles.comparison}>
+      <div className="container">
+        <div className={styles.tableWrapper}>
+          <Heading as="h2" className={styles.comparisonTitle}>Compare</Heading>
+          <table className={styles.comparisonTable}>
+            <thead>
+              <tr>
+                <th className={styles.thFeature}></th>
+                <th className={styles.thRaid}>Raid</th>
+                <th className={styles.thOther}>make</th>
+                <th className={styles.thOther}>just</th>
+                <th className={styles.thOther}>mise</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonFeatures.map((row) => (
+                <tr key={row.label} className={styles.tableRow}>
+                  <td className={styles.featureLabel}>{row.label}</td>
+                  <td className={clsx(styles.cell, styles.colRaid)}><SupportIcon value={row.raid} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.make} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.just} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.mise} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -107,6 +160,7 @@ export default function Home(): ReactNode {
       <main>
         <InstallSection />
         <HomepageFeatures />
+        <ComparisonSection />
       </main>
     </Layout>
   );
