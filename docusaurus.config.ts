@@ -27,6 +27,16 @@ const config: Config = {
     locales: ['en'],
   },
 
+  plugins: [
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: true,
+        docsRouteBasePath: '/docs',
+      },
+    ],
+  ],
+
   presets: [
     [
       'classic',
@@ -61,6 +71,10 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          type: 'search',
+          position: 'right',
+        },
+        {
           href: 'https://github.com/8bitalex/raid',
           position: 'right',
           className: 'header-github-link',
@@ -76,7 +90,7 @@ const config: Config = {
           items: [
             {
               label: 'Getting Started',
-              to: '/docs/intro',
+              to: '/docs/overview',
             },
           ],
         },

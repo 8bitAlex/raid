@@ -5,9 +5,39 @@ import TerminalDemo from '@site/src/components/TerminalDemo';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { Check, Copy, Minus, Star, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import styles from './index.module.css';
+
+function GitHubButtons() {
+  const [stars, setStars] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/8bitalex/raid')
+      .then((res) => res.json())
+      .then((data) => setStars(data.stargazers_count))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <a
+      href="https://github.com/8bitalex/raid"
+      target="_blank"
+      rel="noopener noreferrer"
+      className={styles.githubGroup}>
+      <span className={clsx('button button--lg', styles.buttonGhost, styles.githubLabel)}>
+        View on GitHub
+      </span>
+      {stars !== null && (
+        <span className={clsx('button button--lg', styles.buttonGhost, styles.starButton)}>
+          <Star size={14} />
+          {stars.toLocaleString()}
+        </span>
+      )}
+    </a>
+  );
+}
 
 function HomepageHeader() {
   return (
@@ -21,18 +51,35 @@ function HomepageHeader() {
           Define setup, tasks, and environments in YAML — right in your repo.
         </p>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/intro">
+          <Link className="button button--primary button--lg" to="/docs/overview">
             Get Started
           </Link>
-          <Link
-            className={clsx('button button--lg', styles.buttonGhost)}
-            href="https://github.com/8bitalex/raid">
-            View on GitHub
-          </Link>
+          <GitHubButtons />
         </div>
         <TerminalDemo />
       </div>
     </header>
+  );
+}
+
+function InstallOption({ label, cmd }: { label: string; cmd: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className={styles.installOption}>
+      <span className={styles.installLabel}>{label}</span>
+      <code className={styles.installCmd}>{cmd}</code>
+      <button className={styles.copyButton} onClick={handleCopy} aria-label="Copy to clipboard">
+        {copied ? <Check size={15} /> : <Copy size={15} />}
+      </button>
+    </div>
   );
 }
 
@@ -42,14 +89,61 @@ function InstallSection() {
       <div className="container">
         <Heading as="h2" className={styles.installTitle}>Install</Heading>
         <div className={styles.installOptions}>
-          <div className={styles.installOption}>
-            <span className={styles.installLabel}>Homebrew</span>
-            <code className={styles.installCmd}>brew install 8bitalex/tap/raid</code>
-          </div>
-          <div className={styles.installOption}>
-            <span className={styles.installLabel}>Script</span>
-            <code className={styles.installCmd}>{'curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash'}</code>
-          </div>
+          <InstallOption label="Homebrew" cmd="brew install 8bitalex/tap/raid" />
+          <InstallOption label="Script" cmd="curl -fsSL https://raidcli.dev/install.sh | bash" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type Support = 'yes' | 'no' | 'partial';
+
+const comparisonFeatures: { label: string; raid: Support; make: Support; just: Support; mise: Support }[] = [
+  { label: 'Multi-repo orchestration', raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
+  { label: 'Team profile sharing',     raid: 'yes', make: 'no',      just: 'no',      mise: 'no'      },
+  { label: 'One-command onboarding',   raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
+  { label: 'Environment switching',    raid: 'yes', make: 'no',      just: 'no',      mise: 'yes'     },
+  { label: 'Custom task runner',       raid: 'yes', make: 'yes',     just: 'yes',     mise: 'yes'     },
+  { label: 'YAML config',              raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
+  { label: 'No DSL to learn',          raid: 'yes', make: 'no',      just: 'partial', mise: 'yes'     },
+  { label: 'Concurrent task execution',raid: 'yes', make: 'partial', just: 'no',      mise: 'no'      },
+];
+
+function SupportIcon({ value }: { value: Support }) {
+  if (value === 'yes') return <Check size={16} className={styles.iconYes} />;
+  if (value === 'partial') return <Minus size={16} className={styles.iconPartial} />;
+  return <X size={16} className={styles.iconNo} />;
+}
+
+function ComparisonSection() {
+  return (
+    <section className={styles.comparison}>
+      <div className="container">
+        <div className={styles.tableWrapper}>
+          <Heading as="h2" className={styles.comparisonTitle}>Compare</Heading>
+          <table className={styles.comparisonTable}>
+            <thead>
+              <tr>
+                <th className={styles.thFeature}></th>
+                <th className={styles.thRaid}>Raid</th>
+                <th className={styles.thOther}>make</th>
+                <th className={styles.thOther}>just</th>
+                <th className={styles.thOther}>mise</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonFeatures.map((row) => (
+                <tr key={row.label} className={styles.tableRow}>
+                  <td className={styles.featureLabel}>{row.label}</td>
+                  <td className={clsx(styles.cell, styles.colRaid)}><SupportIcon value={row.raid} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.make} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.just} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.mise} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -66,6 +160,7 @@ export default function Home(): ReactNode {
       <main>
         <InstallSection />
         <HomepageFeatures />
+        <ComparisonSection />
       </main>
     </Layout>
   );
