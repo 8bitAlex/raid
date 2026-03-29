@@ -5,7 +5,7 @@ import TerminalDemo from '@site/src/components/TerminalDemo';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import { Star } from 'lucide-react';
+import { Check, Copy, Star } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import styles from './index.module.css';
@@ -62,20 +62,35 @@ function HomepageHeader() {
   );
 }
 
+function InstallOption({ label, cmd }: { label: string; cmd: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className={styles.installOption}>
+      <span className={styles.installLabel}>{label}</span>
+      <code className={styles.installCmd}>{cmd}</code>
+      <button className={styles.copyButton} onClick={handleCopy} aria-label="Copy to clipboard">
+        {copied ? <Check size={15} /> : <Copy size={15} />}
+      </button>
+    </div>
+  );
+}
+
 function InstallSection() {
   return (
     <section className={styles.install}>
       <div className="container">
         <Heading as="h2" className={styles.installTitle}>Install</Heading>
         <div className={styles.installOptions}>
-          <div className={styles.installOption}>
-            <span className={styles.installLabel}>Homebrew</span>
-            <code className={styles.installCmd}>brew install 8bitalex/tap/raid</code>
-          </div>
-          <div className={styles.installOption}>
-            <span className={styles.installLabel}>Script</span>
-            <code className={styles.installCmd}>{'curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash'}</code>
-          </div>
+          <InstallOption label="Homebrew" cmd="brew install 8bitalex/tap/raid" />
+          <InstallOption label="Script" cmd="curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash" />
         </div>
       </div>
     </section>

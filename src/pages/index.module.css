@@ -134,4 +134,24 @@
   padding: 0;
   overflow-x: auto;
   white-space: nowrap;
+  flex: 1;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ifm-color-emphasis-500);
+  padding: 0.25rem;
+  border-radius: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.copyButton:hover {
+  color: var(--ifm-font-color-base);
 }
