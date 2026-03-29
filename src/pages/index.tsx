@@ -5,9 +5,39 @@ import TerminalDemo from '@site/src/components/TerminalDemo';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { Star } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import styles from './index.module.css';
+
+function GitHubButtons() {
+  const [stars, setStars] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/8bitalex/raid')
+      .then((res) => res.json())
+      .then((data) => setStars(data.stargazers_count))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <a
+      href="https://github.com/8bitalex/raid"
+      target="_blank"
+      rel="noopener noreferrer"
+      className={styles.githubGroup}>
+      <span className={clsx('button button--lg', styles.buttonGhost, styles.githubLabel)}>
+        View on GitHub
+      </span>
+      {stars !== null && (
+        <span className={clsx('button button--lg', styles.buttonGhost, styles.starButton)}>
+          <Star size={14} />
+          {stars.toLocaleString()}
+        </span>
+      )}
+    </a>
+  );
+}
 
 function HomepageHeader() {
   return (
@@ -24,11 +54,7 @@ function HomepageHeader() {
           <Link className="button button--primary button--lg" to="/docs/intro">
             Get Started
           </Link>
-          <Link
-            className={clsx('button button--lg', styles.buttonGhost)}
-            href="https://github.com/8bitalex/raid">
-            View on GitHub
-          </Link>
+          <GitHubButtons />
         </div>
         <TerminalDemo />
       </div>

@@ -59,6 +59,33 @@
   text-decoration: none;
 }
 
+.githubGroup {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.githubGroup:hover .buttonGhost {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+}
+
+.githubLabel {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+
+.starButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
 /* Install section */
 .install {
   padding: 4rem 0;
