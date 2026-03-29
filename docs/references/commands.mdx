@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Command Reference
 
-A reference for all built-in `raid` commands. For custom commands defined in your profile, see [Custom Commands](./custom).
+A reference for all built-in `raid` commands. For custom commands defined in your profile, see [Custom Commands](/docs/usage/custom).
 
 ## raid install
 
@@ -26,7 +26,7 @@ If a repository already exists at its configured path, cloning is skipped.
 | `[repo]` | Install only the named repository (profile-level tasks are not run) |
 | `-t, --threads` | Max concurrent clone threads (default: unlimited) |
 
-For more details, see [Install](./install).
+For more details, see [Install](/docs/usage/install).
 
 ---
 
@@ -42,7 +42,7 @@ raid env list         # list available environments
 
 Applying an environment writes each repository's configured `.env` file and runs its environment tasks.
 
-For more details, see [Env](./env).
+For more details, see [Env](/docs/usage/env).
 
 ---
 
@@ -58,7 +58,7 @@ raid profile <name>           # switch the active profile
 raid profile remove <name>    # remove a profile
 ```
 
-For more details, see [Profile](./profile).
+For more details, see [Profile](/docs/usage/profile).
 
 ---
 
@@ -80,7 +80,7 @@ Doctor inspects the current profile and reports findings at three severity level
 
 Run `raid doctor` after initial setup or whenever something isn't working as expected.
 
-For more details, see [Doctor](./doctor).
+For more details, see [Doctor](/docs/usage/doctor).
 
 ---
 
@@ -98,4 +98,4 @@ Custom commands are defined in `commands` sections of the profile or in individu
 
 Custom command names cannot shadow built-in names (`profile`, `install`, `env`, `doctor`).
 
-For more details, see [Custom Commands](./custom).
+For more details, see [Custom Commands](/docs/usage/custom).

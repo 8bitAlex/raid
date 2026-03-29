@@ -51,7 +51,7 @@ function HomepageHeader() {
           Define setup, tasks, and environments in YAML — right in your repo.
         </p>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/intro">
+          <Link className="button button--primary button--lg" to="/docs/overview">
             Get Started
           </Link>
           <GitHubButtons />
