@@ -1,17 +1,18 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
+import { Rocket, BookOpen, Users, Layers } from 'lucide-react';
 import styles from './styles.module.css';
 
 type FeatureItem = {
-  icon: string;
+  icon: ReactNode;
   title: string;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    icon: '⚡',
+    icon: <Rocket size={32} />,
     title: 'One-command onboarding',
     description: (
       <>
@@ -22,7 +23,7 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    icon: '📋',
+    icon: <BookOpen size={32} />,
     title: 'Tribal knowledge, codified',
     description: (
       <>
@@ -33,7 +34,7 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    icon: '🛠️',
+    icon: <Users size={32} />,
     title: 'Shared team commands',
     description: (
       <>
@@ -44,7 +45,7 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    icon: '🌍',
+    icon: <Layers size={32} />,
     title: 'Environment switching',
     description: (
       <>

@@ -62,8 +62,9 @@ const config: Config = {
         },
         {
           href: 'https://github.com/8bitalex/raid',
-          label: 'GitHub',
           position: 'right',
+          className: 'header-github-link',
+          'aria-label': 'GitHub repository',
         },
       ],
     },
