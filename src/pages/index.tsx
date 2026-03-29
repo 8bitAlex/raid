@@ -64,8 +64,8 @@ export default function Home(): ReactNode {
       description="Distributed dev environment orchestration. Codify your team's setup into a YAML profile — onboard any repo in one command.">
       <HomepageHeader />
       <main>
-        <HomepageFeatures />
         <InstallSection />
+        <HomepageFeatures />
       </main>
     </Layout>
   );
