@@ -1,15 +1,21 @@
-[![Build and Test](https://github.com/8bitAlex/raid/actions/workflows/build.yml/badge.svg)](https://github.com/8bitAlex/raid/actions/workflows/build.yml)
-[![codecov](https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW)](https://codecov.io/github/8bitAlex/raid)
-[![Go Report Card](https://goreportcard.com/badge/github.com/8bitAlex/raid)](https://goreportcard.com/report/github.com/8bitAlex/raid)
+# Raid - Declarative development environment orchestrator
 
-# Raid
-![Latest](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2F8bitAlex%2Fraid%2Fmain%2Fsrc%2Fresources%2Fapp.properties&search=version%3D(.%2B)&replace=%241&label=Latest&color=blue)
-![Stable](https://img.shields.io/github/v/release/8bitAlex/raid?label=Stable&color=green)
-<p>
+<p align="center">
+<a href="https://github.com/8bitAlex/raid/actions/workflows/build.yml"><img src="https://github.com/8bitAlex/raid/actions/workflows/build.yml/badge.svg" alt="Build and Test"></a>
+<a href="https://codecov.io/github/8bitAlex/raid"><img src="https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW" alt="codecov"></a>
+<a href="https://goreportcard.com/report/github.com/8bitAlex/raid"><img src="https://goreportcard.com/badge/github.com/8bitAlex/raid" alt="Go Report Card"></a>
+<br>
+<img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2F8bitAlex%2Fraid%2Fmain%2Fsrc%2Fresources%2Fapp.properties&search=version%3D(.%2B)&replace=%241&label=Latest&color=blue" alt="Latest">
+<img src="https://img.shields.io/github/v/release/8bitAlex/raid?label=Stable&color=green" alt="Stable">
+<br>
+<img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platforms">
+</p>
 
-![Windows](https://img.shields.io/badge/Windows-Yes-blue?logo=windows)
-![macOS](https://img.shields.io/badge/macOS-Yes-lightgrey?logo=apple)
-![Linux](https://img.shields.io/badge/Linux-Yes-yellow?logo=linux)
+<br/>
+
+<p align="center">
+<img src="docs/assets/raid-comparison.gif" alt="Raid vs. manual setup — side-by-side comparison">
+</p>
 
 ---
 
@@ -18,10 +24,10 @@ Every complex system has the same problem. There's a Confluence page from two ye
 **Raid replaces all of it.** Define your team's commands, environments, and workflows as YAML that lives in the repository — versioned, shared, and executable. Anyone can run `raid test`, `raid patch`, or `raid deploy` correctly, consistently, without reading docs or asking another dev.
 
 ```bash
+raid install    # clone all repos and set up the full environment
+raid env local  # switch everything to local — all repos, all at once
 raid test       # run the test suite — however this repo defines that
 raid patch      # apply a patch — whatever that means for this service
-raid env local  # switch everything to local — all repos, all at once
-raid install    # clone all repos and set up the full environment
 ```
 
 The config commits with the code. When the process changes, the command changes with it — one place, not scattered across wikis, scripts, and memory.
@@ -248,17 +254,29 @@ commands:
 
 Tasks are the unit of work in raid. They appear in environments, install steps, commands, and task groups. Each task has a `type` and type-specific fields.
 
+Tasks fall into two categories:
+
+- **Primitive tasks** are the general-purpose building blocks. They can express virtually any operation and are the foundation everything else is built on.
+- **Convenience tasks** are higher-level wrappers around common operations. Anything they do could technically be written with a primitive task, but using a purpose-built type is clearer, safer, and cross-platform.
+
+**Primitive tasks**
+
+| Type | Description |
+|------|-------------|
+| `Script` | Execute a script file |
+| `Set` | Set a variable to a static or derived value |
+| `Shell` | Run a shell command |
+
+**Convenience tasks**
+
 | Type | Description |
 |------|-------------|
 | `Confirm` | Prompt the user for a yes/no confirmation |
-| `Git` | Run a git operation (`pull`, `clone`, etc.) |
+| `Git` | Run a git operation (`pull`, `checkout`, `fetch`, `reset`) |
 | `Group` | Execute a named task group by `ref` |
 | `HTTP` | Download a file from a URL |
 | `Print` | Print a message to the console |
 | `Prompt` | Prompt the user for input and store it in a variable |
-| `Script` | Execute a script file |
-| `Set` | Set an environment variable to a value |
-| `Shell` | Run a shell command |
 | `Template` | Render a template file |
 | `Wait` | Poll a URL or address until it responds |
 
@@ -343,7 +361,7 @@ Execute a script file directly.
 ```yaml
 - type: Script
   path: ./scripts/setup.sh
-  runner: bash     # optional: bash, sh, zsh, python, python3, node, powershell
+  runner: bash     # optional: bash, sh, zsh, python, python2, python3, node, powershell
 ```
 
 ### Set
@@ -380,7 +398,7 @@ Run a command string in a configurable shell.
 ```yaml
 - type: Shell
   cmd: echo "hello $USER"
-  shell: bash      # optional: bash (default), sh, zsh, powershell, cmd
+  shell: bash      # optional: bash (default), sh, zsh, powershell, pwsh, ps, cmd
   literal: false   # optional: skip env var expansion before passing to shell
   path: ~/project  # optional: working directory. Defaults to ~ for profile tasks, repo dir for repo tasks
 ```
@@ -403,6 +421,8 @@ commands:
 ```
 
 Shell-local variables used within the same task (never exported) are resolved by the shell itself and are not visible to later tasks.
+
+Exported variables live only for the duration of the current command run. They are available to every task that follows within the same invocation, but are **not persisted** between runs — the next time the command is invoked, the value is gone. Use a `Set` task if you need a value to persist across runs (values set that way are stored in `~/.raid/vars`).
 
 **Exit code propagation** — when a Shell task exits with a non-zero status, raid stops executing the current command and exits with the same exit code. No additional noise is printed beyond what the shell command itself wrote to stderr.
 
@@ -447,7 +467,7 @@ commands:
       file: $DEPLOY_LOG    # also write all output here; supports $VAR expansion
 ```
 
-**`name`** (required) — the subcommand name; e.g. `name: deploy` is invoked as `raid deploy`. Cannot shadow built-in names (`profile`, `install`, `env`).
+**`name`** (required) — the subcommand name; e.g. `name: deploy` is invoked as `raid deploy`. Cannot shadow built-in names (`profile`, `install`, `env`, `doctor`, `help`, `version`, `completion`).
 
 **`usage`** (optional) — short description shown next to the command in `raid --help`.
 
