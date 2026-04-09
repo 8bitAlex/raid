@@ -38,7 +38,7 @@ The config commits with the code. When the process changes, the command changes 
 
 ## How it works
 
-A **profile** describes your full system: which repos to clone, what environments exist, and what commands the team uses. It lives in a YAML file you register with raid once.
+A **profile** (`*.raid.yaml`) describes your full system: which repos to clone, what environments exist, and what commands the team uses. It lives in a YAML file you register with raid once.
 
 Each **repository** can commit its own `raid.yaml` at its root, defining the commands and environment config specific to that service. Raid merges these automatically when the profile loads.
 
