@@ -5,13 +5,17 @@
 <a href="https://codecov.io/github/8bitAlex/raid"><img src="https://codecov.io/github/8bitAlex/raid/graph/badge.svg?token=Z75V7I2TLW" alt="codecov"></a>
 <a href="https://goreportcard.com/report/github.com/8bitAlex/raid"><img src="https://goreportcard.com/badge/github.com/8bitAlex/raid" alt="Go Report Card"></a>
 <br>
-<img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2F8bitAlex%2Fraid%2Fmain%2Fsrc%2Fresources%2Fapp.properties&search=version%3D(.%2B)&replace=%241&label=Latest&color=blue" alt="Latest">
 <img src="https://img.shields.io/github/v/release/8bitAlex/raid?label=Stable&color=green" alt="Stable">
+<img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2F8bitAlex%2Fraid%2Fmain%2Fsrc%2Fresources%2Fapp.properties&search=version%3D(.%2B)&replace=%241&label=Latest&color=blue" alt="Latest">
+<img src="https://img.shields.io/github/last-commit/8bitAlex/raid?label=Last%20Updated" alt="Last Updated">
 <br>
 <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platforms">
 </p>
 
 <br/>
+<p>
+It's more than <i>just</i> a command runner.
+<p>
 
 <p align="center">
 <img src="docs/assets/raid-comparison.gif" alt="Raid vs. manual setup — side-by-side comparison">
