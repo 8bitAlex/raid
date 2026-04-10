@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 // repoRoot walks up from the package directory to find the repository root
@@ -564,5 +566,182 @@ func TestForceLoad_mergesRepoCommands(t *testing.T) {
 	}
 	if !names["repo-cmd"] {
 		t.Error("GetCommands() missing 'repo-cmd' merged from repo")
+	}
+}
+
+// --- ResetContext ---
+
+func TestResetContext_nilsContext(t *testing.T) {
+	setupTestConfig(t)
+	context = &Context{Profile: Profile{Name: "foo"}}
+	ResetContext()
+	if context != nil {
+		t.Errorf("ResetContext() did not nil context, got %v", context)
+	}
+}
+
+// --- initConfigReadOnly ---
+
+func TestInitConfigReadOnly_fileAbsent(t *testing.T) {
+	setupTestConfig(t)
+	// Point CfgPath at a non-existent file.
+	CfgPath = filepath.Join(t.TempDir(), "absent.toml")
+
+	ok := initConfigReadOnly()
+	if ok {
+		t.Error("initConfigReadOnly() = true for absent file, want false")
+	}
+}
+
+func TestInitConfigReadOnly_validFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+
+	oldCfgPath := CfgPath
+	t.Cleanup(func() {
+		CfgPath = oldCfgPath
+		viper.Reset()
+	})
+	CfgPath = cfgPath
+
+	// Create the file first so InitConfig works, then test read-only load.
+	if err := InitConfig(); err != nil {
+		t.Fatalf("InitConfig() error: %v", err)
+	}
+	viper.Reset()
+
+	CfgPath = cfgPath
+	ok := initConfigReadOnly()
+	if !ok {
+		t.Error("initConfigReadOnly() = false for existing valid config, want true")
+	}
+}
+
+// --- QuietLoad ---
+
+func TestQuietLoad_noConfigFile(t *testing.T) {
+	oldCfgPath := CfgPath
+	t.Cleanup(func() {
+		CfgPath = oldCfgPath
+		viper.Reset()
+	})
+	CfgPath = filepath.Join(t.TempDir(), "nonexistent.toml")
+
+	cmds := QuietLoad()
+	if cmds != nil {
+		t.Errorf("QuietLoad() = %v, want nil when config absent", cmds)
+	}
+}
+
+func TestQuietLoad_configExistsNoProfile(t *testing.T) {
+	setupTestConfig(t)
+
+	// Config exists but no profile is set — ForceLoad will not fail fatally,
+	// but GetCommands returns empty when context has no commands.
+	cmds := QuietLoad()
+	// Nil or empty are both acceptable; we just verify no panic.
+	_ = cmds
+}
+
+func TestQuietLoad_withProfile(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	profilePath := filepath.Join(dir, "profile.yaml")
+	os.WriteFile(profilePath, []byte("name: quiet-test\ncommands:\n  - name: mycmd\n    usage: My command\n    tasks:\n      - type: Shell\n        cmd: exit 0\n"), 0644)
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	if err := AddProfile(Profile{Name: "quiet-test", Path: profilePath}); err != nil {
+		t.Fatalf("AddProfile() error: %v", err)
+	}
+	if err := SetProfile("quiet-test"); err != nil {
+		t.Fatalf("SetProfile() error: %v", err)
+	}
+
+	cmds := QuietLoad()
+	names := make(map[string]bool)
+	for _, c := range cmds {
+		names[c.Name] = true
+	}
+	if !names["mycmd"] {
+		t.Errorf("QuietLoad() missing 'mycmd', got: %v", cmds)
+	}
+}
+
+// --- getPath ---
+
+func TestGetPath_emptyCfgPath(t *testing.T) {
+	old := CfgPath
+	t.Cleanup(func() { CfgPath = old })
+	CfgPath = ""
+	path := getPath()
+	if path == "" {
+		t.Error("getPath() returned empty string when CfgPath is empty")
+	}
+	if CfgPath == "" {
+		t.Error("getPath() did not set CfgPath when it was empty")
+	}
+}
+
+// --- loadRaidVars ---
+
+func TestLoadRaidVars_invalidFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "vars")
+	// Write content that godotenv cannot parse as valid dotenv.
+	os.WriteFile(p, []byte("===invalid==="), 0644)
+
+	old := raidVarsOverridePath
+	t.Cleanup(func() { raidVarsOverridePath = old })
+	raidVarsOverridePath = p
+
+	// Should not panic; error is printed to stderr and silently swallowed.
+	loadRaidVars()
+}
+
+// --- validateFile (empty YAML) ---
+
+func TestValidateSchema_emptyYAML(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}`), 0644)
+
+	dataPath := filepath.Join(dir, "empty.yaml")
+	os.WriteFile(dataPath, []byte(""), 0644)
+
+	err := ValidateSchema(dataPath, schemaPath)
+	if err == nil {
+		t.Fatal("ValidateSchema() expected error for empty YAML file")
+	}
+}
+
+func TestValidateSchema_validJSONArray(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"],"properties":{"name":{"type":"string"}}}`), 0644)
+
+	dataPath := filepath.Join(dir, "data.json")
+	os.WriteFile(dataPath, []byte(`[{"name":"a"},{"name":"b"}]`), 0644)
+
+	if err := ValidateSchema(dataPath, schemaPath); err != nil {
+		t.Errorf("ValidateSchema() on valid JSON array: %v", err)
+	}
+}
+
+func TestValidateSchema_invalidJSONArrayElement(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"],"additionalProperties":false,"properties":{"name":{"type":"string"}}}`), 0644)
+
+	dataPath := filepath.Join(dir, "data.json")
+	os.WriteFile(dataPath, []byte(`[{"name":"ok"},{"bad":"field"}]`), 0644)
+
+	err := ValidateSchema(dataPath, schemaPath)
+	if err == nil {
+		t.Fatal("ValidateSchema() expected error for invalid JSON array element")
 	}
 }
