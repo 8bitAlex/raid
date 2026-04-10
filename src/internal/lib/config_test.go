@@ -101,3 +101,44 @@ func TestSet_persistsKeyInViper(t *testing.T) {
 		t.Errorf("Set() did not persist key: got %q, want %q", got, "testvalue")
 	}
 }
+
+// TestInitConfig_createFileError covers the error branch where CreateFile fails.
+func TestInitConfig_createFileError(t *testing.T) {
+	// Use a regular file as a parent component, so CreateFile will fail with ENOTDIR.
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	oldCfgPath := CfgPath
+	t.Cleanup(func() {
+		CfgPath = oldCfgPath
+		viper.Reset()
+	})
+	CfgPath = filepath.Join(f.Name(), "subdir", "config.toml")
+
+	if err := InitConfig(); err == nil {
+		t.Fatal("InitConfig() expected error for invalid config path")
+	}
+}
+
+// TestGetOrCreateConfigFile_createError covers the CreateFile error branch.
+func TestGetOrCreateConfigFile_createError(t *testing.T) {
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	oldCfgPath := CfgPath
+	t.Cleanup(func() { CfgPath = oldCfgPath })
+	CfgPath = filepath.Join(f.Name(), "subdir", "config.toml")
+
+	_, err = getOrCreateConfigFile()
+	if err == nil {
+		t.Fatal("getOrCreateConfigFile() expected error")
+	}
+}

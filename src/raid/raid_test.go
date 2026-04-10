@@ -1,6 +1,7 @@
 package raid
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -298,6 +299,30 @@ func TestLoad_cached(t *testing.T) {
 		t.Fatalf("Load (cached): %v", err)
 	}
 }
+
+// TestInitialize_initConfigFatal covers the fatal branch when initConfigFn
+// returns an error, using the injected logFatalf to intercept os.Exit.
+func TestInitialize_initConfigFatal(t *testing.T) {
+	oldInit := initConfigFn
+	oldFatalf := logFatalf
+	t.Cleanup(func() {
+		initConfigFn = oldInit
+		logFatalf = oldFatalf
+	})
+
+	initConfigFn = func() error { return errTest }
+	fatalCalled := false
+	logFatalf = func(format string, args ...any) {
+		fatalCalled = true
+	}
+
+	Initialize()
+	if !fatalCalled {
+		t.Error("Initialize: logFatalf was not called on InitConfig error")
+	}
+}
+
+var errTest = fmt.Errorf("test error")
 
 // TestInitialize_profileLoadError covers the error branches in Initialize()
 // where Load() fails (broken profile) and LoadEnv() fails (nil context).

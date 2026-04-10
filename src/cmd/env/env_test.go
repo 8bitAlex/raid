@@ -314,3 +314,29 @@ func TestCommand_envFound_executeError(t *testing.T) {
 		t.Errorf("Command env execute error: got %q, want 'Failed to execute environment'", got)
 	}
 }
+
+// TestCommand_envSetError covers the env.Set error path by making the config
+// file read-only after setup so viper.WriteConfig fails.
+func TestCommand_envSetError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("file permissions not enforced as root")
+	}
+	setupConfigWithEnv(t, "setfail-profile", "dev")
+
+	// Make the config file read-only so Set (which calls viper.WriteConfig) fails.
+	if err := os.Chmod(lib.CfgPath, 0444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(lib.CfgPath, 0644) })
+
+	var buf bytes.Buffer
+	fakeCmd := &cobra.Command{}
+	fakeCmd.SetOut(&buf)
+	fakeCmd.SetErr(&buf)
+	Command.Run(fakeCmd, []string{"dev"})
+
+	got := buf.String()
+	if !strings.Contains(got, "Failed to switch environment") {
+		t.Errorf("Command env setError: got %q, want 'Failed to switch environment'", got)
+	}
+}

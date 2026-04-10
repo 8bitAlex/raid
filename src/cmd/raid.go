@@ -70,21 +70,38 @@ func isInfoCommand(args []string) bool {
 	return false
 }
 
+// Injectable dependencies for testing.
+var (
+	latestReleaseFn    = sys.LatestGitHubRelease
+	latestPreReleaseFn = sys.LatestGitHubPreRelease
+	osExit             = os.Exit
+)
+
 func Execute() {
-	info := isInfoCommand(os.Args)
+	code := executeRoot(os.Args)
+	if code != 0 {
+		osExit(code)
+	}
+}
+
+// executeRoot performs the full Execute flow and returns an exit code.
+// Returns 0 on success. Extracted from Execute() so tests can observe the
+// exit code without os.Exit terminating the test process.
+func executeRoot(args []string) int {
+	info := isInfoCommand(args)
 	environment, _ := raid.GetProperty(raid.PropertyEnvironment)
 
 	// Start version check early so network latency overlaps with initialization.
 	updateCh := make(chan string, 1)
 	go func() {
 		if raid.Environment(environment) == raid.EnvironmentPreview {
-			updateCh <- sys.LatestGitHubPreRelease("8bitalex/raid")
+			updateCh <- latestPreReleaseFn("8bitalex/raid")
 		} else {
-			updateCh <- sys.LatestGitHubRelease("8bitalex/raid")
+			updateCh <- latestReleaseFn("8bitalex/raid")
 		}
 	}()
 
-	applyConfigFlag(os.Args)
+	applyConfigFlag(args)
 	var cmds []lib.Command
 	if info {
 		// Best-effort, read-only load: no config file creation, no warnings.
@@ -131,14 +148,19 @@ func Execute() {
 	rootCmd.SilenceUsage = true
 	registerUserCommands(rootCmd, cmds)
 
+	// Reset args so cobra parses from our slice rather than os.Args when the
+	// caller is providing a different args list (e.g. during tests).
+	rootCmd.SetArgs(args[1:])
+
 	if err := rootCmd.Execute(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.ExitCode())
+			return exitErr.ExitCode()
 		}
 		fmt.Fprintln(os.Stderr, "raid:", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // registerUserCommands adds user-defined commands to root.

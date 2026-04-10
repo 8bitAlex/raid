@@ -560,3 +560,247 @@ func TestRunCreateWizard_withRepoConfigs(t *testing.T) {
 		t.Errorf("runCreateWizard: expected raid.yaml at %s, got: %v", raidYaml, err)
 	}
 }
+
+// --- runAddProfile (direct, not via os.Exit subprocess) ---
+
+func TestRunAddProfile_fileNotFound(t *testing.T) {
+	setupConfig(t)
+	_ = captureStdout(t, func() {
+		code := runAddProfile("/nonexistent/path.yaml")
+		if code != 1 {
+			t.Errorf("runAddProfile fileNotFound: code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunAddProfile_invalidProfile(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.raid.yaml")
+	os.WriteFile(path, []byte("name: bad\nextra: notallowed\n"), 0644)
+
+	_ = captureStdout(t, func() {
+		code := runAddProfile(path)
+		if code != 1 {
+			t.Errorf("runAddProfile invalid: code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunAddProfile_unmarshalError(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.json")
+	// Write an invalid JSON that validates (e.g., the file is technically valid JSON
+	// but unmarshal may fail for profile). Actually, need something that passes
+	// Validate but fails Unmarshal. With a .json extension but invalid JSON:
+	os.WriteFile(path, []byte("not json at all"), 0644)
+
+	_ = captureStdout(t, func() {
+		code := runAddProfile(path)
+		if code != 1 {
+			t.Errorf("runAddProfile bad file: code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunAddProfile_success(t *testing.T) {
+	setupConfig(t)
+	path := validProfileFile(t, "newsuccess")
+	_ = captureStdout(t, func() {
+		code := runAddProfile(path)
+		if code != 0 {
+			t.Errorf("runAddProfile success: code = %d, want 0", code)
+		}
+	})
+}
+
+func TestRunAddProfile_allDuplicates(t *testing.T) {
+	setupConfig(t)
+	path := validProfileFile(t, "dupprofile")
+	// Pre-add the profile so it's a duplicate
+	lib.AddProfile(lib.Profile{Name: "dupprofile", Path: path})
+
+	_ = captureStdout(t, func() {
+		code := runAddProfile(path)
+		if code != 0 {
+			t.Errorf("runAddProfile duplicates: code = %d, want 0", code)
+		}
+	})
+}
+
+func TestRunAddProfile_multiDocSuccess(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "multi.raid.yaml")
+	os.WriteFile(path, []byte("name: multi1\n---\nname: multi2\n"), 0644)
+
+	_ = captureStdout(t, func() {
+		code := runAddProfile(path)
+		if code != 0 {
+			t.Errorf("runAddProfile multi: code = %d, want 0", code)
+		}
+	})
+}
+
+// --- runCreateWizardCore (direct, not via os.Exit subprocess) ---
+
+// feedStdin wraps input text into a temporary *os.File for runCreateWizardCore.
+func feedStdin(t *testing.T, input string) *os.File {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString(input)
+	w.Close()
+	t.Cleanup(func() { r.Close() })
+	return r
+}
+
+func TestRunCreateWizardCore_success(t *testing.T) {
+	setupConfig(t)
+	savePath := filepath.Join(t.TempDir(), "wiz.raid.yaml")
+	input := "wiz-profile\n" + savePath + "\nn\n"
+
+	_ = captureStdout(t, func() {
+		code := runCreateWizardCore(feedStdin(t, input))
+		if code != 0 {
+			t.Errorf("runCreateWizardCore: code = %d, want 0", code)
+		}
+	})
+
+	if _, err := os.Stat(savePath); err != nil {
+		t.Errorf("profile file not created: %v", err)
+	}
+}
+
+func TestRunCreateWizardCore_writeFileError(t *testing.T) {
+	setupConfig(t)
+	// Use a file as parent dir so MkdirAll fails.
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	savePath := filepath.Join(f.Name(), "subdir", "wiz.raid.yaml")
+	input := "failwrite\n" + savePath + "\nn\n"
+
+	_ = captureStdout(t, func() {
+		code := runCreateWizardCore(feedStdin(t, input))
+		if code != 1 {
+			t.Errorf("runCreateWizardCore writeError: code = %d, want 1", code)
+		}
+	})
+}
+
+// TestRunCreateWizardCore_noRepos exercises the branch where there are no
+// repos collected, so the CreateRepoConfigs prompt is skipped.
+func TestRunCreateWizardCore_noReposSkipsConfig(t *testing.T) {
+	setupConfig(t)
+	savePath := filepath.Join(t.TempDir(), "norepos.raid.yaml")
+	// Only name and save path, then "n" for no repos
+	input := "norepos-profile\n" + savePath + "\nn\n"
+
+	_ = captureStdout(t, func() {
+		code := runCreateWizardCore(feedStdin(t, input))
+		if code != 0 {
+			t.Errorf("runCreateWizardCore no repos: code = %d, want 0", code)
+		}
+	})
+}
+
+// TestAddProfileCmd_wrapperExits verifies the wrapper calls osExit on error.
+func TestAddProfileCmd_wrapperExits(t *testing.T) {
+	setupConfig(t)
+	oldExit := osExit
+	defer func() { osExit = oldExit }()
+
+	exitCode := 0
+	osExit = func(code int) { exitCode = code }
+
+	_ = captureStdout(t, func() {
+		AddProfileCmd.Run(&cobra.Command{}, []string{"/nonexistent/file.yaml"})
+	})
+	if exitCode != 1 {
+		t.Errorf("AddProfileCmd wrapper: exitCode = %d, want 1", exitCode)
+	}
+}
+
+// TestAddProfileCmd_wrapperSuccess verifies the wrapper does not call osExit on success.
+func TestAddProfileCmd_wrapperSuccess(t *testing.T) {
+	setupConfig(t)
+	oldExit := osExit
+	defer func() { osExit = oldExit }()
+
+	exitCode := -1
+	osExit = func(code int) { exitCode = code }
+
+	path := validProfileFile(t, "wrappersuccess")
+	_ = captureStdout(t, func() {
+		AddProfileCmd.Run(&cobra.Command{}, []string{path})
+	})
+	if exitCode != -1 {
+		t.Errorf("AddProfileCmd wrapper: osExit should not be called, got code %d", exitCode)
+	}
+}
+
+// TestRunCreateWizard_wrapperExits verifies runCreateWizard calls osExit on error.
+func TestRunCreateWizard_wrapperExits(t *testing.T) {
+	setupConfig(t)
+	oldExit := osExit
+	defer func() { osExit = oldExit }()
+
+	exitCode := 0
+	osExit = func(code int) { exitCode = code }
+
+	// Redirect stdin to a pipe that makes WriteFile fail.
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+	savePath := filepath.Join(f.Name(), "subdir", "wiz.yaml")
+	input := "failwrapper\n" + savePath + "\nn\n"
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.WriteString(input)
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		stdinR.Close()
+	})
+
+	_ = captureStdout(t, func() {
+		runCreateWizard(&cobra.Command{}, nil)
+	})
+	if exitCode != 1 {
+		t.Errorf("runCreateWizard wrapper: exitCode = %d, want 1", exitCode)
+	}
+}
+
+// TestRunAddProfile_setActiveSuccess covers the branch where the active profile
+// is zero and AddProfile sets a new one.
+func TestRunAddProfile_setActiveSuccess(t *testing.T) {
+	setupConfig(t)
+	// Ensure no active profile
+	path := validProfileFile(t, "firstprofile")
+	_ = captureStdout(t, func() {
+		code := runAddProfile(path)
+		if code != 0 {
+			t.Errorf("runAddProfile setActive: code = %d, want 0", code)
+		}
+	})
+	if lib.GetProfile().Name != "firstprofile" {
+		t.Errorf("expected 'firstprofile' to be active, got %q", lib.GetProfile().Name)
+	}
+}

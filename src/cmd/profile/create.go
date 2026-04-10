@@ -19,8 +19,20 @@ var CreateProfileCmd = &cobra.Command{
 	Run:   runCreateWizard,
 }
 
+// osExit is injectable for testing.
+var osExit = os.Exit
+
 func runCreateWizard(cmd *cobra.Command, args []string) {
-	reader := bufio.NewReader(os.Stdin)
+	if code := runCreateWizardCore(os.Stdin); code != 0 {
+		osExit(code)
+	}
+}
+
+// runCreateWizardCore performs the create-profile wizard and returns an exit
+// code. Extracted from runCreateWizard so tests can observe the exit code
+// without os.Exit terminating the test process.
+func runCreateWizardCore(input *os.File) int {
+	reader := bufio.NewReader(input)
 
 	var name string
 	for {
@@ -44,26 +56,26 @@ func runCreateWizard(cmd *cobra.Command, args []string) {
 	draft := pro.ProfileDraft{Name: name, Repositories: repos}
 	if err := pro.WriteFile(draft, savePath); err != nil {
 		fmt.Printf("Failed to write profile: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	if err := pro.Validate(savePath); err != nil {
 		fmt.Printf("Failed to register profile: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	profiles, err := pro.Unmarshal(savePath)
 	if err != nil {
 		fmt.Printf("Failed to register profile: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	if err := pro.AddAll(profiles); err != nil {
 		fmt.Printf("Failed to register profile: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	if pro.Get().IsZero() {
 		if err := pro.Set(name); err != nil {
 			fmt.Printf("Failed to set active profile: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("Profile '%s' set as active.\n", name)
 	}
@@ -73,4 +85,5 @@ func runCreateWizard(cmd *cobra.Command, args []string) {
 	if len(repos) > 0 && sys.ReadYesNo(reader, "\nCreate a raid.yaml config for each repository? [y/N]: ") {
 		pro.CreateRepoConfigs(repos)
 	}
+	return 0
 }

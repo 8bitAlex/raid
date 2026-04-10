@@ -801,6 +801,32 @@ func TestExecuteTask_http_serverError(t *testing.T) {
 	}
 }
 
+// --- execShell empty cmd ---
+
+func TestExecuteTask_shell_emptyCmd(t *testing.T) {
+	task := Task{Type: Shell, Cmd: ""}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("execShell with empty cmd: expected error")
+	}
+}
+
+// --- execTemplate missing src/dest ---
+
+func TestExecuteTask_template_missingSrc(t *testing.T) {
+	task := Task{Type: Template, Dest: filepath.Join(t.TempDir(), "out.txt")}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("execTemplate missing src: expected error")
+	}
+}
+
+func TestExecuteTask_template_missingDest(t *testing.T) {
+	task := Task{Type: Template, Src: "/some/src.txt"}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("execTemplate missing dest: expected error")
+	}
+}
+
 // --- execTemplate success ---
 
 func TestExecuteTask_template_success(t *testing.T) {

@@ -868,3 +868,112 @@ func TestRaidVarsPath_default(t *testing.T) {
 		t.Error("raidVarsPath() returned empty string")
 	}
 }
+
+// TestInstall_nilContext tests the early return branch when context is nil.
+func TestInstall_nilContext(t *testing.T) {
+	setupTestConfig(t)
+	context = nil
+
+	if err := Install(0); err == nil {
+		t.Error("Install() expected error when context is nil")
+	}
+}
+
+// TestQuietLoad_forceLoadFails covers QuietLoad when ForceLoad returns an error.
+func TestQuietLoad_forceLoadFails(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	// Set up a profile that references a bad repo config to cause ForceLoad to fail.
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "myrepo")
+	os.MkdirAll(repoDir, 0755)
+	// Invalid raid.yaml: violates schema.
+	os.WriteFile(filepath.Join(repoDir, RaidConfigFileName), []byte("invalid: [unclosed"), 0644)
+
+	profilePath := filepath.Join(dir, "profile.yaml")
+	content := "name: qlfail\nrepositories:\n  - name: myrepo\n    path: " + repoDir + "\n    url: http://example.com/repo.git\n"
+	os.WriteFile(profilePath, []byte(content), 0644)
+
+	if err := AddProfile(Profile{Name: "qlfail", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("qlfail"); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	ResetContext()
+	cmds := QuietLoad()
+	// Should return nil when ForceLoad fails.
+	if cmds != nil {
+		t.Errorf("QuietLoad with ForceLoad failure = %v, want nil", cmds)
+	}
+}
+
+// TestForceLoad_withGroups covers the loop over profile.Groups.
+func TestForceLoad_withGroups(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	profilePath := filepath.Join(dir, "groups.yaml")
+	content := "name: groups\ntask_groups:\n  build:\n    - type: Shell\n      cmd: echo build\n  test:\n    - type: Shell\n      cmd: echo test\n"
+	os.WriteFile(profilePath, []byte(content), 0644)
+
+	if err := AddProfile(Profile{Name: "groups", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("groups"); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	if err := ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad with groups: %v", err)
+	}
+	if context == nil || len(context.Profile.Groups) != 2 {
+		t.Errorf("ForceLoad: expected 2 groups, got %v", context)
+	}
+}
+
+// TestInstallRepo_installTaskError covers the installRepo error path when
+// install tasks fail (ExecuteTasks returns an error).
+func TestInstallRepo_installTaskError(t *testing.T) {
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+
+	context = &Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/path",
+			Repositories: []Repo{
+				{
+					Name: "repo1",
+					Path: dir,
+					URL:  "http://example.com",
+					Install: OnInstall{
+						Tasks: []Task{{Type: Shell, Cmd: "exit 1"}},
+					},
+				},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	err := InstallRepo("repo1")
+	if err == nil {
+		t.Fatal("InstallRepo expected error from failing install task")
+	}
+	if !strings.Contains(err.Error(), "failed to execute install tasks") {
+		t.Errorf("error %q should mention install task failure", err.Error())
+	}
+}
