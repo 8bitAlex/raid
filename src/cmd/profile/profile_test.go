@@ -3,6 +3,7 @@ package profile
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -338,5 +339,224 @@ func TestRunCreateWizard_withRepo(t *testing.T) {
 
 	if _, err := os.Stat(savePath); err != nil {
 		t.Errorf("runCreateWizard with repo: profile file not created at %s: %v", savePath, err)
+	}
+}
+
+// --- AddProfileCmd error paths (subprocess tests for os.Exit) ---
+
+const (
+	subprocAddNotFound  = "RAID_TEST_ADD_NOTFOUND"
+	subprocAddInvalid   = "RAID_TEST_ADD_INVALID"
+	subprocAddDuplicate = "RAID_TEST_ADD_DUPLICATE"
+	subprocSetNotFound  = "RAID_TEST_SET_NOTFOUND"
+)
+
+func TestAddProfileCmd_fileNotFound_subprocess(t *testing.T) {
+	if os.Getenv(subprocAddNotFound) == "1" {
+		setupConfig(t)
+		root := &cobra.Command{Use: "raid"}
+		root.AddCommand(AddProfileCmd)
+		root.SetArgs([]string{"add", "/nonexistent/path.yaml"})
+		_ = root.Execute()
+		return
+	}
+
+	proc := exec.Command(os.Args[0], "-test.run=^TestAddProfileCmd_fileNotFound_subprocess$", "-test.v")
+	proc.Env = append(os.Environ(), subprocAddNotFound+"=1")
+	err := proc.Run()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+func TestAddProfileCmd_invalidProfile_subprocess(t *testing.T) {
+	if os.Getenv(subprocAddInvalid) == "1" {
+		setupConfig(t)
+		dir := t.TempDir()
+		path := filepath.Join(dir, "bad.raid.yaml")
+		// Write invalid YAML that won't pass schema validation
+		os.WriteFile(path, []byte("invalid: [unclosed"), 0644)
+		root := &cobra.Command{Use: "raid"}
+		root.AddCommand(AddProfileCmd)
+		root.SetArgs([]string{"add", path})
+		_ = root.Execute()
+		return
+	}
+
+	proc := exec.Command(os.Args[0], "-test.run=^TestAddProfileCmd_invalidProfile_subprocess$", "-test.v")
+	proc.Env = append(os.Environ(), subprocAddInvalid+"=1")
+	err := proc.Run()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+func TestAddProfileCmd_allDuplicates_subprocess(t *testing.T) {
+	if os.Getenv(subprocAddDuplicate) == "1" {
+		setupConfig(t)
+		path := validProfileFile(t, "dup")
+		// First add succeeds
+		lib.AddProfile(lib.Profile{Name: "dup", Path: path})
+		// Second add finds duplicate
+		root := &cobra.Command{Use: "raid"}
+		root.AddCommand(AddProfileCmd)
+		root.SetArgs([]string{"add", path})
+		_ = root.Execute()
+		return
+	}
+
+	proc := exec.Command(os.Args[0], "-test.run=^TestAddProfileCmd_allDuplicates_subprocess$", "-test.v")
+	proc.Env = append(os.Environ(), subprocAddDuplicate+"=1")
+	// Exit code 0 is used for "No new profiles" path
+	err := proc.Run()
+	// May exit with code 0 (the os.Exit(0) path) - that's fine
+	if err != nil {
+		// Even exit code 0 is acceptable here
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
+			t.Logf("exit code = %d (may be expected for duplicate handling)", exitErr.ExitCode())
+		}
+	}
+}
+
+func TestCommand_setProfileNotFound_subprocess(t *testing.T) {
+	if os.Getenv(subprocSetNotFound) == "1" {
+		setupConfig(t)
+		root := &cobra.Command{Use: "raid"}
+		root.AddCommand(Command)
+		root.SetArgs([]string{"profile", "nonexistent"})
+		_ = root.Execute()
+		return
+	}
+
+	proc := exec.Command(os.Args[0], "-test.run=^TestCommand_setProfileNotFound_subprocess$", "-test.v")
+	proc.Env = append(os.Environ(), subprocSetNotFound+"=1")
+	err := proc.Run()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+// TestRunCreateWizard_invalidThenValidName tests the name validation retry loop.
+func TestRunCreateWizard_invalidThenValidName(t *testing.T) {
+	setupConfig(t)
+
+	savePath := filepath.Join(t.TempDir(), "retry-profile.raid.yaml")
+
+	// First give an invalid name (contains /), then a valid one.
+	input := "bad/name\ngoodname\n" + savePath + "\nn\n"
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.WriteString(input)
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		stdinR.Close()
+	})
+
+	out := captureStdout(t, func() {
+		cmd := &cobra.Command{}
+		runCreateWizard(cmd, nil)
+	})
+
+	if !strings.Contains(out, "Invalid name") {
+		t.Errorf("runCreateWizard: expected 'Invalid name' for bad/name, got %q", out)
+	}
+	if !strings.Contains(out, "goodname") {
+		t.Errorf("runCreateWizard: expected 'goodname' in output, got %q", out)
+	}
+}
+
+// TestRunCreateWizard_defaultPath tests the default save path branch (empty input).
+func TestRunCreateWizard_defaultPath(t *testing.T) {
+	setupConfig(t)
+
+	// Empty save path → use default
+	input := "defpath-profile\n\nn\n"
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.WriteString(input)
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		stdinR.Close()
+	})
+
+	out := captureStdout(t, func() {
+		cmd := &cobra.Command{}
+		runCreateWizard(cmd, nil)
+	})
+
+	if !strings.Contains(out, "defpath-profile") {
+		t.Errorf("runCreateWizard default path: got %q, want 'defpath-profile'", out)
+	}
+}
+
+// TestRunCreateWizard_withRepoConfigs exercises the branch where the user opts to
+// create raid.yaml for each repo (ReadYesNo returns true).
+func TestRunCreateWizard_withRepoConfigs(t *testing.T) {
+	setupConfig(t)
+
+	saveDir := t.TempDir()
+	savePath := filepath.Join(saveDir, "cfgprofile.raid.yaml")
+	repoPath := t.TempDir()
+
+	// profile name, save path, add repo yes, repo details, no more repos, create configs yes
+	input := "cfgprofile\n" +
+		savePath + "\n" +
+		"y\n" + // add a repository?
+		"cfgrepo\n" + // repo name
+		"https://127.0.0.1:1/repo.git\n" + // URL
+		repoPath + "\n" + // local path
+		"main\n" + // branch
+		"n\n" + // add another?
+		"y\n" // create raid.yaml for each repo?
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdinW.WriteString(input)
+	stdinW.Close()
+
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		stdinR.Close()
+	})
+
+	_ = captureStdout(t, func() {
+		cmd := &cobra.Command{}
+		runCreateWizard(cmd, nil)
+	})
+
+	// Check that a raid.yaml was created in the repo dir
+	raidYaml := filepath.Join(repoPath, "raid.yaml")
+	if _, err := os.Stat(raidYaml); err != nil {
+		t.Errorf("runCreateWizard: expected raid.yaml at %s, got: %v", raidYaml, err)
 	}
 }

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,5 +90,74 @@ func TestInstallCommand_oneArg_subprocess(t *testing.T) {
 	}
 	if exitErr.ExitCode() != 1 {
 		t.Errorf("install one-arg exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+// setupConfigWithProfile creates a config with a profile that has a local repo
+// that can actually be cloned.
+func setupConfigWithProfile(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	old := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = old
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	// Create a bare git repo that can be cloned
+	bareRepo := filepath.Join(dir, "bare.git")
+	cmd := exec.Command("git", "init", "--bare", bareRepo)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git init --bare: %v", err)
+	}
+
+	cloneDest := filepath.Join(dir, "cloned")
+
+	profilePath := filepath.Join(dir, "test.raid.yaml")
+	content := fmt.Sprintf("name: test\nrepositories:\n  - name: repo1\n    url: file://%s\n    path: %s\n", bareRepo, cloneDest)
+	if err := os.WriteFile(profilePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lib.AddProfile(lib.Profile{Name: "test", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad: %v", err)
+	}
+
+	return cloneDest
+}
+
+func TestInstallCommand_noArgs_success(t *testing.T) {
+	cloneDest := setupConfigWithProfile(t)
+
+	// Call the Run handler directly - on success it just returns without log.Fatalf
+	cmd := &cobra.Command{}
+	Command.Run(cmd, []string{})
+
+	// Verify the repo was cloned
+	if _, err := os.Stat(cloneDest); err != nil {
+		t.Errorf("install: expected repo cloned at %s, got: %v", cloneDest, err)
+	}
+}
+
+func TestInstallCommand_oneArg_success(t *testing.T) {
+	cloneDest := setupConfigWithProfile(t)
+
+	cmd := &cobra.Command{}
+	Command.Run(cmd, []string{"repo1"})
+
+	if _, err := os.Stat(cloneDest); err != nil {
+		t.Errorf("install repo1: expected repo cloned at %s, got: %v", cloneDest, err)
 	}
 }

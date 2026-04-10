@@ -177,3 +177,161 @@ func TestInitialize_withTempConfig(t *testing.T) {
 
 	Initialize()
 }
+
+func TestInitialize_withProfile(t *testing.T) {
+	dir := t.TempDir()
+	old := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = old
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	// Create a valid profile
+	profilePath := filepath.Join(dir, "test.raid.yaml")
+	if err := os.WriteFile(profilePath, []byte("name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "test", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Suppress stderr warnings
+	origStderr := os.Stderr
+	devNull, _ := os.Open(os.DevNull)
+	os.Stderr = devNull
+	t.Cleanup(func() {
+		os.Stderr = origStderr
+		devNull.Close()
+	})
+
+	Initialize()
+}
+
+func TestConfigPath_pointer(t *testing.T) {
+	if ConfigPath == nil {
+		t.Fatal("ConfigPath is nil")
+	}
+	// It should point to the same underlying value as lib.CfgPath
+	old := *ConfigPath
+	*ConfigPath = "/test/path"
+	if lib.CfgPath != "/test/path" {
+		t.Errorf("ConfigPath doesn't point to lib.CfgPath")
+	}
+	*ConfigPath = old
+}
+
+func TestForceLoad_withProfile(t *testing.T) {
+	dir := t.TempDir()
+	old := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = old
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	profilePath := filepath.Join(dir, "test.raid.yaml")
+	if err := os.WriteFile(profilePath, []byte("name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "test", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ForceLoad()
+	if err != nil {
+		t.Fatalf("ForceLoad with profile: %v", err)
+	}
+
+	// After ForceLoad, GetCommands should work without panic
+	cmds := GetCommands()
+	_ = cmds
+}
+
+func TestLoad_cached(t *testing.T) {
+	dir := t.TempDir()
+	old := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = old
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	profilePath := filepath.Join(dir, "test.raid.yaml")
+	if err := os.WriteFile(profilePath, []byte("name: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "test", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// First call loads
+	if err := ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad: %v", err)
+	}
+	// Second call should use cache
+	if err := Load(); err != nil {
+		t.Fatalf("Load (cached): %v", err)
+	}
+}
+
+// TestInitialize_profileLoadError covers the error branches in Initialize()
+// where Load() fails (broken profile) and LoadEnv() fails (nil context).
+func TestInitialize_profileLoadError(t *testing.T) {
+	dir := t.TempDir()
+	old := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = old
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	// Register a profile pointing to a non-existent file so Load() fails.
+	if err := lib.AddProfile(lib.Profile{Name: "broken", Path: "/nonexistent/broken.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("broken"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Suppress stderr (Initialize prints warnings there).
+	origStderr := os.Stderr
+	devNull, _ := os.Open(os.DevNull)
+	os.Stderr = devNull
+	t.Cleanup(func() {
+		os.Stderr = origStderr
+		devNull.Close()
+	})
+
+	// Initialize should not panic — Load error is non-fatal.
+	Initialize()
+}

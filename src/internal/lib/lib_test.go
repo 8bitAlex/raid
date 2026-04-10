@@ -745,3 +745,126 @@ func TestValidateSchema_invalidJSONArrayElement(t *testing.T) {
 		t.Fatal("ValidateSchema() expected error for invalid JSON array element")
 	}
 }
+
+// --- validateWithEmbeddedSchema ---
+
+func TestValidateWithEmbeddedSchema_missingFile(t *testing.T) {
+	err := validateWithEmbeddedSchema("/nonexistent/file.yaml", "raid-profile.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for missing file")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_emptyPath(t *testing.T) {
+	err := validateWithEmbeddedSchema("", "raid-profile.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for empty path")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_validProfile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	os.WriteFile(path, []byte("name: test\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "raid-profile.schema.json")
+	if err != nil {
+		t.Errorf("validateWithEmbeddedSchema valid: %v", err)
+	}
+}
+
+func TestValidateWithEmbeddedSchema_invalidProfile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	os.WriteFile(path, []byte("notaname: test\nextra: bad\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "raid-profile.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for invalid profile")
+	}
+}
+
+// --- validateFile multi-doc YAML ---
+
+func TestValidateSchema_multiDocYAML(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"],"properties":{"name":{"type":"string"}}}`), 0644)
+
+	dataPath := filepath.Join(dir, "multi.yaml")
+	os.WriteFile(dataPath, []byte("name: first\n---\nname: second\n"), 0644)
+
+	if err := ValidateSchema(dataPath, schemaPath); err != nil {
+		t.Errorf("ValidateSchema() on valid multi-doc YAML: %v", err)
+	}
+}
+
+func TestValidateSchema_multiDocYAML_invalidSecond(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"],"additionalProperties":false,"properties":{"name":{"type":"string"}}}`), 0644)
+
+	dataPath := filepath.Join(dir, "multi.yaml")
+	os.WriteFile(dataPath, []byte("name: first\n---\nbad: field\n"), 0644)
+
+	err := ValidateSchema(dataPath, schemaPath)
+	if err == nil {
+		t.Fatal("ValidateSchema() expected error for invalid second YAML document")
+	}
+}
+
+// --- session ---
+
+func TestStartEndSession(t *testing.T) {
+	startSession()
+	if commandSession == nil {
+		t.Fatal("startSession() did not create session")
+	}
+	if commandSession.vars == nil || commandSession.baseline == nil {
+		t.Fatal("startSession() session has nil maps")
+	}
+	endSession()
+	if commandSession != nil {
+		t.Fatal("endSession() did not clear session")
+	}
+}
+
+// --- expandRaid with session ---
+
+func TestExpandRaid_sessionVarLookup(t *testing.T) {
+	startSession()
+	defer endSession()
+
+	commandSession.mu.Lock()
+	commandSession.vars["RAID_EXPAND_SESS"] = "from-session"
+	commandSession.mu.Unlock()
+
+	got := expandRaid("$RAID_EXPAND_SESS")
+	if got != "from-session" {
+		t.Errorf("expandRaid session lookup = %q, want %q", got, "from-session")
+	}
+}
+
+// --- raidVarsPath ---
+
+func TestRaidVarsPath_overridePath(t *testing.T) {
+	old := raidVarsOverridePath
+	raidVarsOverridePath = "/custom/path/vars"
+	t.Cleanup(func() { raidVarsOverridePath = old })
+
+	got := raidVarsPath()
+	if got != "/custom/path/vars" {
+		t.Errorf("raidVarsPath() = %q, want %q", got, "/custom/path/vars")
+	}
+}
+
+func TestRaidVarsPath_default(t *testing.T) {
+	old := raidVarsOverridePath
+	raidVarsOverridePath = ""
+	t.Cleanup(func() { raidVarsOverridePath = old })
+
+	got := raidVarsPath()
+	if got == "" {
+		t.Error("raidVarsPath() returned empty string")
+	}
+}

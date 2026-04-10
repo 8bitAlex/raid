@@ -459,6 +459,7 @@ func initRepoWithBranch(t *testing.T, branch string) string {
 		{"git", "-C", dir, "symbolic-ref", "HEAD", "refs/heads/" + branch},
 		{"git", "-C", dir, "config", "user.email", "test@example.com"},
 		{"git", "-C", dir, "config", "user.name", "Test"},
+		{"git", "-C", dir, "config", "commit.gpgSign", "false"},
 		{"git", "-C", dir, "commit", "--allow-empty", "-m", "init"},
 	}
 	for _, cmd := range cmds {
