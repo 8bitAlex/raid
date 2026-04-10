@@ -676,6 +676,59 @@ func TestExecute_inProcess_nonInfoCommand(t *testing.T) {
 	Execute()
 }
 
+// TestExecute_exitErrorPropagation covers the errors.As(err, &exitErr) branch
+// by registering a user command whose task exits with a non-zero code.
+func TestExecute_exitErrorPropagation(t *testing.T) {
+	oldCfg := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = oldCfg
+		lib.ResetContext()
+		viper.Reset()
+	})
+
+	dir := t.TempDir()
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	// Build a profile with a command that runs "exit 5".
+	profilePath := filepath.Join(dir, "exitcmd.raid.yaml")
+	content := "name: exitcmd\ncommands:\n  - name: exitfive\n    tasks:\n      - type: Shell\n        cmd: exit 5\n"
+	if err := os.WriteFile(profilePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "exitcmd", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("exitcmd"); err != nil {
+		t.Fatal(err)
+	}
+
+	oldFn := latestReleaseFn
+	latestReleaseFn = func(string) string { return "" }
+	t.Cleanup(func() { latestReleaseFn = oldFn })
+
+	origStdout := os.Stdout
+	origStderr := os.Stderr
+	devNull, _ := os.Open(os.DevNull)
+	os.Stdout = devNull
+	os.Stderr = devNull
+	t.Cleanup(func() {
+		os.Stdout = origStdout
+		os.Stderr = origStderr
+		devNull.Close()
+	})
+
+	// The user command "exitfive" runs a shell task that exits with code 5.
+	// executeRoot should unwrap the *exec.ExitError and return that code.
+	code := executeRoot([]string{"raid", "exitfive"})
+	if code != 5 {
+		t.Errorf("executeRoot with exit 5 command: code = %d, want 5", code)
+	}
+}
+
 // TestExecute_nonInfoUpdateNotice covers the non-info update notice path.
 // The goroutine typically completes before the select runs when the mock
 // fetcher returns immediately, triggering the notice display.

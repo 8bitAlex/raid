@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -674,11 +675,18 @@ func TestAddProfiles_errorPropagation(t *testing.T) {
 
 // TestWriteProfileFile_error tests the error path when the save path is invalid.
 func TestWriteProfileFile_error(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skip("file permissions not enforced as root")
+	if runtime.GOOS == "windows" {
+		t.Skip("path semantics differ on Windows")
 	}
-	// Write to a non-existent directory that we can't create.
-	err := WriteProfileFile(ProfileDraft{Name: "x"}, "/proc/nonexistent/profile.yaml")
+	// Use a regular file as a parent component so MkdirAll fails.
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	err = WriteProfileFile(ProfileDraft{Name: "x"}, filepath.Join(f.Name(), "sub", "profile.yaml"))
 	if err == nil {
 		t.Error("WriteProfileFile expected error for invalid path")
 	}

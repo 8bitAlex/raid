@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -320,6 +321,9 @@ func TestCommand_envFound_executeError(t *testing.T) {
 func TestCommand_envSetError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("file permissions not enforced as root")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod file permissions behave differently on Windows")
 	}
 	setupConfigWithEnv(t, "setfail-profile", "dev")
 

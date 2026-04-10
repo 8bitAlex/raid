@@ -3,6 +3,7 @@ package lib
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -104,6 +105,9 @@ func TestSet_persistsKeyInViper(t *testing.T) {
 
 // TestInitConfig_createFileError covers the error branch where CreateFile fails.
 func TestInitConfig_createFileError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-as-parent-dir error semantics differ on Windows")
+	}
 	// Use a regular file as a parent component, so CreateFile will fail with ENOTDIR.
 	f, err := os.CreateTemp("", "raid-test-*")
 	if err != nil {
@@ -126,6 +130,9 @@ func TestInitConfig_createFileError(t *testing.T) {
 
 // TestGetOrCreateConfigFile_createError covers the CreateFile error branch.
 func TestGetOrCreateConfigFile_createError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-as-parent-dir error semantics differ on Windows")
+	}
 	f, err := os.CreateTemp("", "raid-test-*")
 	if err != nil {
 		t.Fatal(err)

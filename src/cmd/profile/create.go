@@ -22,6 +22,13 @@ var CreateProfileCmd = &cobra.Command{
 // osExit is injectable for testing.
 var osExit = os.Exit
 
+// Injectable profile-package functions for testing (shared across add.go).
+var (
+	proWriteFile         = pro.WriteFile
+	proCollectRepos      = pro.CollectRepos
+	proCreateRepoConfigs = pro.CreateRepoConfigs
+)
+
 func runCreateWizard(cmd *cobra.Command, args []string) {
 	if code := runCreateWizardCore(os.Stdin); code != 0 {
 		osExit(code)
@@ -51,29 +58,29 @@ func runCreateWizardCore(input *os.File) int {
 		savePath = sys.ExpandPath(rawPath)
 	}
 
-	repos := pro.CollectRepos(reader)
+	repos := proCollectRepos(reader)
 
 	draft := pro.ProfileDraft{Name: name, Repositories: repos}
-	if err := pro.WriteFile(draft, savePath); err != nil {
+	if err := proWriteFile(draft, savePath); err != nil {
 		fmt.Printf("Failed to write profile: %v\n", err)
 		return 1
 	}
 
-	if err := pro.Validate(savePath); err != nil {
+	if err := proValidate(savePath); err != nil {
 		fmt.Printf("Failed to register profile: %v\n", err)
 		return 1
 	}
-	profiles, err := pro.Unmarshal(savePath)
+	profiles, err := proUnmarshal(savePath)
 	if err != nil {
 		fmt.Printf("Failed to register profile: %v\n", err)
 		return 1
 	}
-	if err := pro.AddAll(profiles); err != nil {
+	if err := proAddAll(profiles); err != nil {
 		fmt.Printf("Failed to register profile: %v\n", err)
 		return 1
 	}
-	if pro.Get().IsZero() {
-		if err := pro.Set(name); err != nil {
+	if proGet().IsZero() {
+		if err := proSet(name); err != nil {
 			fmt.Printf("Failed to set active profile: %v\n", err)
 			return 1
 		}
@@ -83,7 +90,7 @@ func runCreateWizardCore(input *os.File) int {
 	fmt.Printf("\nProfile '%s' created at %s\n", name, savePath)
 
 	if len(repos) > 0 && sys.ReadYesNo(reader, "\nCreate a raid.yaml config for each repository? [y/N]: ") {
-		pro.CreateRepoConfigs(repos)
+		proCreateRepoConfigs(repos)
 	}
 	return 0
 }

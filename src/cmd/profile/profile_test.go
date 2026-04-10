@@ -1,14 +1,18 @@
 package profile
 
 import (
+	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -676,6 +680,9 @@ func TestRunCreateWizardCore_success(t *testing.T) {
 }
 
 func TestRunCreateWizardCore_writeFileError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-as-parent-dir error semantics differ on Windows")
+	}
 	setupConfig(t)
 	// Use a file as parent dir so MkdirAll fails.
 	f, err := os.CreateTemp("", "raid-test-*")
@@ -751,20 +758,22 @@ func TestAddProfileCmd_wrapperSuccess(t *testing.T) {
 func TestRunCreateWizard_wrapperExits(t *testing.T) {
 	setupConfig(t)
 	oldExit := osExit
-	defer func() { osExit = oldExit }()
+	oldWrite := proWriteFile
+	oldCollect := proCollectRepos
+	defer func() {
+		osExit = oldExit
+		proWriteFile = oldWrite
+		proCollectRepos = oldCollect
+	}()
 
 	exitCode := 0
 	osExit = func(code int) { exitCode = code }
+	// Force WriteFile to fail so the wrapper sees a non-zero code.
+	proWriteFile = func(pro.ProfileDraft, string) error { return fmt.Errorf("forced error") }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
 
-	// Redirect stdin to a pipe that makes WriteFile fail.
-	f, err := os.CreateTemp("", "raid-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-	defer os.Remove(f.Name())
-	savePath := filepath.Join(f.Name(), "subdir", "wiz.yaml")
-	input := "failwrapper\n" + savePath + "\nn\n"
+	savePath := filepath.Join(t.TempDir(), "wiz.yaml")
+	input := "failwrapper\n" + savePath + "\n"
 
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
@@ -802,5 +811,248 @@ func TestRunAddProfile_setActiveSuccess(t *testing.T) {
 	})
 	if lib.GetProfile().Name != "firstprofile" {
 		t.Errorf("expected 'firstprofile' to be active, got %q", lib.GetProfile().Name)
+	}
+}
+
+// --- Mock-based tests for runAddProfile error paths ---
+
+// saveProMocks saves and returns a restore function for all pro* function vars.
+func saveProMocks() func() {
+	origValidate := proValidate
+	origUnmarshal := proUnmarshal
+	origContains := proContains
+	origAddAll := proAddAll
+	origGet := proGet
+	origSet := proSet
+	origWriteFile := proWriteFile
+	origCollectRepos := proCollectRepos
+	origCreateRepoConfigs := proCreateRepoConfigs
+	return func() {
+		proValidate = origValidate
+		proUnmarshal = origUnmarshal
+		proContains = origContains
+		proAddAll = origAddAll
+		proGet = origGet
+		proSet = origSet
+		proWriteFile = origWriteFile
+		proCollectRepos = origCollectRepos
+		proCreateRepoConfigs = origCreateRepoConfigs
+	}
+}
+
+var errMock = fmt.Errorf("mock error")
+
+func TestRunAddProfile_unmarshalErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+	path := validProfileFile(t, "unmarshalmock")
+
+	proUnmarshal = func(string) ([]pro.Profile, error) { return nil, errMock }
+
+	_ = captureStdout(t, func() {
+		if code := runAddProfile(path); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunAddProfile_addAllErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+	path := validProfileFile(t, "addallmock")
+
+	proAddAll = func([]pro.Profile) error { return errMock }
+
+	_ = captureStdout(t, func() {
+		if code := runAddProfile(path); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunAddProfile_setErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+	path := validProfileFile(t, "setmock")
+
+	// Let AddAll succeed but Set fail. Since pro.Get() still returns zero
+	// (we haven't actually added anything), the Set branch is hit.
+	proAddAll = func([]pro.Profile) error { return nil }
+	proGet = func() pro.Profile { return pro.Profile{} }
+	proSet = func(string) error { return errMock }
+
+	_ = captureStdout(t, func() {
+		if code := runAddProfile(path); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunAddProfile_multipleNewSuccessMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+	path := validProfileFile(t, "multimock")
+
+	// Return two fresh profiles from unmarshal so the "multiple profiles" branch runs.
+	proUnmarshal = func(string) ([]pro.Profile, error) {
+		return []pro.Profile{{Name: "m1"}, {Name: "m2"}}, nil
+	}
+	proContains = func(string) bool { return false }
+	proAddAll = func([]pro.Profile) error { return nil }
+	// Ensure we hit the "active profile already set" branch
+	proGet = func() pro.Profile { return pro.Profile{Name: "preexisting", Path: "/p"} }
+
+	_ = captureStdout(t, func() {
+		if code := runAddProfile(path); code != 0 {
+			t.Errorf("code = %d, want 0", code)
+		}
+	})
+}
+
+// --- Mock-based tests for runCreateWizardCore error paths ---
+
+func TestRunCreateWizardCore_writeFileErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	proWriteFile = func(pro.ProfileDraft, string) error { return errMock }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
+
+	savePath := filepath.Join(t.TempDir(), "wizerr.yaml")
+	input := "wizerr-profile\n" + savePath + "\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunCreateWizardCore_validateErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	proWriteFile = func(pro.ProfileDraft, string) error { return nil }
+	proValidate = func(string) error { return errMock }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
+
+	savePath := filepath.Join(t.TempDir(), "wizval.yaml")
+	input := "wizval-profile\n" + savePath + "\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunCreateWizardCore_unmarshalErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	proWriteFile = func(pro.ProfileDraft, string) error { return nil }
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) { return nil, errMock }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
+
+	savePath := filepath.Join(t.TempDir(), "wizun.yaml")
+	input := "wizun-profile\n" + savePath + "\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunCreateWizardCore_addAllErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	proWriteFile = func(pro.ProfileDraft, string) error { return nil }
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) { return []pro.Profile{{Name: "x"}}, nil }
+	proAddAll = func([]pro.Profile) error { return errMock }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
+
+	savePath := filepath.Join(t.TempDir(), "wizadd.yaml")
+	input := "wizadd-profile\n" + savePath + "\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunCreateWizardCore_setErrorMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	proWriteFile = func(pro.ProfileDraft, string) error { return nil }
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) { return []pro.Profile{{Name: "x"}}, nil }
+	proAddAll = func([]pro.Profile) error { return nil }
+	proGet = func() pro.Profile { return pro.Profile{} } // zero → enters Set branch
+	proSet = func(string) error { return errMock }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
+
+	savePath := filepath.Join(t.TempDir(), "wizset.yaml")
+	input := "wizset-profile\n" + savePath + "\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+}
+
+func TestRunCreateWizardCore_activeAlreadySetMock(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	proWriteFile = func(pro.ProfileDraft, string) error { return nil }
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) { return []pro.Profile{{Name: "x"}}, nil }
+	proAddAll = func([]pro.Profile) error { return nil }
+	proGet = func() pro.Profile { return pro.Profile{Name: "already", Path: "/p"} }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft { return nil }
+
+	savePath := filepath.Join(t.TempDir(), "wizactive.yaml")
+	input := "wizactive-profile\n" + savePath + "\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 0 {
+			t.Errorf("code = %d, want 0", code)
+		}
+	})
+}
+
+func TestRunCreateWizardCore_withReposAndConfigCreate(t *testing.T) {
+	setupConfig(t)
+	defer saveProMocks()()
+
+	createCalled := false
+	proWriteFile = func(pro.ProfileDraft, string) error { return nil }
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) { return []pro.Profile{{Name: "x"}}, nil }
+	proAddAll = func([]pro.Profile) error { return nil }
+	proGet = func() pro.Profile { return pro.Profile{Name: "already", Path: "/p"} }
+	proCollectRepos = func(*bufio.Reader) []pro.RepoDraft {
+		return []pro.RepoDraft{{Name: "r1"}}
+	}
+	proCreateRepoConfigs = func([]pro.RepoDraft) { createCalled = true }
+
+	savePath := filepath.Join(t.TempDir(), "wizrepos.yaml")
+	// name, save path, then "y" for creating repo configs
+	input := "wizrepos-profile\n" + savePath + "\ny\n"
+
+	_ = captureStdout(t, func() {
+		if code := runCreateWizardCore(feedStdin(t, input)); code != 0 {
+			t.Errorf("code = %d, want 0", code)
+		}
+	})
+	if !createCalled {
+		t.Error("proCreateRepoConfigs should have been called")
 	}
 }

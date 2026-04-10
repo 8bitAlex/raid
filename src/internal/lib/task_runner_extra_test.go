@@ -677,6 +677,9 @@ func TestExecuteTask_script_notFound(t *testing.T) {
 }
 
 func TestExecuteTask_script_withRunner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash not reliably available on Windows CI")
+	}
 	script := writeTempScript(t, "#!/bin/sh\necho hello")
 	task := Task{Type: Script, Path: script, Runner: "bash"}
 	err := ExecuteTask(task)
@@ -688,6 +691,9 @@ func TestExecuteTask_script_withRunner(t *testing.T) {
 // --- execSetVar error paths ---
 
 func TestExecuteTask_setVar_createFileError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-as-parent-dir error semantics differ on Windows")
+	}
 	// Use a regular file as parent directory to force CreateFile to fail.
 	f, err := os.CreateTemp("", "raid-test-*")
 	if err != nil {

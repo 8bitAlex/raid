@@ -9,6 +9,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Injectable profile-package functions for testing error paths.
+var (
+	proValidate  = pro.Validate
+	proUnmarshal = pro.Unmarshal
+	proContains  = pro.Contains
+	proAddAll    = pro.AddAll
+	proGet       = pro.Get
+	proSet       = pro.Set
+)
+
 var AddProfileCmd = &cobra.Command{
 	Use:   "add filepath",
 	Short: "Add profile(s) from YAML or JSON file",
@@ -30,12 +40,12 @@ func runAddProfile(path string) int {
 		return 1
 	}
 
-	if err := pro.Validate(path); err != nil {
+	if err := proValidate(path); err != nil {
 		fmt.Printf("Invalid Profile: %v\n", err)
 		return 1
 	}
 
-	profiles, err := pro.Unmarshal(path)
+	profiles, err := proUnmarshal(path)
 	if err != nil {
 		fmt.Printf("Failed to extract profiles: %v\n", err)
 		return 1
@@ -44,7 +54,7 @@ func runAddProfile(path string) int {
 	var newProfiles []pro.Profile
 	var existingNames []string
 	for _, profile := range profiles {
-		if exists := pro.Contains(profile.Name); exists {
+		if exists := proContains(profile.Name); exists {
 			existingNames = append(existingNames, profile.Name)
 		} else {
 			newProfiles = append(newProfiles, profile)
@@ -60,13 +70,13 @@ func runAddProfile(path string) int {
 		return 0
 	}
 
-	if err := pro.AddAll(newProfiles); err != nil {
+	if err := proAddAll(newProfiles); err != nil {
 		fmt.Printf("Failed to save profiles: %v\n", err)
 		return 1
 	}
 
-	if pro.Get().IsZero() {
-		if err := pro.Set(newProfiles[0].Name); err != nil {
+	if proGet().IsZero() {
+		if err := proSet(newProfiles[0].Name); err != nil {
 			fmt.Printf("Failed to set active profile: %v\n", err)
 			return 1
 		}
