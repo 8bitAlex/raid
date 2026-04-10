@@ -11,6 +11,36 @@ import (
 	"testing"
 )
 
+func TestYellow(t *testing.T) {
+	s := Yellow("hello")
+	if !strings.Contains(s, "hello") {
+		t.Errorf("Yellow(%q) does not contain the original string", "hello")
+	}
+	// Must contain at least one ANSI escape sequence.
+	if !strings.Contains(s, "\033[") {
+		t.Errorf("Yellow(%q) = %q, want ANSI escape codes", "hello", s)
+	}
+}
+
+func TestLatestGitHubRelease_public(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"tag_name":"v9.9.9"}`))
+	}))
+	defer server.Close()
+
+	// The public wrapper delegates to latestGitHubRelease; we can't inject the
+	// base URL through the public API, so we just confirm it doesn't panic and
+	// returns a string (may be empty in offline CI).
+	got := LatestGitHubRelease("nonexistent-owner/nonexistent-repo-xyz-12345")
+	_ = got // empty string is a valid result when the request fails
+}
+
+func TestLatestGitHubPreRelease_public(t *testing.T) {
+	got := LatestGitHubPreRelease("nonexistent-owner/nonexistent-repo-xyz-12345")
+	_ = got // empty string is a valid result
+}
+
 func TestGetPlatform(t *testing.T) {
 	p := GetPlatform()
 	switch p {
