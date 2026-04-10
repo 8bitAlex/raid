@@ -850,6 +850,7 @@ func initTempGitRepo(t *testing.T) string {
 	run(t, dir, "git", "init")
 	run(t, dir, "git", "config", "user.email", "test@example.com")
 	run(t, dir, "git", "config", "user.name", "Test")
+	run(t, dir, "git", "config", "commit.gpgSign", "false")
 	// Create an initial commit so HEAD exists.
 	run(t, dir, "git", "commit", "--allow-empty", "-m", "init")
 	return dir

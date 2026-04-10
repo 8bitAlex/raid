@@ -36,10 +36,16 @@ const (
 // Pointer to the configuration path
 var ConfigPath = &lib.CfgPath
 
+// Injectable dependencies for testing the Initialize fatal error branch.
+var (
+	initConfigFn = lib.InitConfig
+	logFatalf    = log.Fatalf
+)
+
 // Initialize the raid environment, including loading configurations and initializing data storage.
 func Initialize() {
-	if err := lib.InitConfig(); err != nil {
-		log.Fatalf("init config: %v", err)
+	if err := initConfigFn(); err != nil {
+		logFatalf("init config: %v", err)
 	}
 	if err := Load(); err != nil {
 		// Non-fatal: allows 'raid doctor' to run and report the underlying issue.

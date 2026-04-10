@@ -3,6 +3,7 @@ package lib
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -99,5 +100,52 @@ func TestSet_persistsKeyInViper(t *testing.T) {
 
 	if got := viper.GetString("testkey"); got != "testvalue" {
 		t.Errorf("Set() did not persist key: got %q, want %q", got, "testvalue")
+	}
+}
+
+// TestInitConfig_createFileError covers the error branch where CreateFile fails.
+func TestInitConfig_createFileError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-as-parent-dir error semantics differ on Windows")
+	}
+	// Use a regular file as a parent component, so CreateFile will fail with ENOTDIR.
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	oldCfgPath := CfgPath
+	t.Cleanup(func() {
+		CfgPath = oldCfgPath
+		viper.Reset()
+	})
+	CfgPath = filepath.Join(f.Name(), "subdir", "config.toml")
+
+	if err := InitConfig(); err == nil {
+		t.Fatal("InitConfig() expected error for invalid config path")
+	}
+}
+
+// TestGetOrCreateConfigFile_createError covers the CreateFile error branch.
+func TestGetOrCreateConfigFile_createError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-as-parent-dir error semantics differ on Windows")
+	}
+	f, err := os.CreateTemp("", "raid-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	oldCfgPath := CfgPath
+	t.Cleanup(func() { CfgPath = oldCfgPath })
+	CfgPath = filepath.Join(f.Name(), "subdir", "config.toml")
+
+	_, err = getOrCreateConfigFile()
+	if err == nil {
+		t.Fatal("getOrCreateConfigFile() expected error")
 	}
 }

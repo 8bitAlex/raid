@@ -745,3 +745,235 @@ func TestValidateSchema_invalidJSONArrayElement(t *testing.T) {
 		t.Fatal("ValidateSchema() expected error for invalid JSON array element")
 	}
 }
+
+// --- validateWithEmbeddedSchema ---
+
+func TestValidateWithEmbeddedSchema_missingFile(t *testing.T) {
+	err := validateWithEmbeddedSchema("/nonexistent/file.yaml", "raid-profile.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for missing file")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_emptyPath(t *testing.T) {
+	err := validateWithEmbeddedSchema("", "raid-profile.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for empty path")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_validProfile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	os.WriteFile(path, []byte("name: test\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "raid-profile.schema.json")
+	if err != nil {
+		t.Errorf("validateWithEmbeddedSchema valid: %v", err)
+	}
+}
+
+func TestValidateWithEmbeddedSchema_invalidProfile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	os.WriteFile(path, []byte("notaname: test\nextra: bad\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "raid-profile.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for invalid profile")
+	}
+}
+
+// --- validateFile multi-doc YAML ---
+
+func TestValidateSchema_multiDocYAML(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"],"properties":{"name":{"type":"string"}}}`), 0644)
+
+	dataPath := filepath.Join(dir, "multi.yaml")
+	os.WriteFile(dataPath, []byte("name: first\n---\nname: second\n"), 0644)
+
+	if err := ValidateSchema(dataPath, schemaPath); err != nil {
+		t.Errorf("ValidateSchema() on valid multi-doc YAML: %v", err)
+	}
+}
+
+func TestValidateSchema_multiDocYAML_invalidSecond(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.json")
+	os.WriteFile(schemaPath, []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"],"additionalProperties":false,"properties":{"name":{"type":"string"}}}`), 0644)
+
+	dataPath := filepath.Join(dir, "multi.yaml")
+	os.WriteFile(dataPath, []byte("name: first\n---\nbad: field\n"), 0644)
+
+	err := ValidateSchema(dataPath, schemaPath)
+	if err == nil {
+		t.Fatal("ValidateSchema() expected error for invalid second YAML document")
+	}
+}
+
+// --- session ---
+
+func TestStartEndSession(t *testing.T) {
+	startSession()
+	if commandSession == nil {
+		t.Fatal("startSession() did not create session")
+	}
+	if commandSession.vars == nil || commandSession.baseline == nil {
+		t.Fatal("startSession() session has nil maps")
+	}
+	endSession()
+	if commandSession != nil {
+		t.Fatal("endSession() did not clear session")
+	}
+}
+
+// --- expandRaid with session ---
+
+func TestExpandRaid_sessionVarLookup(t *testing.T) {
+	startSession()
+	defer endSession()
+
+	commandSession.mu.Lock()
+	commandSession.vars["RAID_EXPAND_SESS"] = "from-session"
+	commandSession.mu.Unlock()
+
+	got := expandRaid("$RAID_EXPAND_SESS")
+	if got != "from-session" {
+		t.Errorf("expandRaid session lookup = %q, want %q", got, "from-session")
+	}
+}
+
+// --- raidVarsPath ---
+
+func TestRaidVarsPath_overridePath(t *testing.T) {
+	old := raidVarsOverridePath
+	raidVarsOverridePath = "/custom/path/vars"
+	t.Cleanup(func() { raidVarsOverridePath = old })
+
+	got := raidVarsPath()
+	if got != "/custom/path/vars" {
+		t.Errorf("raidVarsPath() = %q, want %q", got, "/custom/path/vars")
+	}
+}
+
+func TestRaidVarsPath_default(t *testing.T) {
+	old := raidVarsOverridePath
+	raidVarsOverridePath = ""
+	t.Cleanup(func() { raidVarsOverridePath = old })
+
+	got := raidVarsPath()
+	if got == "" {
+		t.Error("raidVarsPath() returned empty string")
+	}
+}
+
+// TestInstall_nilContext tests the early return branch when context is nil.
+func TestInstall_nilContext(t *testing.T) {
+	setupTestConfig(t)
+	context = nil
+
+	if err := Install(0); err == nil {
+		t.Error("Install() expected error when context is nil")
+	}
+}
+
+// TestQuietLoad_forceLoadFails covers QuietLoad when ForceLoad returns an error.
+func TestQuietLoad_forceLoadFails(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	// Set up a profile that references a bad repo config to cause ForceLoad to fail.
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "myrepo")
+	os.MkdirAll(repoDir, 0755)
+	// Invalid raid.yaml: violates schema.
+	os.WriteFile(filepath.Join(repoDir, RaidConfigFileName), []byte("invalid: [unclosed"), 0644)
+
+	profilePath := filepath.Join(dir, "profile.yaml")
+	content := "name: qlfail\nrepositories:\n  - name: myrepo\n    path: " + repoDir + "\n    url: http://example.com/repo.git\n"
+	os.WriteFile(profilePath, []byte(content), 0644)
+
+	if err := AddProfile(Profile{Name: "qlfail", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("qlfail"); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	ResetContext()
+	cmds := QuietLoad()
+	// Should return nil when ForceLoad fails.
+	if cmds != nil {
+		t.Errorf("QuietLoad with ForceLoad failure = %v, want nil", cmds)
+	}
+}
+
+// TestForceLoad_withGroups covers the loop over profile.Groups.
+func TestForceLoad_withGroups(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	profilePath := filepath.Join(dir, "groups.yaml")
+	content := "name: groups\ntask_groups:\n  build:\n    - type: Shell\n      cmd: echo build\n  test:\n    - type: Shell\n      cmd: echo test\n"
+	os.WriteFile(profilePath, []byte(content), 0644)
+
+	if err := AddProfile(Profile{Name: "groups", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("groups"); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	if err := ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad with groups: %v", err)
+	}
+	if context == nil || len(context.Profile.Groups) != 2 {
+		t.Errorf("ForceLoad: expected 2 groups, got %v", context)
+	}
+}
+
+// TestInstallRepo_installTaskError covers the installRepo error path when
+// install tasks fail (ExecuteTasks returns an error).
+func TestInstallRepo_installTaskError(t *testing.T) {
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+
+	context = &Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/path",
+			Repositories: []Repo{
+				{
+					Name: "repo1",
+					Path: dir,
+					URL:  "http://example.com",
+					Install: OnInstall{
+						Tasks: []Task{{Type: Shell, Cmd: "exit 1"}},
+					},
+				},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	err := InstallRepo("repo1")
+	if err == nil {
+		t.Fatal("InstallRepo expected error from failing install task")
+	}
+	if !strings.Contains(err.Error(), "failed to execute install tasks") {
+		t.Errorf("error %q should mention install task failure", err.Error())
+	}
+}
