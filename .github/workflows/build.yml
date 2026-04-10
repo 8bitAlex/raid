@@ -10,8 +10,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  version-check:
+  changed-files:
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      src-changed: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'src/**'
+
+  version-check:
+    needs: changed-files
+    if: needs.changed-files.outputs.src-changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.2
@@ -28,7 +43,7 @@ jobs:
           echo "Version ${TAG} is new."
 
   build:
-    needs: version-check
+    needs: [changed-files, version-check]
     if: always() && (needs.version-check.result == 'success' || needs.version-check.result == 'skipped')
     runs-on: ${{ matrix.os }}
     strategy:
