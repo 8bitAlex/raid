@@ -172,6 +172,12 @@ func QuietLoad() []Command {
 	return GetCommands()
 }
 
+// ResetContext clears the cached load context, forcing the next Load or ForceLoad to
+// rebuild from the current viper configuration.
+func ResetContext() {
+	context = nil
+}
+
 // Load initializes the context from the active profile, using cached results if available.
 func Load() error {
 	if context == nil {
