@@ -1,0 +1,183 @@
+---
+sidebar_position: 5
+---
+
+# Schema Reference
+
+Complete field reference for profile files and repository `raid.yaml` files.
+
+---
+
+## Profile file
+
+```yaml
+name: "my-team"
+
+repositories:
+  - ...
+
+environments:
+  - ...
+
+install:
+  tasks:
+    - ...
+
+commands:
+  - ...
+
+task_groups:
+  group-name:
+    - ...
+```
+
+### Top-level fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique profile identifier |
+| `repositories` | list | No | Repositories to clone and manage |
+| `environments` | list | No | Named environment configurations |
+| `install` | object | No | Tasks to run after all repos are cloned |
+| `install.tasks` | list | No | Task sequence for global install |
+| `commands` | list | No | Custom commands available via `raid <name>` |
+| `task_groups` | map | No | Reusable named task sequences |
+
+---
+
+## Repository
+
+```yaml
+repositories:
+  - name: "api"
+    url: "git@github.com:my-org/api.git"
+    path: "~/dev/api"
+    install:
+      tasks:
+        - type: Shell
+          cmd: "npm install"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Used to reference the repo (e.g. `raid install api`) |
+| `url` | string | Yes | Git remote URL |
+| `path` | string | Yes | Local clone destination (supports `~`) |
+| `install.tasks` | list | No | Tasks to run after this repo is cloned |
+
+---
+
+## Environment
+
+```yaml
+environments:
+  - name: "local"
+    variables:
+      - name: "LOG_LEVEL"
+        value: "debug"
+    tasks:
+      - type: Shell
+        cmd: "docker-compose up -d db"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Environment name used with `raid env <name>` |
+| `variables` | list | No | Variables to set when the environment is applied |
+| `variables[].name` | string | Yes | Variable name |
+| `variables[].value` | string | Yes | Variable value |
+| `tasks` | list | No | Tasks to run when this environment is applied |
+
+---
+
+## Command
+
+```yaml
+commands:
+  - name: "deploy"
+    usage: "Deploy all services"
+    tasks:
+      - type: Shell
+        cmd: "./deploy.sh"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Command name — invoked as `raid <name>` |
+| `usage` | string | No | Description shown in `raid --help` |
+| `tasks` | list | Yes | Task sequence to run |
+
+Command names cannot shadow built-in names: `install`, `env`, `profile`, `doctor`.
+
+---
+
+## Task
+
+All tasks share these common fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | Task type (case-sensitive, Title Case) |
+| `concurrent` | bool | No | Run in parallel with adjacent concurrent tasks |
+| `condition` | object | No | Conditions that must pass for the task to run |
+
+### Condition
+
+| Field | Type | Description |
+|---|---|---|
+| `platform` | string | `darwin`, `linux`, or `windows` |
+| `exists` | string | Skip if this path already exists |
+| `cmd` | string | Skip if this command exits 0 |
+
+### Task types
+
+| Type | Description |
+|---|---|
+| [`Shell`](/docs/features/tasks#shell) | Run a shell command |
+| [`Script`](/docs/features/tasks#script) | Run a script file |
+| [`Set`](/docs/features/tasks#set) | Set a variable for the current session |
+| [`Print`](/docs/features/tasks#print) | Print a message to the terminal |
+| [`Template`](/docs/features/tasks#template) | Render a template file to a destination |
+| [`Git`](/docs/features/tasks#git) | Perform a git operation |
+| [`Group`](/docs/features/tasks#group) | Execute a named task group |
+| [`Prompt`](/docs/features/tasks#prompt) | Prompt the user for input |
+| [`Confirm`](/docs/features/tasks#confirm) | Ask the user to confirm before continuing |
+| [`HTTP`](/docs/features/tasks#http) | Download a file from a URL |
+| [`Wait`](/docs/features/tasks#wait) | Poll a URL or TCP endpoint until it responds |
+
+See [Task Types](/docs/features/tasks) for full field details per type.
+
+---
+
+## Repository `raid.yaml`
+
+A repository can define its own commands and environments by committing a `raid.yaml` at its root. These are merged into the active profile at load time.
+
+```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
+commands:
+  - name: "migrate"
+    usage: "Run database migrations"
+    tasks:
+      - type: Shell
+        cmd: "go run ./cmd/migrate"
+
+environments:
+  - name: "local"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://localhost:5432/api_dev"
+  - name: "staging"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://staging-db.internal:5432/api"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Must match the repository name in the profile |
+| `branch` | string | No | Default branch to checkout on clone |
+| `commands` | list | No | Repo-scoped custom commands |
+| `environments` | list | No | Repo-scoped environment variables and tasks |

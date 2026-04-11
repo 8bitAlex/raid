@@ -1,0 +1,259 @@
+---
+sidebar_position: 3
+---
+
+# Task Types
+
+Tasks are the unit of work in raid. They appear in install steps, commands, environments, and task groups. Every task has a `type` field and type-specific fields. Task types are case-sensitive and must be written in Title Case as shown.
+
+## Common fields
+
+These fields apply to all task types.
+
+| Field | Description |
+|---|---|
+| `type` | Task type (required) |
+| `concurrent` | Run this task in parallel with adjacent concurrent tasks |
+| `condition` | Only run this task if the condition passes |
+
+### Conditions
+
+```yaml
+- type: Shell
+  cmd: "brew install nvm"
+  condition:
+    platform: "darwin"          # darwin, linux, or windows
+    exists: "/usr/local/bin/nvm"   # skip if path already exists
+    cmd: "which nvm"              # skip if command exits 0
+```
+
+All specified condition fields must pass for the task to run.
+
+---
+
+## Shell
+
+Run a shell command.
+
+```yaml
+- type: Shell
+  cmd: "npm install"
+```
+
+```yaml
+- type: Shell
+  cmd: |
+    echo "Building..."
+    npm run build
+  path: "~/dev/frontend"     # working directory (defaults to home dir or repo root)
+  shell: "zsh"               # override the shell (bash, sh, zsh, powershell, pwsh, ps, cmd)
+  literal: true            # skip variable expansion
+```
+
+**Variable expansion** — `$VAR` and `${VAR}` references in `cmd` are expanded using:
+1. Variables set by `Set` tasks (highest priority)
+2. Variables exported by earlier `Shell` tasks in the same command session
+3. OS environment variables
+
+Shell-local variables and parameter expansions like `${FOO:-default}` are passed through to the shell intact.
+
+**Exit codes** — if the command exits non-zero, task execution stops and raid exits with that same code.
+
+**Exporting variables** — use `export` in your script to make a variable available to later tasks in the same command run:
+
+```yaml
+- type: Shell
+  cmd: |
+    export API_URL=$(cat .env | grep API_URL | cut -d= -f2)
+- type: Shell
+  cmd: 'echo "API is at $API_URL"'
+```
+
+---
+
+## Set
+
+Set a variable that persists for the duration of the command session and can be used in subsequent tasks.
+
+```yaml
+- type: Set
+  var: "ENVIRONMENT"
+  value: "production"
+```
+
+Variables set this way take precedence over exported shell variables and OS environment variables.
+
+---
+
+## Print
+
+Print a message to the terminal.
+
+```yaml
+- type: Print
+  message: "Installing dependencies..."
+```
+
+```yaml
+- type: Print
+  message: "Done!"
+  color: "green"    # red, green, yellow, blue, cyan, white
+```
+
+Use `Print` to structure long task sequences with clear section headers.
+
+---
+
+## Template
+
+Render a template file and write it to a destination.
+
+```yaml
+- type: Template
+  src: "./configs/app.config.tmpl"
+  dest: "~/dev/api/.env"
+```
+
+Template files support `$VAR` and `${VAR}` substitution using the same variable lookup order as `Shell` tasks. Variables that are not set expand to an empty string.
+
+---
+
+## Script
+
+Run a script file.
+
+```yaml
+- type: Script
+  path: "./scripts/setup.sh"
+```
+
+```yaml
+- type: Script
+  path: "./setup.py"
+  runner: "python3"   # bash, sh, zsh, python, python2, python3, node, powershell
+```
+
+If `runner` is omitted, the script is executed directly (requires a shebang line or executable permission).
+
+---
+
+## Git
+
+Perform a git operation on a repository.
+
+```yaml
+- type: Git
+  op: "pull"
+  path: "~/dev/api"
+```
+
+```yaml
+- type: Git
+  op: "checkout"
+  branch: "main"
+  path: "~/dev/api"
+```
+
+| `op` | Description |
+|---|---|
+| `pull` | Pull latest changes |
+| `checkout` | Checkout a branch |
+| `fetch` | Fetch from remote |
+| `reset` | Reset to HEAD |
+
+---
+
+## Group
+
+Execute a named task group defined in the profile's `task_groups` section.
+
+```yaml
+- type: Group
+  ref: "install-deps"
+```
+
+```yaml
+- type: Group
+  ref: "build-all"
+  parallel: true    # run the group's tasks in parallel
+```
+
+---
+
+## Prompt
+
+Prompt the user for input and store the result in a variable.
+
+```yaml
+- type: Prompt
+  var: "API_KEY"
+  message: "Enter your API key"
+```
+
+```yaml
+- type: Prompt
+  var: "USERNAME"
+  message: "Enter your username"
+  default: "admin"
+```
+
+---
+
+## Confirm
+
+Ask the user to confirm before continuing. If the user answers no, remaining tasks are skipped.
+
+```yaml
+- type: Confirm
+  message: "This will reset your database. Continue?"
+```
+
+---
+
+## HTTP
+
+Download a file from a URL.
+
+```yaml
+- type: HTTP
+  url: "https://example.com/config.json"
+  dest: "~/dev/api/config.json"
+```
+
+---
+
+## Wait
+
+Poll a URL or TCP endpoint until it responds, or until the timeout is reached.
+
+```yaml
+- type: Wait
+  url: "http://localhost:3000/health"
+  timeout: "30s"
+```
+
+```yaml
+- type: Wait
+  url: "localhost:5432"   # TCP host:port
+  timeout: "1m"
+```
+
+---
+
+## Concurrent tasks
+
+Mark adjacent tasks with `concurrent: true` to run them in parallel. Raid collects consecutive concurrent tasks into a batch and waits for all of them before moving on.
+
+```yaml
+tasks:
+  - type: Shell
+    cmd: "npm install"
+    path: "~/dev/api"
+    concurrent: true
+  - type: Shell
+    cmd: "npm install"
+    path: "~/dev/frontend"
+    concurrent: true
+  - type: Print
+    message: "Dependencies installed"   # runs after both npm installs finish
+```

@@ -1,0 +1,63 @@
+---
+sidebar_position: 3
+---
+
+# Profile
+
+Manage profiles — create, register, switch, and remove.
+
+```bash
+raid profile <subcommand>
+```
+
+## Subcommands
+
+| Subcommand | Description |
+|---|---|
+| `raid profile create` | Interactive wizard to create a new profile |
+| `raid profile add <path\|url>` | Register an existing profile file |
+| `raid profile list` | List all registered profiles |
+| `raid profile <name>` | Switch the active profile |
+| `raid profile remove <name>` | Remove a registered profile |
+
+## Examples
+
+Create a new profile interactively:
+
+```bash
+raid profile create
+```
+
+Register your team's shared profile from a URL:
+
+```bash
+raid profile add https://example.com/team-profile.yaml
+```
+
+Register a local file:
+
+```bash
+raid profile add ./my-profile.yaml
+```
+
+List all profiles and see which is active:
+
+```bash
+raid profile list
+```
+
+Switch to a different profile:
+
+```bash
+raid profile my-team
+```
+
+Remove a profile:
+
+```bash
+raid profile remove my-team
+```
+
+## Profile files
+
+A profile is a YAML file describing repositories, environments, install tasks, and custom commands. See [Profile Configuration](/docs/features/profiles) for the full format.

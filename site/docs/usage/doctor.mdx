@@ -1,0 +1,44 @@
+---
+sidebar_position: 5
+---
+
+# Doctor
+
+Check the active profile and configuration for issues.
+
+```bash
+raid doctor
+```
+
+## What it checks
+
+Doctor inspects the current profile and reports findings at three severity levels:
+
+| Level | Meaning |
+|---|---|
+| `OK` | No issues found |
+| `WARN` | Something looks off but raid can still function |
+| `ERROR` | A problem that will prevent raid from working correctly |
+
+Checks include:
+
+- Active profile exists and is valid YAML
+- All repository paths and URLs are present
+- Referenced task groups exist
+- Environment names are unique
+- Custom command names don't shadow built-in commands
+
+## When to run it
+
+Run `raid doctor` after:
+
+- Initial setup to verify your profile loaded correctly
+- Adding a new repository or environment
+- Pulling a teammate's updated profile
+- Something isn't working as expected
+
+```bash
+raid doctor
+```
+
+If everything is configured correctly you'll see all `OK` entries. Any `ERROR` entries need to be resolved before the affected features will work.

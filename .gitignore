@@ -31,7 +31,7 @@ go.work.sum
 CLAUDE.md
 .claude/
 
-# Docusaurus files
+# Docusaurus files (site build output also ignored via site/.gitignore)
 /build
 .docusaurus
 node_modules
