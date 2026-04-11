@@ -3,11 +3,20 @@ name: Docs Build and Test
 on:
   pull_request:
     branches:
-      - docsite-source
+      - main
+    paths:
+      - 'site/**'
+      - '.github/workflows/docs-build.yml'
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
     steps:
       - uses: actions/checkout@v6
 
@@ -15,6 +24,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: site/package-lock.json
 
       - name: Install dependencies
         run: npm ci
