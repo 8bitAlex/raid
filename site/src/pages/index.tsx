@@ -2,6 +2,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import TerminalDemo from '@site/src/components/TerminalDemo';
+import { comparisonFeatures, type Support } from '@site/src/lib/comparison';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -96,19 +97,6 @@ function InstallSection() {
     </section>
   );
 }
-
-type Support = 'yes' | 'no' | 'partial';
-
-const comparisonFeatures: { label: string; raid: Support; make: Support; just: Support; mise: Support }[] = [
-  { label: 'Multi-repo orchestration', raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
-  { label: 'Team profile sharing',     raid: 'yes', make: 'no',      just: 'no',      mise: 'no'      },
-  { label: 'One-command onboarding',   raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
-  { label: 'Environment switching',    raid: 'yes', make: 'no',      just: 'no',      mise: 'yes'     },
-  { label: 'Custom task runner',       raid: 'yes', make: 'yes',     just: 'yes',     mise: 'yes'     },
-  { label: 'YAML config',              raid: 'yes', make: 'no',      just: 'no',      mise: 'partial' },
-  { label: 'No DSL to learn',          raid: 'yes', make: 'no',      just: 'partial', mise: 'yes'     },
-  { label: 'Concurrent task execution',raid: 'yes', make: 'partial', just: 'no',      mise: 'no'      },
-];
 
 function SupportIcon({ value }: { value: Support }) {
   if (value === 'yes') return <Check size={16} className={styles.iconYes} />;

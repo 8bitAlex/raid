@@ -6,27 +6,41 @@ repositories:
     path: ~/Developer/raid
     url: https://github.com/8bitAlex/raid.git
 
-environments:
-  - name: dev
-    tasks:
-      - type: Shell
-        cmd: |
-          WORD="Hello, World!"
-          export WORD
-          echo $WORD
-
 commands:
   - name: test
+    usage: Build and run all tests for the raid app and docsite
     tasks:
+      - type: Print
+        message: "==> Building raid app"
+        color: cyan
       - type: Shell
-        literal: true
-        cmd: |
-          WORD="Hello, World!"
-          echo $WORD
-          echo "This is a test command."
-          export WORD
-      - type: Set
-        var: GREET
-        value: $WORD
+        cmd: go build ./...
+        path: ~/Developer/raid
+      - type: Print
+        message: "==> Testing raid app"
+        color: cyan
       - type: Shell
-        cmd: echo $GREET
+        cmd: go test ./...
+        path: ~/Developer/raid
+      - type: Print
+        message: "==> Building docsite"
+        color: cyan
+      - type: Shell
+        cmd: npm install && npm run build
+        path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Testing docsite"
+        color: cyan
+      - type: Shell
+        cmd: npm test
+        path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Type-checking docsite"
+        color: cyan
+      - type: Shell
+        cmd: npm run typecheck
+        path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Tests completed"
+        color: green
+
