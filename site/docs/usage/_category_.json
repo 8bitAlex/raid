@@ -1,0 +1,8 @@
+{
+  "label": "Usage",
+  "position": 10,
+  "link": {
+    "type": "generated-index",
+    "description": "Instructions on how to use raid, including profiles, tasks, and commands."
+  }
+}

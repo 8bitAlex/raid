@@ -1,0 +1,81 @@
+---
+sidebar_position: 2
+slug: /start
+---
+
+# Getting Started
+
+Raid is designed to be easy to get up and running. This guide walks through installing the CLI, creating your first profile, and running your project for the first time.
+
+## Install
+
+**Homebrew** <span className="subtitle">for macOS/Linux</span>
+```bash
+brew install 8bitalex/tap/raid
+```
+
+**Script** <span className="subtitle">for macOS/Linux</span>
+```bash
+curl -fsSL https://raidcli.dev/install.sh | bash
+```
+
+**Download** <span className="subtitle">for Windows/Linux/macOS</span>
+
+Download the latest release from the [GitHub releases page](https://github.com/8bitAlex/raid/releases) and add it to your PATH.
+
+## Create a profile
+
+Run the interactive wizard to create your first profile:
+
+```bash
+raid profile create
+```
+
+The wizard asks for a profile name and walks you through adding repositories. Each repository needs a name, a Git URL, and a local path.
+
+If your team already has a profile, download and register it directly:
+
+```bash
+raid profile add https://example.com/team-profile.yaml
+```
+
+Or register a local file you've downloaded manually:
+
+```bash
+raid profile add ./my-profile.yaml
+```
+
+See [Profile Configuration](./features/profiles) for the full file format.
+
+## Install your project
+
+Once a profile is active, clone all repositories and run their install tasks:
+
+```bash
+raid install
+```
+
+Raid clones all repositories concurrently, then runs profile-level install tasks followed by each repository's install tasks in profile order.
+
+To install a single repository:
+
+```bash
+raid install <repo-name>
+```
+
+## Run a command
+
+If your profile or any of its repositories define custom commands, they are available immediately:
+
+```bash
+raid <command>
+```
+
+Run `raid --help` to see all available commands, including any defined in the active profile.
+
+## Next steps
+
+- [Profile Configuration](./features/profiles) — repositories, environments, and commands
+- [Task Types](./features/tasks) — everything a task can do
+- [Environments](./features/environments) — switch between dev, staging, and production
+- [Command Reference](/docs/references/commands) — built-in commands
