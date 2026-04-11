@@ -44,12 +44,16 @@ f_tag_sm  = ImageFont.truetype(SANS, 26)
 f_url     = ImageFont.truetype(MONO, 24)
 
 # Wordmark
-d.text((LEFT, 70), "raid", font=f_mark, fill=FG)
+WORD_XY = (LEFT, 70)
+d.text(WORD_XY, "raid", font=f_mark, fill=FG)
 
-# Colored underline beneath the wordmark
-bbox = d.textbbox((LEFT, 70), "raid", font=f_mark)
-ul_y = bbox[3] - 6
-d.rectangle([LEFT, ul_y, LEFT + 180, ul_y + 8], fill=ACCENT)
+# Colored accent underline — full width of the wordmark, sitting just below
+# the baseline. Uses the actual text bbox so the line matches the letter
+# width instead of a hardcoded guess.
+wm_bbox = d.textbbox(WORD_XY, "raid", font=f_mark)
+ul_y1 = wm_bbox[3] + 8
+ul_y2 = ul_y1 + 10
+d.rectangle([wm_bbox[0], ul_y1, wm_bbox[2], ul_y2], fill=ACCENT)
 
 # Tagline (two-line) — must fit to the left of the terminal panel (x < 760)
 d.text((LEFT, 290), "Orchestrate your team's", font=f_tag_big, fill=FG)
