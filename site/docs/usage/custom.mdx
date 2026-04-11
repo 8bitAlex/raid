@@ -1,0 +1,71 @@
+---
+sidebar_position: 6
+---
+
+# Custom commands
+
+Run a custom command defined in the active profile or any of its repositories.
+
+```bash
+raid <command>
+```
+
+## Examples
+
+```bash
+raid deploy
+raid migrate
+raid test-all
+```
+
+Run `raid --help` to see all available commands, including any defined in the active profile.
+
+## Defining commands
+
+Custom commands are defined in the `commands` section of your profile or in a repository's `raid.yaml`.
+
+```yaml title="profile.yaml"
+commands:
+  - name: "deploy"
+    usage: "Deploy all services"
+    tasks:
+      - type: Shell
+        cmd: "./deploy.sh"
+        path: "~/dev/api"
+```
+
+```yaml title="~/dev/api/raid.yaml"
+commands:
+  - name: "migrate"
+    usage: "Run database migrations"
+    tasks:
+      - type: Shell
+        cmd: "go run ./cmd/migrate"
+```
+
+## Constraints
+
+Custom command names cannot shadow built-in names: `profile`, `install`, `env`, `doctor`.
+
+## Running tasks in parallel
+
+Use `concurrent: true` on adjacent tasks to run them in parallel:
+
+```yaml
+commands:
+  - name: "test-all"
+    usage: "Run tests across all repos"
+    tasks:
+      - type: Shell
+        cmd: "npm test"
+        path: "~/dev/api"
+        concurrent: true
+      - type: Shell
+        cmd: "npm test"
+        path: "~/dev/frontend"
+        concurrent: true
+      - type: Print
+        message: "All tests passed"
+```
+
+See [Task Types](/docs/features/tasks) for everything a task can do.

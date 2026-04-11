@@ -1,0 +1,68 @@
+---
+sidebar_position: 2
+---
+
+# Install
+
+Clone all repositories in the active profile and run their install tasks.
+
+```bash
+raid install [repo] [-t <threads>]
+```
+
+## What it does
+
+1. Clones all repositories concurrently (throttled by `-t` if set)
+2. Runs profile-level install tasks
+3. Runs each repository's install tasks in profile order
+
+If a repository already exists at its configured path, cloning is skipped.
+
+## Options
+
+| Flag | Description |
+|---|---|
+| `[repo]` | Install only the named repository (profile-level tasks are skipped) |
+| `-t, --threads` | Max concurrent clone threads (default: unlimited) |
+
+## Examples
+
+Install all repositories in the active profile:
+
+```bash
+raid install
+```
+
+Install a single repository:
+
+```bash
+raid install api
+```
+
+Limit to 4 concurrent clones:
+
+```bash
+raid install -t 4
+```
+
+## Install tasks
+
+Install tasks are defined in the profile and in individual repository `raid.yaml` files. See [Profile Configuration](/docs/features/profiles) for the full format.
+
+```yaml title="profile.yaml"
+install:
+  tasks:
+    - type: Print
+      message: "Running global setup..."
+    - type: Shell
+      cmd: "brew bundle --file=~/Brewfile"
+
+repositories:
+  - name: "api"
+    url: "git@github.com:my-org/api.git"
+    path: "~/dev/api"
+    install:
+      tasks:
+        - type: Shell
+          cmd: "npm install"
+```
