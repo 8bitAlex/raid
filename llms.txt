@@ -1,0 +1,41 @@
+# Raid
+
+> Declarative development environment orchestrator — a cross-platform Go CLI that turns your team's multi-repo setup, commands, and environments into version-controlled YAML so every developer runs the same thing the same way on macOS, Linux, and Windows.
+
+Raid solves the "how do I run this, again?" problem for teams working across multiple Git repositories. A top-level **profile** (`*.raid.yaml`) describes repositories, environments, install steps, and custom commands. Each repo can also commit a `raid.yaml` at its root — Raid merges these automatically at load time. Developers use `raid install` to clone and set up everything, `raid env <name>` to switch the full system between local/staging/production, and `raid <cmd>` to run team-defined workflows like `raid test`, `raid patch`, or `raid deploy`.
+
+Raid is written in Go, distributed as a single static binary, and published under the GNU General Public License v3.0.
+
+## Docs
+
+- [README](https://github.com/8bitAlex/raid/blob/main/README.md): Overview, installation, quickstart, commands reference, configuration reference, task types, best practices, comparison vs. Make/Taskfile/Just, and FAQ
+- [Design proposal](https://alexsalerno.dev/blog/raid-design-proposal): Rationale and design motivation for Raid
+- [Contributing guide](https://github.com/8bitAlex/raid/blob/main/docs/CONTRIBUTING.md): Developer setup, code style, testing, and PR workflow
+
+## Schemas
+
+- [Profile JSON Schema](https://raw.githubusercontent.com/8bitAlex/raid/main/schemas/raid-profile.schema.json): Validation schema for `*.raid.yaml` profile files
+- [Repository JSON Schema](https://raw.githubusercontent.com/8bitAlex/raid/main/schemas/raid-repo.schema.json): Validation schema for per-repo `raid.yaml` files
+- [SchemaStore catalog](https://www.schemastore.org/api/json/catalog.json): Published catalog entries — auto-discovered by VS Code, JetBrains, Neovim, and other editors using the schemastore catalog
+
+## Examples
+
+- [Single profile example](https://github.com/8bitAlex/raid/blob/main/docs/examples/example.raid.yaml)
+- [Multi-profile YAML](https://github.com/8bitAlex/raid/blob/main/docs/examples/multiple-profiles.yaml)
+- [Multi-profile JSON](https://github.com/8bitAlex/raid/blob/main/docs/examples/multiple-profiles.json)
+- [Install task demo](https://github.com/8bitAlex/raid/blob/main/docs/examples/install-demo.raid.yaml)
+- [Environment task demo](https://github.com/8bitAlex/raid/blob/main/docs/examples/env-demo.raid.yaml)
+- [Per-repo raid.yaml example](https://github.com/8bitAlex/raid/blob/main/docs/examples/raid.yaml)
+
+## Installation
+
+- [install.sh](https://github.com/8bitAlex/raid/blob/main/install.sh): Linux installer — `curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash`
+- [Homebrew tap](https://github.com/8bitalex/homebrew-tap): macOS — `brew install 8bitalex/tap/raid`
+- [Releases](https://github.com/8bitAlex/raid/releases): Prebuilt binaries for macOS, Linux, and Windows (amd64 and arm64)
+
+## Optional
+
+- [Task reference](https://github.com/8bitAlex/raid/blob/main/README.md#tasks): All 11 task types — Shell, Script, Set, Git, HTTP, Wait, Prompt, Confirm, Print, Template, Group
+- [Commands configuration](https://github.com/8bitAlex/raid/blob/main/README.md#commands-configuration): Defining custom `raid <cmd>` subcommands in profiles and per-repo configs
+- [Best practices](https://github.com/8bitAlex/raid/blob/main/README.md#best-practices): Committing `raid.yaml` to every repo, gating destructive tasks with `Confirm`, organizing profiles, keeping secrets out of config
+- [License (GPL-3.0)](https://github.com/8bitAlex/raid/blob/main/LICENSE)
