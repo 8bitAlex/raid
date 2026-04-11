@@ -48,3 +48,53 @@ func TestYAMLToJSON_invalidYAML(t *testing.T) {
 		t.Fatal("YAMLToJSON() expected error for invalid YAML, got nil")
 	}
 }
+
+func TestMergeErr_nilSlice(t *testing.T) {
+	err := MergeErr(nil)
+	if err != nil {
+		t.Errorf("MergeErr(nil) = %v, want nil", err)
+	}
+}
+
+func TestMergeErr_emptySlice(t *testing.T) {
+	err := MergeErr([]error{})
+	if err != nil {
+		t.Errorf("MergeErr(empty) = %v, want nil", err)
+	}
+}
+
+func TestMergeErr_mixedNilAndErrors(t *testing.T) {
+	err := MergeErr([]error{nil, errors.New("real error"), nil})
+	if err == nil {
+		t.Fatal("MergeErr(mixed) returned nil, want error")
+	}
+	if !strings.Contains(err.Error(), "real error") {
+		t.Errorf("MergeErr(mixed) = %q, want 'real error'", err.Error())
+	}
+}
+
+func TestMergeErr_allNil(t *testing.T) {
+	err := MergeErr([]error{nil, nil, nil})
+	if err != nil {
+		t.Errorf("MergeErr(all nil) = %v, want nil", err)
+	}
+}
+
+func TestYAMLToJSON_multiDocRejected(t *testing.T) {
+	multi := strings.NewReader("name: first\n---\nname: second\n")
+	_, err := YAMLToJSON(multi)
+	if err == nil {
+		t.Fatal("YAMLToJSON(multi-doc) expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "multi-document") {
+		t.Errorf("YAMLToJSON(multi-doc) error = %q, want 'multi-document' mention", err.Error())
+	}
+}
+
+func TestYAMLToJSON_emptyInput(t *testing.T) {
+	empty := strings.NewReader("")
+	_, err := YAMLToJSON(empty)
+	if err == nil {
+		t.Fatal("YAMLToJSON(empty) expected error, got nil")
+	}
+}

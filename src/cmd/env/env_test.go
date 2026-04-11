@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -220,5 +221,126 @@ func TestListEnvCmd_withEnvironments(t *testing.T) {
 	got := buf.String()
 	if !strings.Contains(got, "staging") {
 		t.Errorf("ListEnvCmd with envs: got %q, want 'staging'", got)
+	}
+}
+
+func TestCommand_envFound_fullSuccess(t *testing.T) {
+	setupConfigWithEnv(t, "success-profile", "prod")
+
+	var buf bytes.Buffer
+	fakeCmd := &cobra.Command{}
+	fakeCmd.SetOut(&buf)
+	fakeCmd.SetErr(&buf)
+	Command.Run(fakeCmd, []string{"prod"})
+
+	got := buf.String()
+	if !strings.Contains(got, "Environment executed successfully") {
+		t.Errorf("Command env success: got %q, want 'Environment executed successfully'", got)
+	}
+}
+
+func TestCommand_envFound_forceLoadError(t *testing.T) {
+	setupConfigWithEnv(t, "exec-err-profile", "failing")
+
+	// Delete the profile file so that ForceLoad (which re-reads it) fails,
+	// while the cached context still has the env for Contains to succeed.
+	profilePath := lib.GetProfile().Path
+	if err := os.Remove(profilePath); err != nil {
+		t.Fatalf("remove profile file: %v", err)
+	}
+
+	var buf bytes.Buffer
+	fakeCmd := &cobra.Command{}
+	fakeCmd.SetOut(&buf)
+	fakeCmd.SetErr(&buf)
+	Command.Run(fakeCmd, []string{"failing"})
+
+	got := buf.String()
+	if !strings.Contains(got, "Failed to reload profile") {
+		t.Errorf("Command env forceLoad error: got %q, want 'Failed to reload profile'", got)
+	}
+}
+
+// TestCommand_envFound_setError covers the env.Set error path by calling
+// with an env name that doesn't exist in the config but passes Contains
+// via a direct context manipulation.
+func TestCommand_envFound_executeError(t *testing.T) {
+	// Set up an env with a task that will fail.
+	repoRoot := repoRootForEnv(t)
+
+	dir := t.TempDir()
+	old := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = old
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	// Profile with env that has a failing task.
+	profilePath := filepath.Join(dir, "failenv.raid.yaml")
+	content := "name: failenv\nenvironments:\n  - name: badenv\n    tasks:\n      - type: Shell\n        cmd: exit 1\n"
+	if err := os.WriteFile(profilePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "failenv", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("failenv"); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	if err := os.Chdir(repoRoot); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(wd) })
+
+	if err := lib.ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad: %v", err)
+	}
+
+	var buf bytes.Buffer
+	fakeCmd := &cobra.Command{}
+	fakeCmd.SetOut(&buf)
+	fakeCmd.SetErr(&buf)
+	Command.Run(fakeCmd, []string{"badenv"})
+
+	got := buf.String()
+	if !strings.Contains(got, "Failed to execute environment") {
+		t.Errorf("Command env execute error: got %q, want 'Failed to execute environment'", got)
+	}
+}
+
+// TestCommand_envSetError covers the env.Set error path by making the config
+// file read-only after setup so viper.WriteConfig fails.
+func TestCommand_envSetError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("file permissions not enforced as root")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod file permissions behave differently on Windows")
+	}
+	setupConfigWithEnv(t, "setfail-profile", "dev")
+
+	// Make the config file read-only so Set (which calls viper.WriteConfig) fails.
+	if err := os.Chmod(lib.CfgPath, 0444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(lib.CfgPath, 0644) })
+
+	var buf bytes.Buffer
+	fakeCmd := &cobra.Command{}
+	fakeCmd.SetOut(&buf)
+	fakeCmd.SetErr(&buf)
+	Command.Run(fakeCmd, []string{"dev"})
+
+	got := buf.String()
+	if !strings.Contains(got, "Failed to switch environment") {
+		t.Errorf("Command env setError: got %q, want 'Failed to switch environment'", got)
 	}
 }

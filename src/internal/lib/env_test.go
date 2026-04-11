@@ -314,6 +314,9 @@ func TestExecuteEnv_repoEnvVars(t *testing.T) {
 }
 
 func TestExecuteEnv_setEnvWriteError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("file permissions not enforced as root")
+	}
 	setupTestConfig(t)
 
 	dir := t.TempDir()
