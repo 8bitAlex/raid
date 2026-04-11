@@ -1,6 +1,6 @@
 # Contributing to Raid
 
-Thank you for your interest in contributing to Raid! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Raid — the declarative, cross-platform CLI for orchestrating multi-repo development environments. This document provides guidelines and information for contributors, including how to set up your Go development environment, run the test suite, and submit pull requests.
 
 ## Table of Contents
 

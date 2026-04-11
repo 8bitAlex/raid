@@ -13,12 +13,13 @@
 </p>
 
 <br/>
-<p>
-It's more than <i>just</i> a command runner.
-<p>
+
+**Raid is a cross-platform, open-source CLI that turns your team's multi-repo development environment into version-controlled YAML.** Stop losing hours to wiki archaeology, stale setup scripts, and "what's the command for that again?" Slack threads — define commands, environments, and workflows once and let every developer run them the same way on macOS, Linux, and Windows.
+
+It's more than *just* a command runner.
 
 <p align="center">
-<img src="docs/assets/raid-comparison.gif" alt="Raid vs. manual setup — side-by-side comparison">
+<img src="docs/assets/raid-comparison.gif" alt="Raid vs. manual setup — side-by-side comparison of a multi-repo developer environment orchestrated with the raid CLI">
 </p>
 
 ---
@@ -40,7 +41,7 @@ The config commits with the code. When the process changes, the command changes 
 
 ---
 
-## How it works
+## How Raid works
 
 A **profile** (`*.raid.yaml`) describes your full system: which repos to clone, what environments exist, and what commands the team uses. It lives in a YAML file you register with raid once.
 
@@ -57,6 +58,27 @@ When a developer runs any raid command, it executes against the right repo, in t
 - **Full system orchestration** — manage any number of repos as a single unit. Clone, configure, and run them together or individually.
 - **Rich task runner** — 11 built-in task types: shell commands, scripts, HTTP downloads, git operations, health checks, template rendering, prompts, confirmations, and more.
 - **Portable** — config is just YAML in the repo. Works on macOS, Linux, and Windows.
+
+---
+
+## Why Raid? (vs. Make, Taskfile, Just, and docker-compose)
+
+Most task runners are built to orchestrate a *single project*. Raid is built for the problem one layer up: **operating a multi-repo development environment** as a team. Here's how it compares to tools you might already use:
+
+| Capability                                    | Raid | Make | Taskfile | Just | docker-compose |
+|------------------------------------------------|:----:|:----:|:--------:|:----:|:--------------:|
+| Declarative YAML config                        |  ✅  |  ❌  |    ✅    |  ❌  |       ✅       |
+| Multi-repo orchestration                       |  ✅  |  ❌  |    ❌    |  ❌  |       ❌       |
+| Merges top-level profile + per-repo config     |  ✅  |  ❌  |    ❌    |  ❌  |       ❌       |
+| Named environments (local / staging / prod)    |  ✅  |  ❌  |    ❌    |  ❌  |      ⚠️       |
+| Built-in `Git`, `HTTP`, `Wait`, `Prompt` tasks |  ✅  |  ❌  |    ❌    |  ❌  |       ❌       |
+| Cross-platform (macOS / Linux / Windows)       |  ✅  |  ⚠️  |    ✅    |  ✅  |       ✅       |
+| JSON Schema autocomplete via SchemaStore       |  ✅  |  ❌  |    ❌    |  ❌  |      ⚠️       |
+| Custom `raid <cmd>` subcommands in `--help`    |  ✅  |  ❌  |    ✅    |  ✅  |       ❌       |
+
+**Use Raid when** your team works across more than one repository and needs a single, consistent way to clone repos, switch environments, and run day-to-day commands.
+
+**Skip Raid when** you're building a single-language project in isolation — a standard build tool (Make, Taskfile, npm scripts, cargo) is probably all you need.
 
 ---
 
@@ -513,6 +535,46 @@ raid deploy staging v1.2.3   # $RAID_ARG_1=staging, $RAID_ARG_2=v1.2.3
 **Keep profiles in a dotfiles repo.** Profile files reference your repos and environments. Storing them in a private dotfiles repo keeps them version-controlled and accessible across machines.
 
 **Never commit secrets.** Use environment variable references or keep sensitive values in private profiles — never hardcode credentials in a committed raid file.
+
+---
+
+## FAQ
+
+### What is Raid?
+
+Raid is an open-source, cross-platform CLI tool that orchestrates development tasks, environments, and workflows across multiple Git repositories. Configuration lives in YAML files committed alongside the code, so every developer on the team runs the same commands the same way — no wiki archaeology, no setup scripts living on one person's laptop.
+
+### How is Raid different from Make, Taskfile, or Just?
+
+Make, Taskfile, and Just run tasks inside a single project. Raid is designed for **multi-repo** development environments: it clones repositories, merges a top-level profile with per-repo `raid.yaml` files, switches environment variables across every repo at once, and exposes custom `raid <cmd>` subcommands that anyone on the team can run. See [Why Raid?](#why-raid-vs-make-taskfile-just-and-docker-compose) above for a side-by-side comparison.
+
+### Does Raid work on Windows?
+
+Yes. Raid builds for macOS, Linux, and Windows (amd64 and arm64 where applicable). See [Installation](#installation) for platform-specific instructions.
+
+### Where does Raid store its configuration?
+
+Profiles are registered in a [Viper](https://github.com/spf13/viper)-managed config file. Persisted variables from the `Set` task live in `~/.raid/vars`. Per-repo `raid.yaml` files live at the root of each repository and are committed to version control alongside the code they describe.
+
+### Can I use Raid with a monorepo?
+
+Raid is optimized for multi-repo setups, but it works for a single repo too — you can skip the top-level profile and commit a `raid.yaml` at the repo root to define commands, environments, and tasks for that project.
+
+### How do I share profiles across my team?
+
+Commit a `raid.yaml` in each service repository to share per-repo workflows — that's the primary mechanism. For team-wide profiles that span multiple repos, store them in a dotfiles repo or an internal shared repo and register them with `raid profile add <file>`.
+
+### Does Raid support JSON Schema autocomplete in VS Code?
+
+Yes. Raid's profile and repo schemas are published to [SchemaStore](https://www.schemastore.org/), so any editor that uses the schemastore catalog — VS Code with the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml), JetBrains IDEs, Neovim with `yaml-language-server`, Helix, and others — automatically associates `*.raid.yaml` and `raid.yaml` files with the correct schema. No manual `$schema` comment required.
+
+### Is Raid production-ready?
+
+Raid is currently in the **prototype stage**. Core functionality works and is usable today, but APIs and configuration may change as the project evolves. See [Development Status](#development-status).
+
+### How is "Raid" pronounced, and where does the name come from?
+
+It's pronounced like the English word *raid* — as in a coordinated, objective-driven operation. The name reflects the tool's purpose: coordinating a group of repos to accomplish a single goal.
 
 ---
 

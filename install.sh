@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+#
+# Raid installer — Linux (with automatic Homebrew handoff on macOS).
+#
+# Raid is a declarative multi-repo development environment orchestrator:
+# a cross-platform Go CLI that turns your team's commands, environments,
+# and workflows into version-controlled YAML.
+#
+# Homepage: https://github.com/8bitalex/raid
+# License:  GPL-3.0-only
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash
+#
 set -euo pipefail
 
 REPO="8bitalex/raid"

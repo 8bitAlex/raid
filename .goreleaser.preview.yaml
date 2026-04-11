@@ -41,7 +41,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TOKEN }}"
     directory: Formula
     homepage: https://github.com/8bitalex/raid
-    description: "Distributed development environment orchestration tool (preview build)"
+    description: "Declarative multi-repo development environment orchestrator — cross-platform Go CLI for team commands, environments, and workflows (preview build)"
     license: GPL-3.0-only
     install: |
       bin.install "raid"
