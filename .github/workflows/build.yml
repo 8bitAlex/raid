@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       src-changed: ${{ steps.filter.outputs.src }}
+      docs-changed: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v6.0.2
       - uses: dorny/paths-filter@v3
@@ -26,6 +27,8 @@ jobs:
           filters: |
             src:
               - 'src/**'
+            docs:
+              - 'site/**'
 
   version-check:
     needs: changed-files
@@ -62,3 +65,22 @@ jobs:
       run: go build -v ./...
     - name: Test
       run: go test -v ./...
+
+  docs:
+    needs: changed-files
+    if: always() && (github.event_name != 'pull_request' || needs.changed-files.outputs.docs-changed == 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
