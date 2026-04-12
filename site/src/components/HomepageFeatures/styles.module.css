@@ -1,6 +1,7 @@
 .features {
   padding: 4rem 0;
   width: 100%;
+  background: var(--ifm-color-emphasis-100);
 }
 
 .feature {

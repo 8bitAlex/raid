@@ -178,6 +178,17 @@ Execute a named task group defined in the profile's `task_groups` section.
   parallel: true    # run the group's tasks in parallel
 ```
 
+### Retries
+
+Groups can automatically retry on failure using `attempts` and `delay`:
+
+```yaml
+- type: Group
+  ref: "flaky-setup"
+  attempts: 3        # retry up to 3 times on failure
+  delay: "2s"        # wait between attempts (default: 1s)
+```
+
 ---
 
 ## Prompt
@@ -194,8 +205,10 @@ Prompt the user for input and store the result in a variable.
 - type: Prompt
   var: "USERNAME"
   message: "Enter your username"
-  default: "admin"
+  default: "admin"                # used if the user presses Enter without input
 ```
+
+The `message` and `default` fields are optional. If `message` is omitted, the user is prompted with the variable name.
 
 ---
 
@@ -207,6 +220,8 @@ Ask the user to confirm before continuing. If the user answers no, remaining tas
 - type: Confirm
   message: "This will reset your database. Continue?"
 ```
+
+The `message` field is optional. If omitted, a generic confirmation prompt is shown.
 
 ---
 

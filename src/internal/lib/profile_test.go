@@ -568,8 +568,15 @@ func TestCreateRepoConfigs_omitsBranchWhenEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("raid.yaml not created: %v", err)
 	}
-	if strings.Contains(string(data), "branch:") {
-		t.Error("CreateRepoConfigs(): wrote branch field when Branch is empty")
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "branch:") {
+			t.Error("CreateRepoConfigs(): wrote branch field when Branch is empty")
+			break
+		}
 	}
 }
 

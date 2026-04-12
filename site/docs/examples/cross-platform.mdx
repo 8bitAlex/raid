@@ -1,0 +1,156 @@
+---
+sidebar_position: 4
+---
+
+# Cross-Platform Setup
+
+Use [conditions](/docs/features/tasks#conditions) to write a single profile that works across macOS, Linux, and Windows. Raid evaluates conditions before running each task, so platform-specific steps are skipped automatically.
+
+## Scenario
+
+A team has developers on macOS and Linux. The install process needs different package managers and paths on each platform, but everything else is shared.
+
+## Profile
+
+```yaml title="platform.raid.yaml"
+name: "platform"
+
+repositories:
+  - name: "api"
+    url: "git@github.com:my-org/api.git"
+    path: "~/dev/api"
+  - name: "frontend"
+    url: "git@github.com:my-org/frontend.git"
+    path: "~/dev/frontend"
+
+install:
+  tasks:
+    # macOS: install system dependencies with Homebrew
+    - type: Shell
+      cmd: "brew install go node postgresql"
+      condition:
+        platform: "darwin"
+
+    # Linux: install system dependencies with apt
+    - type: Shell
+      cmd: "sudo apt-get update && sudo apt-get install -y golang nodejs postgresql"
+      condition:
+        platform: "linux"
+
+    # Shared: install a tool only if it's missing
+    - type: Shell
+      cmd: "npm install -g pnpm"
+      condition:
+        cmd: "! which pnpm"
+
+    - type: Print
+      message: "System dependencies installed"
+      color: "green"
+
+commands:
+  - name: "start"
+    usage: "Start all services"
+    tasks:
+      # macOS: use Homebrew services for Postgres
+      - type: Shell
+        cmd: "brew services start postgresql"
+        condition:
+          platform: "darwin"
+
+      # Linux: use systemctl for Postgres
+      - type: Shell
+        cmd: "sudo systemctl start postgresql"
+        condition:
+          platform: "linux"
+
+      - type: Shell
+        cmd: "go run ./cmd/server &"
+        path: "~/dev/api"
+      - type: Shell
+        cmd: "npm run dev"
+        path: "~/dev/frontend"
+```
+
+## Combining conditions
+
+All condition fields must pass for the task to run. Use this to create precise gates:
+
+```yaml
+# Only run on macOS when the config file doesn't exist yet
+- type: Shell
+  cmd: "cp ./defaults/config.toml ~/.config/myapp/config.toml"
+  condition:
+    platform: "darwin"
+    exists: "!~/.config/myapp/config.toml"
+
+# Only run if both the database exists and the migration tool is installed
+- type: Shell
+  cmd: "go run ./cmd/migrate"
+  condition:
+    cmd: "psql -lqt | grep -q myapp_dev"
+    exists: "./cmd/migrate/main.go"
+```
+
+## Per-repo platform tasks
+
+Individual repos can also use conditions in their `raid.yaml`:
+
+```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
+install:
+  tasks:
+    - type: Shell
+      cmd: "go mod download"
+    - type: Shell
+      cmd: "brew install protobuf"
+      condition:
+        platform: "darwin"
+    - type: Shell
+      cmd: "sudo apt-get install -y protobuf-compiler"
+      condition:
+        platform: "linux"
+    - type: Shell
+      cmd: "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+```
+
+## Task groups for platform blocks
+
+If the same platform-specific sequence appears in multiple places, extract it into a [task group](/docs/features/task-groups):
+
+```yaml
+task_groups:
+  install-postgres:
+    - type: Shell
+      cmd: "brew install postgresql && brew services start postgresql"
+      condition:
+        platform: "darwin"
+    - type: Shell
+      cmd: "sudo apt-get install -y postgresql && sudo systemctl start postgresql"
+      condition:
+        platform: "linux"
+    - type: Wait
+      url: "localhost:5432"
+      timeout: "10s"
+
+commands:
+  - name: "db-setup"
+    usage: "Install and start Postgres"
+    tasks:
+      - type: Group
+        ref: "install-postgres"
+      - type: Shell
+        cmd: "createdb myapp_dev"
+        condition:
+          cmd: "! psql -lqt | grep -q myapp_dev"
+
+  - name: "reset"
+    usage: "Reinstall and restart everything"
+    tasks:
+      - type: Group
+        ref: "install-postgres"
+      - type: Shell
+        cmd: "go run ./cmd/migrate --fresh"
+        path: "~/dev/api"
+```

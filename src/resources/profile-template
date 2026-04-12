@@ -1,0 +1,168 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
+#
+# Raid Profile
+# A raid profile defines a collection of repositories, shared environments,
+# install steps, reusable task groups, and custom commands for your project.
+# Run `raid env <environment>` to spin up an environment, `raid install` to
+# run install tasks, or `raid <command>` to invoke a custom command.
+#
+# VS Code users: install the Red Hat YAML extension for automatic schema
+# validation and autocomplete:
+# https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml
+# The schema is published to SchemaStore, so *.raid.yaml files are
+# automatically associated -- no manual $schema comment required.
+
+# name: my-project
+
+# ---------------------------------------------------------------------------
+# Repositories
+# ---------------------------------------------------------------------------
+# repositories:
+#   - name: api
+#     path: ~/dev/my-project/api
+#     url: https://github.com/myorg/api.git
+#   - name: frontend
+#     path: ~/dev/my-project/frontend
+#     url: https://github.com/myorg/frontend.git
+
+# ---------------------------------------------------------------------------
+# Environments  (raid env <name>)
+# ---------------------------------------------------------------------------
+# environments:
+#   - name: dev
+#     variables:
+#       - name: NODE_ENV
+#         value: development
+#       - name: DATABASE_URL
+#         value: postgresql://localhost:5432/dev_db
+#     tasks:
+#       - type: Shell
+#         cmd: docker compose up -d
+#       - type: Wait
+#         url: http://localhost:5432
+#         timeout: 30s
+#       - type: Shell
+#         cmd: npm run dev
+#         concurrent: true
+#
+#   - name: staging
+#     variables:
+#       - name: NODE_ENV
+#         value: staging
+#       - name: API_URL
+#         value: https://staging.example.com
+#     tasks:
+#       - type: Shell
+#         cmd: npm run build
+
+# ---------------------------------------------------------------------------
+# Install  (raid install)
+# ---------------------------------------------------------------------------
+# install:
+#   tasks:
+#     - type: Shell
+#       cmd: brew bundle --no-lock
+#       condition:
+#         platform: darwin
+#     - type: Shell
+#       cmd: npm install
+#     - type: Shell
+#       cmd: pip install -r requirements.txt
+#       condition:
+#         exists: requirements.txt
+
+# ---------------------------------------------------------------------------
+# Task Groups  (reusable task sequences referenced by name)
+# ---------------------------------------------------------------------------
+# task_groups:
+#   db-migrate:
+#     - type: Print
+#       message: "Running database migrations..."
+#       color: cyan
+#     - type: Shell
+#       cmd: npm run db:migrate
+#
+#   health-check:
+#     - type: Wait
+#       url: http://localhost:3000/health
+#       timeout: 60s
+#     - type: Print
+#       message: "Service is healthy"
+#       color: green
+
+# ---------------------------------------------------------------------------
+# Commands  (raid <name>)
+# ---------------------------------------------------------------------------
+# commands:
+#   - name: build
+#     usage: Build all services
+#     tasks:
+#       - type: Shell
+#         cmd: npm run build
+#         path: ~/dev/my-project/api
+#       - type: Shell
+#         cmd: npm run build
+#         path: ~/dev/my-project/frontend
+#         concurrent: true
+#
+#   - name: deploy
+#     usage: Deploy to production
+#     tasks:
+#       - type: Confirm
+#         message: "Deploy to production?"
+#       - type: Prompt
+#         var: DEPLOY_TAG
+#         message: "Enter release tag"
+#         default: latest
+#       - type: Shell
+#         cmd: ./scripts/deploy.sh $DEPLOY_TAG
+#
+#   - name: lint
+#     usage: Lint and format all code
+#     out:
+#       stdout: true
+#       stderr: false
+#     tasks:
+#       - type: Shell
+#         cmd: npm run lint
+#       - type: Shell
+#         cmd: go vet ./...
+#         condition:
+#           exists: go.mod
+#
+#   - name: reset-db
+#     usage: Drop and recreate the local database
+#     tasks:
+#       - type: Confirm
+#         message: "This will destroy all local data. Continue?"
+#       - type: Shell
+#         cmd: docker compose down -v db
+#       - type: Shell
+#         cmd: docker compose up -d db
+#       - type: Group
+#         ref: db-migrate
+#       - type: Group
+#         ref: health-check
+
+# ---------------------------------------------------------------------------
+# Task Reference
+# ---------------------------------------------------------------------------
+# Task types:
+#   Shell    - Run a shell command (cmd, shell, literal, path)
+#   Script   - Run a script file (path, runner)
+#   HTTP     - Download a file (url, dest)
+#   Wait     - Poll until ready (url [http or tcp host:port], timeout)
+#   Template - Render a file with $VAR substitution (src, dest)
+#   Group    - Run a named task group (ref, parallel, attempts, delay)
+#   Git      - Git operation (op: pull|checkout|fetch|reset, branch, path)
+#   Prompt   - Ask the user for input (var, message, default)
+#   Confirm  - Ask for yes/no confirmation (message)
+#   Set      - Set an environment variable (var, value)
+#   Print    - Print a message (message, color, literal)
+#
+# Common task options:
+#   concurrent - Run this task in parallel with the next tasks (true/false)
+#   condition  - Only run if all conditions are met:
+#     platform - darwin (mac), linux, or windows
+#     exists   - file or directory path that must exist
+#     cmd      - shell command that must exit 0

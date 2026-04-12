@@ -43,6 +43,46 @@ commands:
         cmd: "go run ./cmd/migrate"
 ```
 
+## Arguments
+
+Custom commands accept positional arguments, which are exposed as `RAID_ARG_1`, `RAID_ARG_2`, etc.
+
+```bash
+raid deploy prod us-east-1
+```
+
+```yaml title="profile.yaml"
+commands:
+  - name: "deploy"
+    usage: "Deploy to a target environment and region"
+    tasks:
+      - type: Print
+        message: "Deploying to $RAID_ARG_1 in $RAID_ARG_2"
+      - type: Shell
+        cmd: "./scripts/deploy.sh $RAID_ARG_1 $RAID_ARG_2"
+```
+
+The variables are set for the duration of the command and cleared afterwards.
+
+## Output configuration
+
+Use the `out` field to control what output a command shows and optionally write it to a file.
+
+```yaml
+commands:
+  - name: "build"
+    usage: "Build all services (quiet)"
+    out:
+      stdout: true            # show stdout (default: true when out is omitted)
+      stderr: false           # hide stderr
+      file: "~/logs/build.log"  # also write all output to a file (supports $VAR)
+    tasks:
+      - type: Shell
+        cmd: "npm run build"
+```
+
+When `out` is omitted entirely, both stdout and stderr are shown. When `out` is present, only streams explicitly set to `true` are displayed. The `file` field writes both stdout and stderr to the specified path regardless of the `stdout`/`stderr` settings.
+
 ## Constraints
 
 Custom command names cannot shadow built-in names: `profile`, `install`, `env`, `doctor`.

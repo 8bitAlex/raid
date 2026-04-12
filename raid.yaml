@@ -1,12 +1,8 @@
+# Uses local schema for development
 # yaml-language-server: $schema=./schemas/raid-repo.schema.json
+
+# Required for YAML support in VSCode
+# https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml
 
 name: raid
 branch: main
-
-environments:
-  - name: dev
-    tasks:
-      - type: Shell
-        cmd: echo "Hello, world! - From raid"
-      - type: Script
-        path: ./docs/examples/hello.sh

@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
+#
+# Raid Repository Configuration
+# A raid.yaml file lives in the root of a repository and defines per-repo
+# environments, install steps, and custom commands. When a profile runs
+# `raid env` or `raid install`, each repo's raid.yaml is also evaluated.
+#
+# VS Code users: install the Red Hat YAML extension for automatic schema
+# validation and autocomplete:
+# https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml
+# The schema is published to SchemaStore, so raid.yaml files are
+# automatically associated -- no manual $schema comment required.
+
+# name: my-service
+# branch: main
+
+# ---------------------------------------------------------------------------
+# Environments  (merged with profile environments during `raid env`)
+# ---------------------------------------------------------------------------
+# environments:
+#   - name: dev
+#     variables:
+#       - name: PORT
+#         value: "3000"
+#       - name: LOG_LEVEL
+#         value: debug
+#     tasks:
+#       - type: Shell
+#         cmd: npm run dev
+#
+#   - name: staging
+#     variables:
+#       - name: PORT
+#         value: "8080"
+#       - name: LOG_LEVEL
+#         value: info
+#     tasks:
+#       - type: Shell
+#         cmd: npm run build && npm start
+
+# ---------------------------------------------------------------------------
+# Install  (runs during `raid install` for this repo)
+# ---------------------------------------------------------------------------
+# install:
+#   tasks:
+#     - type: Shell
+#       cmd: npm install
+#     - type: Shell
+#       cmd: cp .env.example .env
+#       condition:
+#         exists: .env.example
+#     - type: Shell
+#       cmd: go mod download
+#       condition:
+#         exists: go.mod
+#     - type: Shell
+#       cmd: pip install -r requirements.txt
+#       condition:
+#         exists: requirements.txt
+
+# ---------------------------------------------------------------------------
+# Commands  (raid <name>, scoped to this repo)
+# ---------------------------------------------------------------------------
+# commands:
+#   - name: build
+#     usage: Build the service
+#     tasks:
+#       - type: Shell
+#         cmd: npm run build
+#
+#   - name: test
+#     usage: Run the test suite
+#     tasks:
+#       - type: Shell
+#         cmd: npm test
+#
+#   - name: lint
+#     usage: Lint and type-check
+#     tasks:
+#       - type: Shell
+#         cmd: npm run lint
+#       - type: Shell
+#         cmd: npm run typecheck
+#
+#   - name: seed
+#     usage: Seed the local database
+#     tasks:
+#       - type: Confirm
+#         message: "This will reset seed data. Continue?"
+#       - type: Shell
+#         cmd: npm run db:seed
+
+# ---------------------------------------------------------------------------
+# Task Reference
+# ---------------------------------------------------------------------------
+# Task types:
+#   Shell    - Run a shell command (cmd, shell, literal, path)
+#   Script   - Run a script file (path, runner)
+#   HTTP     - Download a file (url, dest)
+#   Wait     - Poll until ready (url [http or tcp host:port], timeout)
+#   Template - Render a file with $VAR substitution (src, dest)
+#   Group    - Run a named task group (ref, parallel, attempts, delay)
+#   Git      - Git operation (op: pull|checkout|fetch|reset, branch, path)
+#   Prompt   - Ask the user for input (var, message, default)
+#   Confirm  - Ask for yes/no confirmation (message)
+#   Set      - Set an environment variable (var, value)
+#   Print    - Print a message (message, color, literal)
+#
+# Common task options:
+#   concurrent - Run this task in parallel with the next tasks (true/false)
+#   condition  - Only run if all conditions are met:
+#     platform - darwin (mac), linux, or windows
+#     exists   - file or directory path that must exist
+#     cmd      - shell command that must exit 0

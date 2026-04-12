@@ -1,0 +1,102 @@
+---
+sidebar_position: 5
+---
+
+# Task Groups
+
+Task groups let you define reusable sequences of tasks at the profile level, then reference them by name from commands, install steps, or environments. This keeps your configuration DRY and makes complex workflows easier to maintain.
+
+## Defining task groups
+
+Task groups are defined in the `task_groups` map at the top level of a profile. Each key is the group name, and the value is a list of tasks.
+
+```yaml title="profile.raid.yaml"
+task_groups:
+  install-deps:
+    - type: Shell
+      cmd: "npm install"
+      path: "~/dev/api"
+    - type: Shell
+      cmd: "npm install"
+      path: "~/dev/frontend"
+
+  health-check:
+    - type: Wait
+      url: "http://localhost:3000/health"
+      timeout: "30s"
+    - type: Print
+      message: "Service is healthy"
+      color: "green"
+```
+
+## Using task groups
+
+Reference a group from any task list using the `Group` task type:
+
+```yaml
+commands:
+  - name: "setup"
+    usage: "Install all dependencies"
+    tasks:
+      - type: Group
+        ref: "install-deps"
+      - type: Print
+        message: "Done"
+```
+
+The same group can be referenced from multiple places:
+
+```yaml
+commands:
+  - name: "setup"
+    tasks:
+      - type: Group
+        ref: "install-deps"
+
+  - name: "reset"
+    tasks:
+      - type: Confirm
+        message: "Reinstall all dependencies?"
+      - type: Shell
+        cmd: "rm -rf node_modules"
+        path: "~/dev/api"
+      - type: Group
+        ref: "install-deps"
+```
+
+## Parallel execution
+
+By default, tasks in a group run sequentially. Set `parallel: true` to run all tasks in the group concurrently:
+
+```yaml
+- type: Group
+  ref: "install-deps"
+  parallel: true
+```
+
+## Retries
+
+Groups support automatic retries for flaky steps. Use `attempts` to set the maximum number of tries, and `delay` to control the wait between attempts:
+
+```yaml
+- type: Group
+  ref: "health-check"
+  attempts: 5
+  delay: "3s"
+```
+
+If the group fails after all attempts are exhausted, the error is returned and task execution stops.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ref` | string | Yes | Name of the task group to execute |
+| `parallel` | bool | No | Run all tasks in the group concurrently. Default: `false` |
+| `attempts` | int | No | Retry the group on failure up to this many times |
+| `delay` | string | No | Wait between retry attempts (e.g. `1s`, `500ms`). Default: `1s` |
+
+## When to use task groups
+
+- **Shared setup steps** used by multiple commands (e.g. `install-deps`, `pull-all`)
+- **Health checks** that need to be retried across different commands
+- **Teardown sequences** reused in reset and rebuild workflows
+- **Platform-specific blocks** where the same conditional tasks appear in several places

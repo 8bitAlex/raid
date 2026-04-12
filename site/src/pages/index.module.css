@@ -86,6 +86,18 @@
   padding-right: 0.75rem;
 }
 
+.heroGif {
+  max-width: 80%;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+}
+
+@media screen and (max-width: 996px) {
+  .heroGif {
+    border-radius: 8px;
+  }
+}
+
 /* Install section */
 .install {
   padding: 4rem 0;
@@ -156,9 +168,21 @@
   color: var(--ifm-font-color-base);
 }
 
+.manualDownload {
+  display: block;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--ifm-color-primary);
+  text-decoration: underline;
+}
+
+.manualDownload:hover {
+  color: var(--ifm-color-primary-dark);
+}
+
 /* Comparison section */
 .comparison {
-  padding: 1rem 0 4rem 0;
+  padding: 4rem 0;
   background: var(--ifm-background-color);
   text-align: center;
 }
@@ -167,7 +191,14 @@
   font-size: 2rem;
   font-weight: 800;
   margin-bottom: 0.5rem;
-  text-align: left;
+  text-align: center;
+}
+
+.comparisonSubtitle {
+  font-size: 1rem;
+  color: var(--ifm-color-emphasis-600);
+  margin-bottom: 2rem;
+  text-align: center;
 }
 
 .tableWrapper {
@@ -179,9 +210,14 @@
 .comparisonTable {
   width: 100%;
   display: inline-table;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.9rem;
   background: var(--ifm-background-color);
+  border-radius: 12px;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .thFeature {
@@ -199,8 +235,10 @@
 .thRaid {
   padding: 1rem 1.25rem;
   text-align: center;
-  border-bottom: 1px solid rgba(79, 70, 229, 0.3);
-  background: rgba(79, 70, 229, 0.08);
+  border-bottom: 2px solid rgba(79, 70, 229, 0.4);
+  background: linear-gradient(180deg, rgba(79, 70, 229, 0.14) 0%, rgba(79, 70, 229, 0.06) 100%);
+  font-weight: 700;
+  color: var(--ifm-color-primary);
 }
 
 .raidBadge {

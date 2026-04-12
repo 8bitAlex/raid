@@ -1,0 +1,84 @@
+---
+sidebar_position: 1
+---
+
+# raid
+
+The root `raid` command. All other commands are subcommands of `raid`.
+
+```bash
+raid [command] [flags]
+```
+
+## Global flags
+
+These flags can be used with any subcommand.
+
+| Flag | Description |
+|---|---|
+| `-c, --config <path>` | Path to the config file (default: `~/.raid/config.toml`) |
+| `-h, --help` | Show help for any command |
+| `-v, --version` | Print the current raid version |
+
+## Config file
+
+Raid stores its configuration at `~/.raid/config.toml` by default. This file tracks which profile is active and where profile files are located.
+
+Use `--config` to point to a different config file:
+
+```bash
+raid --config ~/alt-config.toml install
+raid -c /tmp/test-config.toml doctor
+```
+
+This is useful when managing multiple independent setups or during testing.
+
+## Built-in commands
+
+| Command | Description |
+|---|---|
+| [`install`](./install) | Clone repositories and run install tasks |
+| [`env`](./env) | Apply, list, or check environments |
+| [`profile`](./profile) | Create, add, list, switch, or remove profiles |
+| [`doctor`](./doctor) | Check the active configuration for issues |
+| [`completion`](#shell-completion) | Generate shell autocompletion scripts |
+
+Custom commands defined in the active profile or its repositories are also available as `raid <name>`. See [Custom Commands](./custom) for details.
+
+## Version check
+
+Raid checks for updates on every invocation. For informational commands (`--help`, `--version`, `completion`), it waits up to 1.5 seconds for the check to complete. For all other commands, the check runs in the background and does not delay execution.
+
+If an update is available, a notice is printed to stderr:
+
+```
+Raid v0.5.0 (Update available: v0.5.0 → v0.6.0)
+```
+
+## Shell completion
+
+Generate autocompletion scripts for your shell:
+
+```bash
+# Bash
+raid completion bash > /etc/bash_completion.d/raid
+
+# Zsh
+raid completion zsh > "${fpath[1]}/_raid"
+
+# Fish
+raid completion fish > ~/.config/fish/completions/raid.fish
+
+# PowerShell
+raid completion powershell > raid.ps1
+```
+
+Run `raid completion <shell> --help` for detailed instructions for each shell.
+
+## Reserved command names
+
+The following names are reserved for built-in commands and cannot be used as custom command names:
+
+`profile`, `install`, `env`, `doctor`, `help`, `version`, `completion`
+
+If a custom command in your profile uses a reserved name, it is ignored and a warning is printed.

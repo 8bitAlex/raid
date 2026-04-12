@@ -1,0 +1,217 @@
+---
+sidebar_position: 6
+---
+
+# Variables
+
+Variables let you pass dynamic values into tasks — paths, credentials, feature flags, or anything that changes between runs or environments. Raid resolves `$VAR` and `${VAR}` references before executing a task, using a well-defined priority order.
+
+## Resolution order
+
+When raid encounters a `$VAR` or `${VAR}` reference, it resolves the value using the following priority (highest wins):
+
+1. **Set tasks** — variables defined with the `Set` task type
+2. **Shell exports** — variables exported by earlier `Shell` tasks in the same command session
+3. **OS environment** — variables already present in the system environment
+
+If a variable is defined at multiple levels, the highest-priority source wins. For example, a `Set` task always overrides a value from the OS environment.
+
+```yaml
+commands:
+  - name: "example"
+    tasks:
+      # OS env: LOG_LEVEL=info
+      - type: Set
+        var: "LOG_LEVEL"
+        value: "debug"          # wins — Set overrides OS env
+      - type: Print
+        message: "$LOG_LEVEL"   # prints "debug"
+```
+
+## Setting variables
+
+### With `Set` tasks
+
+Use `Set` to define a variable that persists for the duration of the command session. These have the highest priority.
+
+```yaml
+- type: Set
+  var: "ENVIRONMENT"
+  value: "production"
+```
+
+The `value` field supports `$VAR` references, so you can compose variables from other variables:
+
+```yaml
+- type: Set
+  var: "DB_URL"
+  value: "postgres://$DB_HOST:$DB_PORT/$DB_NAME"
+```
+
+### With `Shell` exports
+
+Use `export` inside a Shell task to capture dynamic values and make them available to subsequent tasks:
+
+```yaml
+- type: Shell
+  cmd: |
+    export GIT_SHA=$(git rev-parse --short HEAD)
+    export BUILD_DATE=$(date +%Y-%m-%d)
+- type: Print
+  message: "Build $GIT_SHA on $BUILD_DATE"
+```
+
+Exported variables are captured from the shell's environment after it exits. Shell-local variables (set without `export`) are **not** captured.
+
+### With `Prompt` tasks
+
+Prompt the user for a value at runtime:
+
+```yaml
+- type: Prompt
+  var: "API_KEY"
+  message: "Enter your API key"
+  default: "sk-dev-key"
+```
+
+The user's input is stored as a `Set`-level variable for the rest of the command session.
+
+## Using variables
+
+### In task fields
+
+Most string fields in tasks support `$VAR` and `${VAR}` substitution:
+
+```yaml
+- type: Shell
+  cmd: "deploy --env=$ENVIRONMENT --region=$REGION"
+  path: "$WORKSPACE/api"
+
+- type: Print
+  message: "Deployed to $ENVIRONMENT"
+
+- type: Template
+  src: "./config.tmpl"
+  dest: "$WORKSPACE/api/.env"
+```
+
+### In command output
+
+The `out.file` field also supports variable expansion:
+
+```yaml
+commands:
+  - name: "build"
+    out:
+      file: "$HOME/logs/build-$ENVIRONMENT.log"
+    tasks:
+      - type: Shell
+        cmd: "npm run build"
+```
+
+### In environment variables
+
+Environment variable values support references to other variables:
+
+```yaml
+environments:
+  - name: "local"
+    variables:
+      - name: "API_URL"
+        value: "http://localhost:$API_PORT"
+```
+
+## Shell pass-through
+
+When raid expands variables for a Shell task, unknown variables are passed through to the shell intact. This means shell-local variables and parameter expansions work as expected:
+
+```yaml
+- type: Shell
+  cmd: |
+    NAME="world"
+    echo "Hello, $NAME"              # shell resolves $NAME
+    echo "${PORT:-3000}"             # shell default expansion works
+```
+
+Raid recognizes parameter expansions like `${VAR:-default}`, `${VAR:+alt}`, and similar forms, and leaves them for the shell to handle.
+
+### The `literal` flag
+
+Set `literal: true` on a Shell or Print task to skip all raid-level variable expansion. The raw string is passed directly to the shell or terminal.
+
+```yaml
+- type: Shell
+  literal: true
+  cmd: |
+    WORD="Hello"
+    export WORD
+```
+
+```yaml
+- type: Print
+  literal: true
+  message: "Use $VAR syntax to reference variables"
+```
+
+## Variable scoping
+
+Variables are scoped to the **command session** — the lifetime of a single `raid <command>` invocation. They are not persisted between separate command runs.
+
+```yaml
+commands:
+  - name: "build"
+    tasks:
+      - type: Set
+        var: "MODE"
+        value: "release"
+      - type: Shell
+        cmd: "make $MODE"       # MODE is available here
+  - name: "test"
+    tasks:
+      - type: Shell
+        cmd: "echo $MODE"       # MODE is NOT set (different command)
+```
+
+### Command arguments
+
+Arguments passed to a custom command are available as `RAID_ARG_1`, `RAID_ARG_2`, etc. for the duration of that command:
+
+```bash
+raid deploy staging us-east-1
+```
+
+```yaml
+commands:
+  - name: "deploy"
+    tasks:
+      - type: Print
+        message: "Deploying to $RAID_ARG_1 in $RAID_ARG_2"
+```
+
+## Case sensitivity
+
+Variable names set via `Set` tasks are resolved case-insensitively. `$MY_VAR`, `$my_var`, and `$My_Var` all resolve to the same value. Shell exports and OS environment variables follow the platform's native case rules (case-sensitive on macOS/Linux).
+
+## Tips
+
+**Use `Set` for values shared across tasks.** If multiple tasks need the same computed value, set it once with `Set` rather than repeating the logic.
+
+**Use `Shell` exports for dynamic values.** When the value comes from a command (git SHA, timestamp, generated token), capture it with `export` in a Shell task.
+
+**Use `Prompt` for developer-specific values.** Local ports, API keys, or anything that varies per developer should be prompted at runtime.
+
+**Combine with `Template` for config files.** Set variables from any source, then render a `.env` or config file using a Template task:
+
+```yaml
+tasks:
+  - type: Prompt
+    var: "DB_PORT"
+    message: "Local database port"
+    default: "5432"
+  - type: Set
+    var: "DB_URL"
+    value: "postgres://localhost:$DB_PORT/myapp_dev"
+  - type: Template
+    src: "./envs/local.env.tmpl"
+    dest: "~/dev/api/.env"
+```

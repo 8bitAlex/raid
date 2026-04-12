@@ -1,7 +1,6 @@
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import TerminalDemo from '@site/src/components/TerminalDemo';
 import { comparisonFeatures, type Support } from '@site/src/lib/comparison';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
@@ -45,11 +44,11 @@ function HomepageHeader() {
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className={styles.heroTitle}>
-          Your workflow<br />as a config.
+          Your multi-repo workflow<br />in a config.
         </Heading>
         <p className={styles.heroSubtitle}>
           Stop fighting your tools. Start writing code.<br />
-          Define setup, tasks, and environments in YAML — right in your repo.
+          Define setup, tasks, and environments in YAML — right alongside your repos.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview">
@@ -57,7 +56,11 @@ function HomepageHeader() {
           </Link>
           <GitHubButtons />
         </div>
-        <TerminalDemo />
+        <img
+          src="/img/raid-comparison.gif"
+          alt="Raid CLI demo"
+          className={styles.heroGif}
+        />
       </div>
     </header>
   );
@@ -93,6 +96,13 @@ function InstallSection() {
           <InstallOption label="Homebrew" cmd="brew install 8bitalex/tap/raid" />
           <InstallOption label="Script" cmd="curl -fsSL https://raidcli.dev/install.sh | bash" />
         </div>
+        <a
+          href="https://github.com/8bitAlex/raid/releases/latest"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.manualDownload}>
+          Or download manually from GitHub (Windows, Linux, macOS)
+        </a>
       </div>
     </section>
   );
@@ -109,7 +119,10 @@ function ComparisonSection() {
     <section className={styles.comparison}>
       <div className="container">
         <div className={styles.tableWrapper}>
-          <Heading as="h2" className={styles.comparisonTitle}>Compare</Heading>
+          <Heading as="h2" className={styles.comparisonTitle}>How does Raid stack up?</Heading>
+          <p className={styles.comparisonSubtitle}>
+            See how Raid compares to other popular task runners and dev tools.
+          </p>
           <table className={styles.comparisonTable}>
             <thead>
               <tr>
@@ -147,8 +160,8 @@ export default function Home(): ReactNode {
       <HomepageHeader />
       <main>
         <InstallSection />
-        <HomepageFeatures />
         <ComparisonSection />
+        <HomepageFeatures />
       </main>
     </Layout>
   );
