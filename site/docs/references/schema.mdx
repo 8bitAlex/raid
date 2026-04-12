@@ -99,6 +99,10 @@ commands:
     tasks:
       - type: Shell
         cmd: "./deploy.sh"
+    out:
+      stdout: true
+      stderr: false
+      file: "~/logs/deploy.log"
 ```
 
 | Field | Type | Required | Description |
@@ -106,8 +110,14 @@ commands:
 | `name` | string | Yes | Command name — invoked as `raid <name>` |
 | `usage` | string | No | Description shown in `raid --help` |
 | `tasks` | list | Yes | Task sequence to run |
+| `out` | object | No | Output configuration (see below) |
+| `out.stdout` | bool | No | Show stdout (default: `true` when `out` is omitted) |
+| `out.stderr` | bool | No | Show stderr (default: `true` when `out` is omitted) |
+| `out.file` | string | No | Also write all output to this file (supports `$VAR`) |
 
 Command names cannot shadow built-in names: `install`, `env`, `profile`, `doctor`.
+
+Arguments passed after the command name are available as `RAID_ARG_1`, `RAID_ARG_2`, etc.
 
 ---
 
