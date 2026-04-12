@@ -27,6 +27,18 @@ const (
 //go:embed app.properties
 var appProperties []byte
 
+//go:embed profile-template
+var profileTemplate []byte
+
+//go:embed repo-template
+var repoTemplate []byte
+
+// ProfileTemplate returns the embedded profile template content.
+func ProfileTemplate() string { return string(profileTemplate) }
+
+// RepoTemplate returns the embedded repo template content.
+func RepoTemplate() string { return string(repoTemplate) }
+
 // GetProperty returns the value of the named property from app.properties.
 // Returns an error if the property is not found.
 func GetProperty(name Property) (string, error) {

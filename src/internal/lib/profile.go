@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/8bitalex/raid/src/resources"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -221,11 +222,6 @@ func ValidateProfile(path string) error {
 	return validateWithEmbeddedSchema(path, profileSchemaPath)
 }
 
-const (
-	profileSchemaURL = "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json"
-	repoSchemaURL    = "https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json"
-)
-
 // ProfileDraft is the minimal structure written to a new profile file.
 type ProfileDraft struct {
 	Name         string      `yaml:"name"`
@@ -246,7 +242,7 @@ func WriteProfileFile(draft ProfileDraft, path string) error {
 	if err != nil {
 		return fmt.Errorf("serializing profile: %w", err)
 	}
-	content := "# yaml-language-server: $schema=" + profileSchemaURL + "\n\n" + string(data)
+	content := resources.ProfileTemplate() + "\n" + string(data)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
@@ -296,7 +292,7 @@ func CreateRepoConfigs(repos []RepoDraft) {
 			fmt.Printf("  raid.yaml already exists at %s, skipping.\n", configPath)
 			continue
 		}
-		content := "# yaml-language-server: $schema=" + repoSchemaURL + "\n\nname: " + repo.Name + "\n"
+		content := resources.RepoTemplate() + "\nname: " + repo.Name + "\n"
 		if repo.Branch != "" {
 			content += "branch: " + repo.Branch + "\n"
 		}
