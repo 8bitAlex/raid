@@ -36,12 +36,11 @@ task_groups:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Unique profile identifier |
-| `repositories` | list | No | Repositories to clone and manage |
-| `environments` | list | No | Named environment configurations |
-| `install` | object | No | Tasks to run after all repos are cloned |
-| `install.tasks` | list | No | Task sequence for global install |
-| `commands` | list | No | Custom commands available via `raid <name>` |
-| `task_groups` | map | No | Reusable named task sequences |
+| [`repositories`](#repository) | list | No | Repositories to clone and manage |
+| [`environments`](#environment) | list | No | Named environment configurations |
+| [`install`](#install) | object | No | Install configuration |
+| [`commands`](#command) | list | No | Custom commands available via `raid <name>` |
+| [`task_groups`](#task-groups) | map | No | Reusable named task sequences |
 
 ---
 
@@ -63,7 +62,7 @@ repositories:
 | `name` | string | Yes | Used to reference the repo (e.g. `raid install api`) |
 | `url` | string | Yes | Git remote URL |
 | `path` | string | Yes | Local clone destination (supports `~`) |
-| `install.tasks` | list | No | Tasks to run after this repo is cloned |
+| [`install`](#install) | object | No | Install configuration for this repo |
 
 ---
 
@@ -83,10 +82,23 @@ environments:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Environment name used with `raid env <name>` |
-| `variables` | list | No | Variables to set when the environment is applied |
-| `variables[].name` | string | Yes | Variable name |
-| `variables[].value` | string | Yes | Variable value |
-| `tasks` | list | No | Tasks to run when this environment is applied |
+| [`variables`](#variables) | list | No | Variables to set when the environment is applied |
+| [`tasks`](#task) | list | No | Tasks to run when this environment is applied |
+
+### Variables
+
+Each entry in the `variables` list is an object with a `name` and `value`:
+
+```yaml
+variables:
+  - name: "LOG_LEVEL"
+    value: "debug"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Variable name |
+| `value` | string | Yes | Variable value |
 
 ---
 
@@ -109,15 +121,58 @@ commands:
 |---|---|---|---|
 | `name` | string | Yes | Command name — invoked as `raid <name>` |
 | `usage` | string | No | Description shown in `raid --help` |
-| `tasks` | list | Yes | Task sequence to run |
-| `out` | object | No | Output configuration (see below) |
-| `out.stdout` | bool | No | Show stdout (default: `true` when `out` is omitted) |
-| `out.stderr` | bool | No | Show stderr (default: `true` when `out` is omitted) |
-| `out.file` | string | No | Also write all output to this file (supports `$VAR`) |
+| [`tasks`](#task) | list | Yes | Task sequence to run |
+| [`out`](#output) | object | No | Output configuration |
 
 Command names cannot shadow built-in names: `install`, `env`, `profile`, `doctor`.
 
 Arguments passed after the command name are available as `RAID_ARG_1`, `RAID_ARG_2`, etc.
+
+### Output
+
+When `out` is omitted, both stdout and stderr are shown. When `out` is present, only streams explicitly set to `true` are displayed. The `file` field writes all output to the specified path regardless of the `stdout`/`stderr` settings.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `stdout` | bool | No | Show stdout (default: `true` when `out` is omitted) |
+| `stderr` | bool | No | Show stderr (default: `true` when `out` is omitted) |
+| `file` | string | No | Also write all output to this file (supports `$VAR`) |
+
+---
+
+## Install
+
+```yaml
+install:
+  tasks:
+    - type: Shell
+      cmd: "npm install"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| [`tasks`](#task) | list | No | Task sequence to run |
+
+---
+
+## Task groups
+
+```yaml
+task_groups:
+  install-deps:
+    - type: Shell
+      cmd: "npm install"
+  health-check:
+    - type: Wait
+      url: "http://localhost:3000/health"
+      timeout: "30s"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| [`task_groups`](#task) | map | No | Map of group name to task list |
+
+Task groups are referenced using the [Group](#group) task type.
 
 ---
 
@@ -127,45 +182,158 @@ All tasks share these common fields:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `type` | string | Yes | Task type (case-sensitive, Title Case) |
+| [`type`](#task-types) | string | Yes | Task type (case-sensitive, Title Case) |
 | `concurrent` | bool | No | Run in parallel with adjacent concurrent tasks |
-| `condition` | object | No | Conditions that must pass for the task to run |
+| [`condition`](#condition) | object | No | Conditions that must all pass for the task to run |
 
 ### Condition
 
 | Field | Type | Description |
 |---|---|---|
-| `platform` | string | `darwin`, `linux`, or `windows` |
-| `exists` | string | Skip if this path already exists |
-| `cmd` | string | Skip if this command exits 0 |
+| `platform` | string enum | `darwin`, `linux`, or `windows` |
+| `exists` | string | Only run if this file or directory exists |
+| `cmd` | string | Only run if this command exits 0 |
+
+All specified condition fields must be satisfied for the task to run.
 
 ### Task types
 
-| Type | Description |
-|---|---|
-| [`Shell`](/docs/features/tasks#shell) | Run a shell command |
-| [`Script`](/docs/features/tasks#script) | Run a script file |
-| [`Set`](/docs/features/tasks#set) | Set a variable for the current session |
-| [`Print`](/docs/features/tasks#print) | Print a message to the terminal |
-| [`Template`](/docs/features/tasks#template) | Render a template file to a destination |
-| [`Git`](/docs/features/tasks#git) | Perform a git operation |
-| [`Group`](/docs/features/tasks#group) | Execute a named task group |
-| [`Prompt`](/docs/features/tasks#prompt) | Prompt the user for input |
-| [`Confirm`](/docs/features/tasks#confirm) | Ask the user to confirm before continuing |
-| [`HTTP`](/docs/features/tasks#http) | Download a file from a URL |
-| [`Wait`](/docs/features/tasks#wait) | Poll a URL or TCP endpoint until it responds |
+[`Shell`](#shell) | [`Script`](#script) | [`HTTP`](#http) | [`Wait`](#wait) | [`Template`](#template) | [`Group`](#group) | [`Git`](#git) | [`Prompt`](#prompt) | [`Confirm`](#confirm) | [`Set`](#set) | [`Print`](#print)
 
-See [Task Types](/docs/features/tasks) for full field details per type.
+---
+
+### Shell
+
+Run a shell command.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Shell"` |
+| `cmd` | string | Yes | Command to execute |
+| `shell` | string enum | No | Shell to use: `bash`, `sh`, `zsh`, `powershell`, `pwsh`, `ps`, `cmd`. Default: `bash` |
+| `literal` | bool | No | Skip `$VAR` expansion before passing to the shell. Default: `false` |
+| `path` | string | No | Working directory. Defaults to `~` for profile tasks, the repo directory for repo tasks |
+
+### Script
+
+Run a script file.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Script"` |
+| `path` | string | Yes | Path to the script file |
+| `runner` | string enum | No | Interpreter: `bash`, `sh`, `zsh`, `python`, `python2`, `python3`, `node`, `powershell` |
+
+If `runner` is omitted, the script is executed directly (requires a shebang line or executable permission).
+
+### HTTP
+
+Download a file from a URL.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"HTTP"` |
+| `url` | string | Yes | URL to download from |
+| `dest` | string | Yes | Local path to write the file to |
+
+### Wait
+
+Poll a URL or TCP endpoint until it responds, or until the timeout is reached.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Wait"` |
+| `url` | string | Yes | HTTP(S) URL or TCP `host:port` to poll |
+| `timeout` | string | No | Max wait duration (e.g. `30s`, `1m`). Default: `30s` |
+
+### Template
+
+Render a template file with variable substitution and write it to a destination.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Template"` |
+| `src` | string | Yes | Path to the template file. Supports `$VAR` and `${VAR}` substitution |
+| `dest` | string | Yes | Path to write the rendered file to |
+
+### Group
+
+Execute a named task group defined in the profile's `task_groups` section.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Group"` |
+| `ref` | string | Yes | Name of the task group to execute |
+| `parallel` | bool | No | Run all tasks in the group concurrently. Default: `false` |
+| `attempts` | int | No | Retry the group on failure up to this many times |
+| `delay` | string | No | Wait between retry attempts (e.g. `1s`, `500ms`). Default: `1s` |
+
+### Git
+
+Perform a git operation on a repository.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Git"` |
+| `op` | string enum | Yes | Git operation: `pull`, `checkout`, `fetch`, `reset` |
+| `branch` | string | No | Target branch (required for `checkout`, optional for others) |
+| `path` | string | No | Path to the git repository. Defaults to the current working directory |
+
+### Prompt
+
+Prompt the user for input and store the result in a variable.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Prompt"` |
+| `var` | string | Yes | Environment variable name to set with the user's input |
+| `message` | string | No | Message to display to the user |
+| `default` | string | No | Default value if the user provides no input |
+
+### Confirm
+
+Ask the user for yes/no confirmation. If the user answers no, remaining tasks are skipped.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Confirm"` |
+| `message` | string | No | Confirmation prompt to display |
+
+### Set
+
+Set an environment variable for the duration of the command session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Set"` |
+| `var` | string | Yes | Environment variable name to set |
+| `value` | string | Yes | Value to assign. Supports `$VAR` and `${VAR}` substitution |
+
+### Print
+
+Print a message to the terminal.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | `"Print"` |
+| `message` | string | Yes | Message to print. Supports `$VAR` substitution unless `literal` is `true` |
+| `color` | string enum | No | Terminal color: `red`, `green`, `yellow`, `blue`, `cyan`, `white` |
+| `literal` | bool | No | Skip environment variable expansion in the message. Default: `false` |
 
 ---
 
 ## Repository `raid.yaml`
 
-A repository can define its own commands and environments by committing a `raid.yaml` at its root. These are merged into the active profile at load time.
+A repository can define its own install tasks, commands, and environments by committing a `raid.yaml` at its root. These are merged into the active profile at load time.
 
 ```yaml title="~/dev/api/raid.yaml"
 name: "api"
 branch: "main"
+
+install:
+  tasks:
+    - type: Shell
+      cmd: "npm install"
 
 commands:
   - name: "migrate"
@@ -188,6 +356,7 @@ environments:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Must match the repository name in the profile |
-| `branch` | string | No | Default branch to checkout on clone |
-| `commands` | list | No | Repo-scoped custom commands |
-| `environments` | list | No | Repo-scoped environment variables and tasks |
+| `branch` | string | Yes | Default branch to checkout on clone |
+| [`install`](#install) | object | No | Install configuration for this repo |
+| [`commands`](#command) | list | No | Repo-scoped custom commands |
+| [`environments`](#environment) | list | No | Repo-scoped environment variables and tasks |
