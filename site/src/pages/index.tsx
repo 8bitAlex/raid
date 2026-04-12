@@ -119,7 +119,10 @@ function ComparisonSection() {
     <section className={styles.comparison}>
       <div className="container">
         <div className={styles.tableWrapper}>
-          <Heading as="h2" className={styles.comparisonTitle}>Compare</Heading>
+          <Heading as="h2" className={styles.comparisonTitle}>How does Raid stack up?</Heading>
+          <p className={styles.comparisonSubtitle}>
+            See how Raid compares to other popular task runners and dev tools.
+          </p>
           <table className={styles.comparisonTable}>
             <thead>
               <tr>
@@ -157,8 +160,8 @@ export default function Home(): ReactNode {
       <HomepageHeader />
       <main>
         <InstallSection />
-        <HomepageFeatures />
         <ComparisonSection />
+        <HomepageFeatures />
       </main>
     </Layout>
   );
