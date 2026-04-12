@@ -1,0 +1,225 @@
+---
+sidebar_position: 5
+---
+
+# Advanced Commands
+
+This example covers command arguments, output redirection, and task group retries — features that make custom commands more flexible and resilient.
+
+## Command arguments
+
+Custom commands accept positional arguments, exposed as `RAID_ARG_1`, `RAID_ARG_2`, etc. Use them to build parameterized workflows:
+
+```yaml title="profile.raid.yaml"
+commands:
+  - name: "deploy"
+    usage: "Deploy a service to a target environment"
+    tasks:
+      - type: Confirm
+        message: "Deploy $RAID_ARG_1 to $RAID_ARG_2?"
+      - type: Shell
+        cmd: "./scripts/deploy.sh --service=$RAID_ARG_1 --env=$RAID_ARG_2"
+      - type: Print
+        message: "$RAID_ARG_1 deployed to $RAID_ARG_2"
+        color: "green"
+```
+
+```bash
+raid deploy api staging
+# > Deploy api to staging? (y/N) y
+# > api deployed to staging
+```
+
+### Combining with `Set` for readability
+
+Use `Set` to give arguments meaningful names:
+
+```yaml
+commands:
+  - name: "deploy"
+    usage: "Deploy <service> <environment>"
+    tasks:
+      - type: Set
+        var: "SERVICE"
+        value: "$RAID_ARG_1"
+      - type: Set
+        var: "TARGET_ENV"
+        value: "$RAID_ARG_2"
+      - type: Confirm
+        message: "Deploy $SERVICE to $TARGET_ENV?"
+      - type: Shell
+        cmd: "./scripts/deploy.sh --service=$SERVICE --env=$TARGET_ENV"
+      - type: Print
+        message: "$SERVICE deployed to $TARGET_ENV"
+        color: "green"
+```
+
+---
+
+## Output redirection
+
+Use the `out` field to control what a command shows and optionally log output to a file.
+
+### Quiet builds
+
+Show stdout but suppress stderr for a cleaner terminal:
+
+```yaml
+commands:
+  - name: "build"
+    usage: "Build all services (quiet)"
+    out:
+      stdout: true
+      stderr: false
+    tasks:
+      - type: Shell
+        cmd: "go build ./..."
+        path: "~/dev/api"
+        concurrent: true
+      - type: Shell
+        cmd: "npm run build"
+        path: "~/dev/frontend"
+        concurrent: true
+```
+
+### Logging to a file
+
+Write all output to a log file for later review. The `file` field captures both stdout and stderr regardless of the display settings:
+
+```yaml
+commands:
+  - name: "test-all"
+    usage: "Run all tests with logging"
+    out:
+      stdout: true
+      stderr: true
+      file: "$HOME/logs/test-run.log"
+    tasks:
+      - type: Shell
+        cmd: "go test ./..."
+        path: "~/dev/api"
+      - type: Shell
+        cmd: "npm test"
+        path: "~/dev/frontend"
+```
+
+```bash
+raid test-all
+# output shown in terminal AND written to ~/logs/test-run.log
+```
+
+### Silent with log only
+
+Suppress all terminal output and write everything to a file:
+
+```yaml
+commands:
+  - name: "nightly-build"
+    usage: "Run the nightly build silently"
+    out:
+      stdout: false
+      stderr: false
+      file: "$HOME/logs/nightly-$RAID_ARG_1.log"
+    tasks:
+      - type: Shell
+        cmd: "./scripts/build-all.sh"
+```
+
+```bash
+raid nightly-build 2025-01-15
+# no terminal output, all output in ~/logs/nightly-2025-01-15.log
+```
+
+---
+
+## Task group retries
+
+Some steps are inherently flaky — network calls, service health checks, database connections on cold start. Use `attempts` and `delay` on a Group task to retry automatically.
+
+### Health check with retries
+
+```yaml title="profile.raid.yaml"
+task_groups:
+  wait-for-services:
+    - type: Wait
+      url: "http://localhost:3000/health"
+      timeout: "5s"
+    - type: Wait
+      url: "localhost:5432"
+      timeout: "5s"
+    - type: Print
+      message: "All services healthy"
+      color: "green"
+
+commands:
+  - name: "start"
+    usage: "Start and verify all services"
+    tasks:
+      - type: Shell
+        cmd: "docker-compose up -d"
+      - type: Group
+        ref: "wait-for-services"
+        attempts: 5
+        delay: "3s"
+      - type: Print
+        message: "Ready to develop"
+        color: "green"
+```
+
+If the health checks fail, raid retries the entire group up to 5 times with a 3-second wait between attempts. If all attempts are exhausted, the error is returned and execution stops.
+
+### Flaky install steps
+
+```yaml
+task_groups:
+  install-npm:
+    - type: Shell
+      cmd: "npm install"
+      path: "~/dev/api"
+    - type: Shell
+      cmd: "npm install"
+      path: "~/dev/frontend"
+
+commands:
+  - name: "setup"
+    usage: "Install all dependencies"
+    tasks:
+      - type: Group
+        ref: "install-npm"
+        attempts: 3
+        delay: "5s"
+      - type: Print
+        message: "Dependencies installed"
+        color: "green"
+```
+
+### Combining retries with parallel execution
+
+Run all tasks in a group concurrently and retry the batch if any fail:
+
+```yaml
+task_groups:
+  pull-all:
+    - type: Shell
+      cmd: "git pull"
+      path: "~/dev/api"
+    - type: Shell
+      cmd: "git pull"
+      path: "~/dev/frontend"
+    - type: Shell
+      cmd: "git pull"
+      path: "~/dev/shared-config"
+
+commands:
+  - name: "sync"
+    usage: "Pull all repos"
+    tasks:
+      - type: Group
+        ref: "pull-all"
+        parallel: true
+        attempts: 3
+        delay: "2s"
+      - type: Print
+        message: "All repos up to date"
+        color: "green"
+```

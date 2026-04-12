@@ -82,7 +82,7 @@ tasks:
 
 **Commands** are custom CLI commands defined in your profile or in a repository's `raid.yaml`. Once defined, they're available to everyone on the team as `raid <name>`.
 
-Use commands to encode team workflows — deployments, migrations, test runs — so no one has to remember the exact steps or ask a colleague.
+Use commands to encode team workflows — deployments, migrations, test runs — so no one has to remember the exact steps or ask a colleague. Commands accept arguments, support output redirection, and can run tasks in parallel.
 
 ```yaml
 commands:
@@ -90,11 +90,72 @@ commands:
     usage: "Deploy all services to staging"
     tasks:
       - type: Shell
-        cmd: "./scripts/deploy.sh"
+        cmd: "./scripts/deploy.sh $RAID_ARG_1"
         path: "~/dev/api"
 ```
 
 → See [Custom Commands](/docs/usage/custom)
+
+---
+
+### Task groups
+
+**Task groups** are reusable sequences of tasks defined once at the profile level and referenced by name from commands, install steps, or environments. They keep configuration DRY and support parallel execution and automatic retries.
+
+```yaml
+task_groups:
+  install-deps:
+    - type: Shell
+      cmd: "npm install"
+      path: "~/dev/api"
+    - type: Shell
+      cmd: "npm install"
+      path: "~/dev/frontend"
+
+commands:
+  - name: "setup"
+    tasks:
+      - type: Group
+        ref: "install-deps"
+```
+
+→ See [Task Groups](/docs/features/task-groups)
+
+---
+
+### Variables
+
+**Variables** let you pass dynamic values between tasks. Raid resolves `$VAR` and `${VAR}` references using a priority chain: `Set` tasks override shell exports, which override OS environment variables.
+
+```yaml
+tasks:
+  - type: Set
+    var: "ENVIRONMENT"
+    value: "staging"
+  - type: Shell
+    cmd: "deploy --env=$ENVIRONMENT"
+```
+
+→ See [Variables](/docs/features/variables)
+
+---
+
+### Per-repo configuration
+
+Repositories can define their own commands, environments, and install steps by committing a `raid.yaml` at their root. These are automatically merged into the active profile.
+
+```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
+commands:
+  - name: "migrate"
+    tasks:
+      - type: Shell
+        cmd: "go run ./cmd/migrate"
+```
+
+→ See [Repository Configuration](/docs/features/repo-config)
 
 ---
 
@@ -103,4 +164,5 @@ commands:
 - [Getting Started](/docs/start) — install raid and set up your first profile
 - [Profile Configuration](/docs/features/profiles) — full profile file format
 - [Task Types](/docs/features/tasks) — everything a task can do
+- [Variables](/docs/features/variables) — variable resolution and expansion
 - [Command Reference](/docs/references/commands) — built-in commands

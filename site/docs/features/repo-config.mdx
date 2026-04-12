@@ -1,0 +1,195 @@
+---
+sidebar_position: 7
+---
+
+# Repository Configuration
+
+Each repository managed by raid can define its own configuration by committing a `raid.yaml` file at its root. This lets teams colocate service-specific commands, environments, and install steps right next to the code they apply to.
+
+## File format
+
+```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
+install:
+  tasks:
+    - type: Shell
+      cmd: "npm install"
+
+commands:
+  - name: "migrate"
+    usage: "Run database migrations"
+    tasks:
+      - type: Shell
+        cmd: "go run ./cmd/migrate"
+
+environments:
+  - name: "local"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://localhost:5432/api_dev"
+  - name: "staging"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://staging-db.internal:5432/api"
+```
+
+## Fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Must match the repository name in the profile |
+| `branch` | string | Yes | Default branch to checkout on clone |
+| [`install`](/docs/references/schema#install) | object | No | Install configuration for this repo |
+| [`commands`](/docs/references/schema#command) | list | No | Custom commands scoped to this repo |
+| [`environments`](/docs/references/schema#environment) | list | No | Environment variables and tasks for this repo |
+
+## How it works
+
+When a profile is loaded, raid scans each repository's configured `path` for a `raid.yaml` file. If found, its contents are merged into the active profile:
+
+- **Commands** from the repo become available as `raid <name>`, just like profile-level commands.
+- **Environments** are merged with the matching profile-level environment when `raid env <name>` is applied. Both the profile-level and repo-level variables and tasks run.
+- **Install tasks** run after the repository is cloned during `raid install`.
+
+The `name` field in the repo's `raid.yaml` must match the repository name defined in the profile. This is how raid associates the file with the correct repository entry.
+
+## Install tasks
+
+A repo's install tasks run after the repository has been cloned. Use them for dependency installation, build steps, or any one-time setup specific to that service.
+
+```yaml
+install:
+  tasks:
+    - type: Shell
+      cmd: "npm install"
+    - type: Shell
+      cmd: "npm run build"
+```
+
+If the repository already exists at its configured path, cloning is skipped but install tasks still run during `raid install`.
+
+## Commands
+
+Repo-level commands work exactly like profile-level commands. They are available globally as `raid <name>` and support all the same features: tasks, output configuration, and arguments.
+
+```yaml
+commands:
+  - name: "api-dev"
+    usage: "Start the API in development mode"
+    tasks:
+      - type: Shell
+        cmd: "go run ./cmd/server"
+
+  - name: "api-test"
+    usage: "Run API tests"
+    tasks:
+      - type: Shell
+        cmd: "go test ./..."
+```
+
+Command names must be unique across the profile and all repos. They cannot shadow built-in names: `profile`, `install`, `env`, `doctor`.
+
+## Environments
+
+Repo-level environments define variables and tasks specific to that service. When you run `raid env local`, raid applies both the profile-level `local` environment and any repo-level `local` environments across all repositories.
+
+```yaml
+environments:
+  - name: "local"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://localhost:5432/api_dev"
+      - name: "API_PORT"
+        value: "3000"
+    tasks:
+      - type: Shell
+        cmd: "docker-compose up -d db"
+
+  - name: "staging"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://staging-db.internal:5432/api"
+```
+
+See [Environments](/docs/features/environments) for more on how environment merging works.
+
+## When to use repo config
+
+**Service-specific commands.** If only one service needs a `migrate` or `seed` command, define it in that repo's `raid.yaml` rather than cluttering the profile.
+
+**Per-service environment variables.** Each service likely connects to different databases, uses different ports, or needs different API keys. Define these in the repo config so the profile stays clean.
+
+**Install steps tied to the codebase.** Dependency installation, code generation, or build steps that live alongside the source code they apply to.
+
+## Example: multi-service setup
+
+```yaml title="Profile: acme.raid.yaml"
+name: "acme"
+
+repositories:
+  - name: "api"
+    url: "git@github.com:acme/api.git"
+    path: "~/dev/api"
+  - name: "frontend"
+    url: "git@github.com:acme/frontend.git"
+    path: "~/dev/frontend"
+
+environments:
+  - name: "local"
+    variables:
+      - name: "LOG_LEVEL"
+        value: "debug"
+```
+
+```yaml title="~/dev/api/raid.yaml"
+name: "api"
+branch: "main"
+
+install:
+  tasks:
+    - type: Shell
+      cmd: "go mod download"
+
+commands:
+  - name: "migrate"
+    usage: "Run database migrations"
+    tasks:
+      - type: Shell
+        cmd: "go run ./cmd/migrate"
+
+environments:
+  - name: "local"
+    variables:
+      - name: "DATABASE_URL"
+        value: "postgres://localhost:5432/api_dev"
+    tasks:
+      - type: Shell
+        cmd: "docker-compose up -d db"
+```
+
+```yaml title="~/dev/frontend/raid.yaml"
+name: "frontend"
+branch: "main"
+
+install:
+  tasks:
+    - type: Shell
+      cmd: "npm install"
+
+commands:
+  - name: "fe-dev"
+    usage: "Start the frontend dev server"
+    tasks:
+      - type: Shell
+        cmd: "npm run dev"
+
+environments:
+  - name: "local"
+    variables:
+      - name: "VITE_API_URL"
+        value: "http://localhost:3000"
+```
+
+Running `raid env local` applies the profile-level `LOG_LEVEL=debug` to all repos, plus `DATABASE_URL` and docker-compose for the API, and `VITE_API_URL` for the frontend.

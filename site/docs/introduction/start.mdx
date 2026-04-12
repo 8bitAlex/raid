@@ -71,11 +71,39 @@ If your profile or any of its repositories define custom commands, they are avai
 raid <command>
 ```
 
+Commands accept positional arguments, which are available as `RAID_ARG_1`, `RAID_ARG_2`, etc.:
+
+```bash
+raid deploy staging us-east-1
+```
+
 Run `raid --help` to see all available commands, including any defined in the active profile.
+
+## Switch environments
+
+Apply a named environment across all repositories:
+
+```bash
+raid env local
+```
+
+This sets the configured variables and runs any environment tasks for each repository. See [Environments](./features/environments) for details.
+
+## Custom config path
+
+By default, raid looks for its config at `$HOME/.config/raid/config.toml`. Use the `--config` (or `-c`) flag to point to a different location:
+
+```bash
+raid --config ~/my-config.toml install
+```
 
 ## Next steps
 
 - [Profile Configuration](./features/profiles) — repositories, environments, and commands
 - [Task Types](./features/tasks) — everything a task can do
+- [Task Groups](./features/task-groups) — reusable task sequences with retries
+- [Variables](./features/variables) — variable resolution and expansion
 - [Environments](./features/environments) — switch between dev, staging, and production
+- [Repository Configuration](./features/repo-config) — per-repo commands and environments
+- [Custom Commands](/docs/usage/custom) — arguments, output redirection, and more
 - [Command Reference](/docs/references/commands) — built-in commands
