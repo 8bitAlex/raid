@@ -86,6 +86,18 @@
   padding-right: 0.75rem;
 }
 
+.heroGif {
+  max-width: 80%;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+}
+
+@media screen and (max-width: 996px) {
+  .heroGif {
+    border-radius: 8px;
+  }
+}
+
 /* Install section */
 .install {
   padding: 4rem 0;
@@ -154,6 +166,18 @@
 
 .copyButton:hover {
   color: var(--ifm-font-color-base);
+}
+
+.manualDownload {
+  display: block;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--ifm-color-primary);
+  text-decoration: underline;
+}
+
+.manualDownload:hover {
+  color: var(--ifm-color-primary-dark);
 }
 
 /* Comparison section */
