@@ -28,7 +28,6 @@ go.work.sum
 .env
 
 # AI assistant files
-CLAUDE.md
 .claude/
 
 # Docusaurus files (site build output also ignored via site/.gitignore)
