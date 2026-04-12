@@ -48,7 +48,7 @@ function HomepageHeader() {
         </Heading>
         <p className={styles.heroSubtitle}>
           Stop fighting your tools. Start writing code.<br />
-          Define setup, tasks, and environments in YAML — right along your code.
+          Define setup, tasks, and environments in YAML — right alongside your repos.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview">
