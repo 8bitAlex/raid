@@ -1,4 +1,8 @@
+# Uses local schema for development
 # yaml-language-server: $schema=./schemas/raid-profile.schema.json
+
+# Required for YAML support in VSCode
+# https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml
 
 name: raid
 repositories:
