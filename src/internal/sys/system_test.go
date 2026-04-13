@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -102,6 +103,16 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+// posixAbsExpected returns the expected result of ExpandPath for a POSIX-style
+// absolute path: on Windows the path is returned as-is; on other platforms
+// filepath.Clean is applied (equivalent to filepath.Abs for already-absolute paths).
+func posixAbsExpected(path string) string {
+	if runtime.GOOS == "windows" {
+		return path
+	}
+	return filepath.Clean(path)
+}
+
 func TestExpandPath(t *testing.T) {
 	t.Run("empty string", func(t *testing.T) {
 		if got := ExpandPath(""); got != "" {
@@ -114,7 +125,7 @@ func TestExpandPath(t *testing.T) {
 		defer os.Unsetenv("RAID_SYS_TEST")
 
 		got := ExpandPath("/tmp/$RAID_SYS_TEST/path")
-		want, _ := filepath.Abs("/tmp/testvalue/path")
+		want := posixAbsExpected("/tmp/testvalue/path")
 		if got != want {
 			t.Errorf("ExpandPath() = %q, want %q", got, want)
 		}
@@ -131,10 +142,10 @@ func TestExpandPath(t *testing.T) {
 	})
 
 	t.Run("absolute path unchanged", func(t *testing.T) {
-		abs, _ := filepath.Abs("/usr/local/bin")
+		want := posixAbsExpected("/usr/local/bin")
 		got := ExpandPath("/usr/local/bin")
-		if got != abs {
-			t.Errorf("ExpandPath(%q) = %q, want %q", "/usr/local/bin", got, abs)
+		if got != want {
+			t.Errorf("ExpandPath(%q) = %q, want %q", "/usr/local/bin", got, want)
 		}
 	})
 }
@@ -608,7 +619,7 @@ func TestFileExists_permissionError(t *testing.T) {
 
 func TestExpandPath_withWhitespace(t *testing.T) {
 	got := ExpandPath("  /usr/local/bin  ")
-	want, _ := filepath.Abs("/usr/local/bin")
+	want := posixAbsExpected("/usr/local/bin")
 	if got != want {
 		t.Errorf("ExpandPath with whitespace = %q, want %q", got, want)
 	}

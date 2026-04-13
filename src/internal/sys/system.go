@@ -87,6 +87,14 @@ func ExpandPath(input string) string {
 	input = os.ExpandEnv(input)
 	input = strings.TrimSpace(input)
 	input, _ = homedir.Expand(input)
+
+	// On Windows, preserve POSIX-style absolute paths (for example,
+	// "/usr/local/bin") rather than canonicalizing them into a drive-rooted
+	// Windows path via filepath.Abs.
+	if runtime.GOOS == "windows" && strings.HasPrefix(input, "/") {
+		return input
+	}
+
 	if abs, err := filepath.Abs(input); err == nil {
 		input = abs
 	}
