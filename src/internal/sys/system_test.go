@@ -610,3 +610,29 @@ func TestExpandPath_withWhitespace(t *testing.T) {
 		t.Errorf("ExpandPath with whitespace = %q, want %q", got, "/usr/local/bin")
 	}
 }
+
+func TestExpandPath_relativePath(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := ExpandPath("./some/relative/path")
+	want := filepath.Join(cwd, "some/relative/path")
+	if got != want {
+		t.Errorf("ExpandPath(\"./some/relative/path\") = %q, want %q", got, want)
+	}
+}
+
+func TestExpandPath_bareRelativePath(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := ExpandPath("profile.raid.yaml")
+	want := filepath.Join(cwd, "profile.raid.yaml")
+	if got != want {
+		t.Errorf("ExpandPath(\"profile.raid.yaml\") = %q, want %q", got, want)
+	}
+}

@@ -77,7 +77,8 @@ func Expand(input string) string {
 	return os.ExpandEnv(input)
 }
 
-// ExpandPath expands environment variables and a leading ~ in the given path.
+// ExpandPath expands environment variables, a leading ~, and resolves relative
+// paths to absolute using the current working directory.
 func ExpandPath(input string) string {
 	if input == "" {
 		return input
@@ -86,6 +87,9 @@ func ExpandPath(input string) string {
 	input = os.ExpandEnv(input)
 	input = strings.TrimSpace(input)
 	input, _ = homedir.Expand(input)
+	if abs, err := filepath.Abs(input); err == nil {
+		input = abs
+	}
 	return input
 }
 

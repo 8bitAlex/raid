@@ -72,7 +72,7 @@ func (t Task) Expand() Task {
 		Literal:    t.Literal,
 		Shell:      t.Shell,
 		Path:       sys.ExpandPath(expandRaid(t.Path)),
-		Runner:     sys.ExpandPath(expandRaid(t.Runner)),
+		Runner:     expandRaid(t.Runner),
 		URL:        expandRaid(t.URL),
 		Dest:       sys.ExpandPath(expandRaid(t.Dest)),
 		Timeout:    t.Timeout,
