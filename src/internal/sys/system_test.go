@@ -114,8 +114,9 @@ func TestExpandPath(t *testing.T) {
 		defer os.Unsetenv("RAID_SYS_TEST")
 
 		got := ExpandPath("/tmp/$RAID_SYS_TEST/path")
-		if got != "/tmp/testvalue/path" {
-			t.Errorf("ExpandPath() = %q, want %q", got, "/tmp/testvalue/path")
+		want, _ := filepath.Abs("/tmp/testvalue/path")
+		if got != want {
+			t.Errorf("ExpandPath() = %q, want %q", got, want)
 		}
 	})
 
@@ -130,9 +131,10 @@ func TestExpandPath(t *testing.T) {
 	})
 
 	t.Run("absolute path unchanged", func(t *testing.T) {
+		abs, _ := filepath.Abs("/usr/local/bin")
 		got := ExpandPath("/usr/local/bin")
-		if got != "/usr/local/bin" {
-			t.Errorf("ExpandPath(%q) = %q, want unchanged", "/usr/local/bin", got)
+		if got != abs {
+			t.Errorf("ExpandPath(%q) = %q, want %q", "/usr/local/bin", got, abs)
 		}
 	})
 }
@@ -606,8 +608,9 @@ func TestFileExists_permissionError(t *testing.T) {
 
 func TestExpandPath_withWhitespace(t *testing.T) {
 	got := ExpandPath("  /usr/local/bin  ")
-	if got != "/usr/local/bin" {
-		t.Errorf("ExpandPath with whitespace = %q, want %q", got, "/usr/local/bin")
+	want, _ := filepath.Abs("/usr/local/bin")
+	if got != want {
+		t.Errorf("ExpandPath with whitespace = %q, want %q", got, want)
 	}
 }
 

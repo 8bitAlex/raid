@@ -2,6 +2,7 @@ package lib
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -69,8 +70,9 @@ func TestTaskExpand_expandsEnvVarsInFields(t *testing.T) {
 	if got.Cmd != "echo hello" {
 		t.Errorf("Expand().Cmd = %q, want %q", got.Cmd, "echo hello")
 	}
-	if got.Path != "/tmp/hello/script.sh" {
-		t.Errorf("Expand().Path = %q, want %q", got.Path, "/tmp/hello/script.sh")
+	wantPath, _ := filepath.Abs("/tmp/hello/script.sh")
+	if got.Path != wantPath {
+		t.Errorf("Expand().Path = %q, want %q", got.Path, wantPath)
 	}
 	if got.Runner != "hello" {
 		t.Errorf("Expand().Runner = %q, want %q", got.Runner, "hello")
