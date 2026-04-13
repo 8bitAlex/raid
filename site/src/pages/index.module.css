@@ -39,6 +39,18 @@
   line-height: 1.6;
 }
 
+@media screen and (max-width: 996px) {
+  .heroSubtitle {
+    font-size: 1.1rem;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .heroSubtitle br {
+    display: none;
+  }
+}
+
 .buttons {
   display: flex;
   align-items: center;
@@ -94,6 +106,7 @@
 
 @media screen and (max-width: 996px) {
   .heroGif {
+    max-width: 100%;
     border-radius: 8px;
   }
 }
@@ -129,6 +142,13 @@
   text-align: left;
 }
 
+@media screen and (max-width: 480px) {
+  .installOption {
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+  }
+}
+
 .installLabel {
   font-size: 0.75rem;
   font-weight: 600;
@@ -136,6 +156,13 @@
   letter-spacing: 0.05em;
   color: var(--ifm-color-emphasis-600);
   min-width: 70px;
+  flex-shrink: 0;
+}
+
+@media screen and (max-width: 480px) {
+  .installLabel {
+    min-width: 55px;
+  }
 }
 
 .installCmd {
@@ -147,6 +174,13 @@
   overflow-x: auto;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
+}
+
+@media screen and (max-width: 480px) {
+  .installCmd {
+    font-size: 0.75rem;
+  }
 }
 
 .copyButton {
@@ -187,11 +221,23 @@
   text-align: center;
 }
 
+@media screen and (max-width: 996px) {
+  .comparison {
+    padding: 3rem 1rem;
+  }
+}
+
 .comparisonTitle {
   font-size: 2rem;
   font-weight: 800;
   margin-bottom: 0.5rem;
   text-align: center;
+}
+
+@media screen and (max-width: 480px) {
+  .comparisonTitle {
+    font-size: 1.5rem;
+  }
 }
 
 .comparisonSubtitle {
@@ -203,6 +249,7 @@
 
 .tableWrapper {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   max-width: 736px;
   margin: 0 auto;
 }
@@ -218,6 +265,13 @@
   border: 1px solid var(--ifm-color-emphasis-300);
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+@media screen and (max-width: 480px) {
+  .comparisonTable {
+    font-size: 0.8rem;
+    border-radius: 8px;
+  }
 }
 
 .thFeature {
@@ -239,6 +293,15 @@
   background: linear-gradient(180deg, rgba(79, 70, 229, 0.14) 0%, rgba(79, 70, 229, 0.06) 100%);
   font-weight: 700;
   color: var(--ifm-color-primary);
+}
+
+@media screen and (max-width: 480px) {
+  .thFeature,
+  .thRaid,
+  .thOther {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.65rem;
+  }
 }
 
 .raidBadge {
@@ -291,6 +354,17 @@
 .cell {
   text-align: center;
   padding: 0.75rem 1.25rem;
+}
+
+@media screen and (max-width: 480px) {
+  .featureLabel {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .cell {
+    padding: 0.5rem 0.35rem;
+  }
 }
 
 .colRaid {
