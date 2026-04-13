@@ -16,7 +16,7 @@ func TestTaskIsZero(t *testing.T) {
 		{"task with type only", Task{Type: Shell}, false},
 		{"task with cmd but no type", Task{Cmd: "echo hi"}, true},
 		{"shell task with cmd", Task{Type: Shell, Cmd: "echo hi"}, false},
-		{"script task with path", Task{Type: Script, Path: "/tmp/script.sh"}, false},
+		{"script task with path", Task{Type: Script, Path: filepath.Join(os.TempDir(), "script.sh")}, false},
 	}
 
 	for _, tt := range tests {
@@ -55,13 +55,17 @@ func TestTaskExpand_expandsEnvVarsInFields(t *testing.T) {
 	os.Setenv("RAID_TEST_EXPAND", "hello")
 	defer os.Unsetenv("RAID_TEST_EXPAND")
 
+	tmpDir := os.TempDir()
+	inputPath := filepath.Join(tmpDir, "$RAID_TEST_EXPAND", "script.sh")
+	wantPath := filepath.Join(tmpDir, "hello", "script.sh")
+
 	task := Task{
 		Type:       Shell,
 		Concurrent: true,
 		Literal:    true,
 		Cmd:        "echo $RAID_TEST_EXPAND",
 		Shell:      "bash",
-		Path:       "/tmp/$RAID_TEST_EXPAND/script.sh",
+		Path:       inputPath,
 		Runner:     "$RAID_TEST_EXPAND",
 	}
 
@@ -70,7 +74,6 @@ func TestTaskExpand_expandsEnvVarsInFields(t *testing.T) {
 	if got.Cmd != "echo hello" {
 		t.Errorf("Expand().Cmd = %q, want %q", got.Cmd, "echo hello")
 	}
-	wantPath, _ := filepath.Abs("/tmp/hello/script.sh")
 	if got.Path != wantPath {
 		t.Errorf("Expand().Path = %q, want %q", got.Path, wantPath)
 	}

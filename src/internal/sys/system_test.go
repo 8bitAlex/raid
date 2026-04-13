@@ -113,8 +113,9 @@ func TestExpandPath(t *testing.T) {
 		os.Setenv("RAID_SYS_TEST", "testvalue")
 		defer os.Unsetenv("RAID_SYS_TEST")
 
-		got := ExpandPath("/tmp/$RAID_SYS_TEST/path")
-		want, _ := filepath.Abs("/tmp/testvalue/path")
+		tmpDir := os.TempDir()
+		got := ExpandPath(filepath.Join(tmpDir, "$RAID_SYS_TEST", "path"))
+		want := filepath.Join(tmpDir, "testvalue", "path")
 		if got != want {
 			t.Errorf("ExpandPath() = %q, want %q", got, want)
 		}
