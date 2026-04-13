@@ -115,6 +115,17 @@ curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bas
    - Paste the folder path and click OK
 5. Open a new terminal and verify: `raid --version`
 
+**Preview builds**
+
+Want to try the latest features before they ship? Install the preview channel — it receives updates ahead of stable and may include experimental functionality.
+
+```bash
+# macOS / Linux (Homebrew)
+brew install 8bitalex/tap/raid-preview
+```
+
+You can also download preview binaries directly from the [GitHub releases page](https://github.com/8bitalex/raid/releases). Preview builds are tagged with a `-preview` suffix (e.g. `0.6.0-preview`) and update independently from stable. You can have both installed side-by-side.
+
 ### Quickstart
 
 ```bash

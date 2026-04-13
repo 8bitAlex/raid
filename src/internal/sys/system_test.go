@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -102,6 +103,16 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+// posixAbsExpected returns the expected result of ExpandPath for a POSIX-style
+// absolute path: on Windows the path is returned as-is; on other platforms
+// filepath.Clean is applied (equivalent to filepath.Abs for already-absolute paths).
+func posixAbsExpected(path string) string {
+	if runtime.GOOS == "windows" {
+		return path
+	}
+	return filepath.Clean(path)
+}
+
 func TestExpandPath(t *testing.T) {
 	t.Run("empty string", func(t *testing.T) {
 		if got := ExpandPath(""); got != "" {
@@ -113,9 +124,11 @@ func TestExpandPath(t *testing.T) {
 		os.Setenv("RAID_SYS_TEST", "testvalue")
 		defer os.Unsetenv("RAID_SYS_TEST")
 
-		got := ExpandPath("/tmp/$RAID_SYS_TEST/path")
-		if got != "/tmp/testvalue/path" {
-			t.Errorf("ExpandPath() = %q, want %q", got, "/tmp/testvalue/path")
+		tmpDir := os.TempDir()
+		got := ExpandPath(filepath.Join(tmpDir, "$RAID_SYS_TEST", "path"))
+		want := filepath.Join(tmpDir, "testvalue", "path")
+		if got != want {
+			t.Errorf("ExpandPath() = %q, want %q", got, want)
 		}
 	})
 
@@ -130,9 +143,10 @@ func TestExpandPath(t *testing.T) {
 	})
 
 	t.Run("absolute path unchanged", func(t *testing.T) {
+		want := posixAbsExpected("/usr/local/bin")
 		got := ExpandPath("/usr/local/bin")
-		if got != "/usr/local/bin" {
-			t.Errorf("ExpandPath(%q) = %q, want unchanged", "/usr/local/bin", got)
+		if got != want {
+			t.Errorf("ExpandPath(%q) = %q, want %q", "/usr/local/bin", got, want)
 		}
 	})
 }
@@ -606,7 +620,34 @@ func TestFileExists_permissionError(t *testing.T) {
 
 func TestExpandPath_withWhitespace(t *testing.T) {
 	got := ExpandPath("  /usr/local/bin  ")
-	if got != "/usr/local/bin" {
-		t.Errorf("ExpandPath with whitespace = %q, want %q", got, "/usr/local/bin")
+	want := posixAbsExpected("/usr/local/bin")
+	if got != want {
+		t.Errorf("ExpandPath with whitespace = %q, want %q", got, want)
+	}
+}
+
+func TestExpandPath_relativePath(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := ExpandPath("./some/relative/path")
+	want := filepath.Join(cwd, "some/relative/path")
+	if got != want {
+		t.Errorf("ExpandPath(\"./some/relative/path\") = %q, want %q", got, want)
+	}
+}
+
+func TestExpandPath_bareRelativePath(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := ExpandPath("profile.raid.yaml")
+	want := filepath.Join(cwd, "profile.raid.yaml")
+	if got != want {
+		t.Errorf("ExpandPath(\"profile.raid.yaml\") = %q, want %q", got, want)
 	}
 }

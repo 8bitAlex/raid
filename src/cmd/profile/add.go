@@ -35,6 +35,8 @@ var AddProfileCmd = &cobra.Command{
 // Extracted from AddProfileCmd.Run so tests can observe the exit code
 // without os.Exit terminating the test process.
 func runAddProfile(path string) int {
+	path = sys.ExpandPath(path)
+
 	if !sys.FileExists(path) {
 		fmt.Printf("File '%s' does not exist\n", path)
 		return 1
