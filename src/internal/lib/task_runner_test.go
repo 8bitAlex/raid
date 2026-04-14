@@ -1064,7 +1064,10 @@ func TestExecuteTask_prompt_consecutiveReads(t *testing.T) {
 
 	origStdin := os.Stdin
 	os.Stdin = r
-	defer func() { os.Stdin = origStdin }()
+	defer func() {
+		os.Stdin = origStdin
+		_ = r.Close()
+	}()
 
 	if err := ExecuteTask(Task{Type: Prompt, Var: "RAID_PROMPT_FIRST"}); err != nil {
 		t.Fatalf("first prompt: unexpected error: %v", err)
