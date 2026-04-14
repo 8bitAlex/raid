@@ -4,7 +4,7 @@
 
 Raid solves the "how do I run this, again?" problem for teams working across multiple Git repositories. A top-level **profile** (`*.raid.yaml`) describes repositories, environments, install steps, and custom commands. Each repo can also commit a `raid.yaml` at its root — Raid merges these automatically at load time. Developers use `raid install` to clone and set up everything, `raid env <name>` to switch the full system between local/staging/production, and `raid <cmd>` to run team-defined workflows like `raid test`, `raid patch`, or `raid deploy`.
 
-Raid is written in Go, distributed as a single static binary, and published under the GNU General Public License v3.0.
+Raid is written in Go, distributed as a single self-contained binary, and published under the GNU General Public License v3.0.
 
 ## Docs
 
