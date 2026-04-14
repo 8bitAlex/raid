@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-"""Generate a GitHub social preview card for raid (1280x640)."""
+"""Generate a GitHub social preview card for raid (1280x640).
+
+Usage:
+    python3 docs/assets/gen_social_preview.py [--out PATH]
+
+Dependencies: Pillow (`pip install Pillow`).
+
+Fonts: uses DejaVu Sans (Regular/Bold) and DejaVu Sans Mono (Regular/Bold).
+Candidate paths below cover typical Linux, macOS, and Windows installations;
+pass any missing ones with DEJAVU_FONT_DIR=/path if your system keeps them
+somewhere custom.
+"""
+import argparse
+import os
+import sys
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1280, 640
@@ -14,11 +30,40 @@ ACCENT    = (255, 107, 71)        # #FF6B47 warm coral
 GREEN     = (63, 185, 80)         # #3FB950
 YELLOW    = (210, 153, 34)        # #D29922
 
-# Fonts
-SANS_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-SANS      = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-MONO_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
-MONO      = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+
+def _find_font(filename: str) -> str:
+    """Locate a DejaVu font file across common platform locations."""
+    env_dir = os.environ.get("DEJAVU_FONT_DIR")
+    candidates = []
+    if env_dir:
+        candidates.append(Path(env_dir) / filename)
+    candidates += [
+        # Linux
+        Path("/usr/share/fonts/truetype/dejavu") / filename,
+        Path("/usr/share/fonts/TTF") / filename,
+        Path("/usr/share/fonts/dejavu") / filename,
+        # macOS (Homebrew cask + manual install)
+        Path("/opt/homebrew/share/fonts") / filename,
+        Path("/usr/local/share/fonts") / filename,
+        Path.home() / "Library/Fonts" / filename,
+        # Windows
+        Path(r"C:\Windows\Fonts") / filename,
+    ]
+    for p in candidates:
+        if p.is_file():
+            return str(p)
+    sys.exit(
+        f"error: could not find {filename}.\n"
+        "Install the DejaVu fonts (e.g. `apt install fonts-dejavu`, "
+        "`brew install --cask font-dejavu`) or set DEJAVU_FONT_DIR to "
+        "the directory containing them."
+    )
+
+
+SANS_BOLD = _find_font("DejaVuSans-Bold.ttf")
+SANS      = _find_font("DejaVuSans.ttf")
+MONO_BOLD = _find_font("DejaVuSansMono-Bold.ttf")
+MONO      = _find_font("DejaVuSansMono.ttf")
 
 img = Image.new("RGB", (W, H), BG)
 d = ImageDraw.Draw(img)
@@ -130,7 +175,17 @@ cursor_x = content_x + 22
 cursor_y = content_y - 2
 d.rectangle([cursor_x, cursor_y, cursor_x + 14, cursor_y + 26], fill=ACCENT)
 
-# Save
-out = "/home/user/raid/docs/assets/social-preview.png"
-img.save(out, "PNG", optimize=True)
-print(f"Wrote {out} ({W}x{H})")
+# Save — default to writing next to this script (docs/assets/social-preview.png)
+# so the script works from any checkout. Override with --out.
+parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(__file__).resolve().parent / "social-preview.png",
+    help="Output PNG path (default: %(default)s)",
+)
+args = parser.parse_args()
+
+args.out.parent.mkdir(parents=True, exist_ok=True)
+img.save(args.out, "PNG", optimize=True)
+print(f"Wrote {args.out} ({W}x{H})")
