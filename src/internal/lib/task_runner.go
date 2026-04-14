@@ -29,6 +29,30 @@ var (
 // tasks do not interleave reads or compete for input.
 var stdinMu sync.Mutex
 
+// stdinReader is a package-level buffered reader over os.Stdin, shared across
+// all Prompt and Confirm tasks so that bytes buffered ahead by one task are
+// still available to the next. Creating a fresh bufio.Reader per call would
+// discard any line(s) that got pulled into the old reader's buffer along with
+// the one that was actually returned — on piped input this caused the next
+// Prompt to see EOF instead of waiting for input.
+//
+// stdinReaderFor tracks which os.Stdin the reader was built for so that tests
+// that swap os.Stdin (e.g. to a pipe) get a fresh reader tied to the new fd.
+var (
+	stdinReader    *bufio.Reader
+	stdinReaderFor *os.File
+)
+
+// getStdinReader returns the shared stdin reader, (re)creating it whenever
+// os.Stdin has been swapped. Callers must hold stdinMu.
+func getStdinReader() *bufio.Reader {
+	if stdinReader == nil || stdinReaderFor != os.Stdin {
+		stdinReader = bufio.NewReader(os.Stdin)
+		stdinReaderFor = os.Stdin
+	}
+	return stdinReader
+}
+
 var colorCodes = map[string]string{
 	"red":    "\033[31m",
 	"green":  "\033[32m",
@@ -550,8 +574,7 @@ func execPrompt(task Task) error {
 
 	fmt.Fprint(commandStdout, message+" ")
 
-	reader := bufio.NewReader(os.Stdin)
-	value, err := reader.ReadString('\n')
+	value, err := getStdinReader().ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read input: %w", err)
 	}
@@ -576,8 +599,7 @@ func execConfirm(task Task) error {
 
 	fmt.Fprint(commandStdout, message+" [y/N] ")
 
-	reader := bufio.NewReader(os.Stdin)
-	answer, err := reader.ReadString('\n')
+	answer, err := getStdinReader().ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read input: %w", err)
 	}
