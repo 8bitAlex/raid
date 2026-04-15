@@ -1042,6 +1042,48 @@ func TestExecuteTask_prompt_usesDefault(t *testing.T) {
 	os.Unsetenv("RAID_PROMPT_DEFAULT_TEST")
 }
 
+// TestExecuteTask_prompt_consecutiveReads is a regression test for a bug where
+// a fresh bufio.Reader was created on every Prompt/Confirm invocation. On
+// piped input, the first reader could buffer more than one line, return the
+// first, and discard the rest when it went out of scope — causing the next
+// Prompt to see EOF instead of waiting for input.
+func TestExecuteTask_prompt_consecutiveReads(t *testing.T) {
+	os.Unsetenv("RAID_PROMPT_FIRST")
+	os.Unsetenv("RAID_PROMPT_SECOND")
+	t.Cleanup(func() {
+		os.Unsetenv("RAID_PROMPT_FIRST")
+		os.Unsetenv("RAID_PROMPT_SECOND")
+	})
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString("alice\nsmith\n")
+	w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() {
+		os.Stdin = origStdin
+		_ = r.Close()
+	}()
+
+	if err := ExecuteTask(Task{Type: Prompt, Var: "RAID_PROMPT_FIRST"}); err != nil {
+		t.Fatalf("first prompt: unexpected error: %v", err)
+	}
+	if err := ExecuteTask(Task{Type: Prompt, Var: "RAID_PROMPT_SECOND"}); err != nil {
+		t.Fatalf("second prompt: unexpected error: %v", err)
+	}
+
+	if got := os.Getenv("RAID_PROMPT_FIRST"); got != "alice" {
+		t.Errorf("RAID_PROMPT_FIRST = %q, want %q", got, "alice")
+	}
+	if got := os.Getenv("RAID_PROMPT_SECOND"); got != "smith" {
+		t.Errorf("RAID_PROMPT_SECOND = %q, want %q", got, "smith")
+	}
+}
+
 // --- Confirm tasks ---
 
 func TestExecuteTask_confirm_yes(t *testing.T) {
