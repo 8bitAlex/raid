@@ -2,24 +2,57 @@ name: Deploy
 
 on:
   workflow_dispatch:
-    inputs:
-      confirmed:
-        description: "I have bumped the version in src/resources/app.properties"
-        required: true
-        type: boolean
+  schedule:
+    # Every Friday at 16:00 UTC; the gate job filters to even ISO weeks so
+    # the stable release runs at most once every two weeks.
+    - cron: '0 16 * * 5'
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_release: ${{ steps.gate.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to release
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "Manual dispatch; proceeding."
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          WEEK=$((10#$(date -u +%V)))
+          if [ $((WEEK % 2)) -ne 0 ]; then
+            echo "ISO week $WEEK is odd; biweekly release runs only on even weeks. Skipping."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          VERSION=$(awk -F= '/^version=/{print $2}' src/resources/app.properties)
+          TAG="v${VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists; version has not been bumped since last release. Skipping."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Even ISO week $WEEK with unreleased version $VERSION; proceeding."
+          echo "should_release=true" >> $GITHUB_OUTPUT
+
   deploy:
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Confirm version bump
-        if: ${{ !inputs.confirmed }}
-        run: |
-          echo "::error::Deploy cancelled. Check the box to confirm the version has been bumped in src/resources/app.properties."
-          exit 1
-
       - uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
