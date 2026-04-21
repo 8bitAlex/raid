@@ -1,6 +1,6 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import type { Config } from '@docusaurus/types';
+import { themes as prismThemes } from 'prism-react-renderer';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -61,7 +61,8 @@ const config: Config = {
       title: 'Raid',
       logo: {
         alt: 'Raid logo',
-        src: 'img/logo.svg',
+        src: 'img/logo-light.svg',
+        srcDark: 'img/logo-dark.svg',
       },
       items: [
         {
