@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
+
+# This is a raid profile definition for a fictional company called Acme. It defines two repositories (web and api) 
+# and a development environment with tasks to set up and run the projects.
+name: acme
+
+# Repos tracked by this profile — cloned on `raid install`
+repositories:
+  - name: web
+    path: ~/Developer/acme/web
+    url: https://github.com/acme/web.git
+  - name: api
+    path: ~/Developer/acme/api
+    url: https://github.com/acme/api.git
+
+# Environments run task sequences across all repos
+environments:
+  - name: dev
+    # Shared env vars injected into every task
+    variables:
+      - name: NODE_ENV
+        value: development
+      - name: API_URL
+        value: http://localhost:3000
+    tasks:
+      # Run a shell command
+      - type: Shell
+        cmd: npm install
+      # Start services in parallel
+      - type: Shell
+        cmd: npm run dev
+        concurrent: true
+      # Wait for the API to become healthy
+      - type: Wait
+        url: http://localhost:3000/health
+        timeout: 30s
+
+# One-time setup on `raid install`
+install:
+  tasks:
+    - type: Confirm
+      message: Install dependencies?
+    - type: Script
+      path: ./scripts/bootstrap.sh
+
+
+
+

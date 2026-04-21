@@ -55,6 +55,16 @@ function HomepageHeader() {
             Get Started
           </Link>
           <GitHubButtons />
+          <a
+            href="https://www.producthunt.com/products/raid?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-raid"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.productHuntBadge}>
+            <img
+              alt="Raid - Open-source development workflow orchestrator | Product Hunt"
+              src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1128226&theme=neutral&t=1776801713624"
+            />
+          </a>
         </div>
         <img
           src="/img/raid-comparison.gif"

@@ -98,6 +98,18 @@
   padding-right: 0.75rem;
 }
 
+.productHuntBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 3rem;
+}
+
+.productHuntBadge img {
+  height: 100%;
+  width: auto;
+  display: block;
+}
+
 .heroGif {
   max-width: 80%;
   border-radius: 12px;

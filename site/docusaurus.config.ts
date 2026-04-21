@@ -54,6 +54,7 @@ const config: Config = {
   ],
 
   themeConfig: {
+    image: 'img/social-preview.png',
     colorMode: {
       respectPrefersColorScheme: true,
     },
