@@ -40,6 +40,92 @@ function GitHubButtons() {
   );
 }
 
+function CostSavings() {
+  const HOURS_INCREMENT = 48;
+  const RATE = 150;
+  const RAMP_DUR = 800;
+  const PAUSE_DUR = 4000;
+
+  const [hours, setHours] = useState(0);
+  const [rate, setRate] = useState(0);
+  const [savings, setSavings] = useState(0);
+
+  useEffect(() => {
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    const clamp01 = (t: number) => Math.max(0, Math.min(t, 1));
+
+    let raf = 0;
+    let timeout = 0;
+    let cancelled = false;
+
+    const rateDelay = 300;
+    const rateDur = 800;
+    const savingsDelay = 700;
+    const savingsDur = 900;
+    const initialTotal = savingsDelay + savingsDur;
+    const initialStart = performance.now();
+
+    const initialTick = (now: number) => {
+      if (cancelled) return;
+      const elapsed = now - initialStart;
+      setHours(Math.round(HOURS_INCREMENT * ease(clamp01(elapsed / RAMP_DUR))));
+      setRate(Math.round(RATE * ease(clamp01((elapsed - rateDelay) / rateDur))));
+      setSavings(Math.round(HOURS_INCREMENT * RATE * ease(clamp01((elapsed - savingsDelay) / savingsDur))));
+      if (elapsed < initialTotal) {
+        raf = requestAnimationFrame(initialTick);
+      } else {
+        timeout = window.setTimeout(() => rampFrom(HOURS_INCREMENT), PAUSE_DUR);
+      }
+    };
+
+    const rampFrom = (from: number) => {
+      if (cancelled) return;
+      const to = from + HOURS_INCREMENT;
+      const rampStart = performance.now();
+      const rampTick = (now: number) => {
+        if (cancelled) return;
+        const t = clamp01((now - rampStart) / RAMP_DUR);
+        const h = Math.round(from + (to - from) * ease(t));
+        setHours(h);
+        setSavings(h * RATE);
+        if (t < 1) {
+          raf = requestAnimationFrame(rampTick);
+        } else {
+          timeout = window.setTimeout(() => rampFrom(to), PAUSE_DUR);
+        }
+      };
+      raf = requestAnimationFrame(rampTick);
+    };
+
+    raf = requestAnimationFrame(initialTick);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  return (
+    <div className={styles.savings} aria-label={`Time saved ${hours} hours times $${RATE} per hour equals $${savings} saved`}>
+      <div className={styles.savingsItem}>
+        <span className={styles.savingsLabel}>Time Saved</span>
+        <span className={styles.savingsValue}>{hours}<span className={styles.savingsUnit}>hrs</span></span>
+      </div>
+      <span className={styles.savingsOp} aria-hidden>×</span>
+      <div className={styles.savingsItem}>
+        <span className={styles.savingsLabel}>Dev Cost</span>
+        <span className={styles.savingsValue}>${rate}<span className={styles.savingsUnit}>/hr</span></span>
+      </div>
+      <span className={styles.savingsOp} aria-hidden>=</span>
+      <div className={clsx(styles.savingsItem, styles.savingsResult)}>
+        <span className={styles.savingsLabel}>Cost Savings</span>
+        <span className={styles.savingsValue}>${savings.toLocaleString()}</span>
+      </div>
+    </div>
+  );
+}
+
 function HomepageHeader() {
   return (
     <header className={clsx('hero', styles.heroBanner)}>
@@ -58,6 +144,7 @@ function HomepageHeader() {
         <p className={styles.heroSubtitle}>
           Open-source CLI for orchestrating complex development workflows.
         </p>
+        <CostSavings />
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview">
             Get Started
