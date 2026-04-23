@@ -47,8 +47,7 @@
 .heroSubtitle {
   font-size: 1.25rem;
   color: var(--ifm-color-emphasis-700);
-  margin: 0 auto;
-  margin-bottom: 2rem;
+  margin: 0 auto 2rem;
   line-height: 1.6;
 }
 
@@ -123,6 +122,32 @@
   display: block;
 }
 
+@media screen and (max-width: 480px) {
+  .buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .buttons > * {
+    width: 100%;
+  }
+
+  .githubLabel {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .productHuntBadge {
+    height: auto;
+    justify-content: center;
+  }
+
+  .productHuntBadge img {
+    width: 100%;
+    height: auto;
+  }
+}
+
 .heroGif {
   max-width: 80%;
   border-radius: 12px;
@@ -133,6 +158,12 @@
   .heroGif {
     max-width: 100%;
     border-radius: 8px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .heroGif {
+    display: none;
   }
 }
 
@@ -252,6 +283,12 @@
   }
 }
 
+@media screen and (max-width: 480px) {
+  .comparison {
+    padding: 3rem 0.5rem;
+  }
+}
+
 .comparisonTitle {
   font-size: 2rem;
   font-weight: 800;
@@ -292,13 +329,6 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
-@media screen and (max-width: 480px) {
-  .comparisonTable {
-    font-size: 0.8rem;
-    border-radius: 8px;
-  }
-}
-
 .thFeature {
   padding: 1rem 1.25rem;
   text-align: left;
@@ -317,16 +347,8 @@
   border-bottom: 2px solid rgba(79, 70, 229, 0.4);
   background: linear-gradient(180deg, rgba(79, 70, 229, 0.14) 0%, rgba(79, 70, 229, 0.06) 100%);
   font-weight: 700;
+  font-family: 'Norwester', var(--ifm-font-family-base);
   color: var(--ifm-color-primary);
-}
-
-@media screen and (max-width: 480px) {
-  .thFeature,
-  .thRaid,
-  .thOther {
-    padding: 0.6rem 0.5rem;
-    font-size: 0.65rem;
-  }
 }
 
 .raidBadge {
@@ -381,17 +403,6 @@
   padding: 0.75rem 1.25rem;
 }
 
-@media screen and (max-width: 480px) {
-  .featureLabel {
-    padding: 0.5rem;
-    font-size: 0.8rem;
-  }
-
-  .cell {
-    padding: 0.5rem 0.35rem;
-  }
-}
-
 .colRaid {
   background: rgba(79, 70, 229, 0.06);
 }
@@ -406,4 +417,41 @@
 
 .iconNo {
   color: #dc2626;
+}
+
+@media screen and (max-width: 480px) {
+  .comparisonTable {
+    font-size: 0.75rem;
+    border-radius: 8px;
+    table-layout: fixed;
+  }
+
+  .thFeature {
+    width: 36%;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.55rem;
+  }
+
+  .thRaid,
+  .thOther {
+    width: 16%;
+    padding: 0.5rem 0.15rem;
+    font-size: 0.55rem;
+  }
+
+  .featureLabel {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.7rem;
+    word-break: break-word;
+  }
+
+  .cell {
+    padding: 0.5rem 0.15rem;
+  }
+
+  .raidBadge {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.03em;
+  }
 }
