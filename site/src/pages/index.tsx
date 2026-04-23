@@ -4,6 +4,7 @@ import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import { comparisonFeatures, type Support } from '@site/src/lib/comparison';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
+import ThemedImage from '@theme/ThemedImage';
 import clsx from 'clsx';
 import { Check, Copy, Minus, Star, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -44,11 +45,18 @@ function HomepageHeader() {
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className={styles.heroTitle}>
-          Your multi-repo workflow<br />in a config.
+          <ThemedImage
+            alt="Raid logo"
+            className={styles.heroLogo}
+            sources={{
+              light: '/img/logo-light.svg',
+              dark: '/img/logo-dark.svg',
+            }}
+          />
+          Raid
         </Heading>
         <p className={styles.heroSubtitle}>
-          Stop fighting your tools. Start writing code.<br />
-          Define setup, tasks, and environments in YAML — right alongside your repos.
+          Open-source CLI for orchestrating complex development workflows.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview">
@@ -101,7 +109,7 @@ function InstallSection() {
   return (
     <section className={styles.install}>
       <div className="container">
-        <Heading as="h2" className={styles.installTitle}>Install</Heading>
+        <Heading as="h2" className={styles.installTitle}>Easy Install</Heading>
         <div className={styles.installOptions}>
           <InstallOption label="Homebrew" cmd="brew install 8bitalex/tap/raid" />
           <InstallOption label="Script" cmd="curl -fsSL https://raidcli.dev/install.sh | bash" />

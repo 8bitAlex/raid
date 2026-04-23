@@ -19,22 +19,35 @@
 }
 
 .heroTitle {
-  font-size: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  font-size: 5rem;
   font-weight: 800;
   line-height: 1.15;
   margin-bottom: 1.25rem;
   color: var(--ifm-font-color-base);
+  font-family: 'Norwester', var(--ifm-font-family-base);
+}
+
+.heroLogo {
+  height: 2em;
+  width: auto;
+  display: block;
 }
 
 @media screen and (max-width: 996px) {
   .heroTitle {
     font-size: 2rem;
+    gap: 0.6rem;
   }
 }
 
 .heroSubtitle {
   font-size: 1.25rem;
   color: var(--ifm-color-emphasis-700);
+  margin: 0 auto;
   margin-bottom: 2rem;
   line-height: 1.6;
 }

@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Norwester';
+  src: url('/font/norwester.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --ifm-color-primary: #4f46e5;
   --ifm-color-primary-dark: #4338ca;
