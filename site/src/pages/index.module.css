@@ -273,7 +273,7 @@
 /* Comparison section */
 .comparison {
   padding: 4rem 0;
-  background: var(--ifm-background-color);
+  background: var(--ifm-color-emphasis-100);
   text-align: center;
 }
 
@@ -427,15 +427,15 @@
   }
 
   .thFeature {
-    width: 36%;
-    padding: 0.5rem 0.25rem;
+    width: 30%;
+    padding: 0.5rem 0.2rem;
     font-size: 0.55rem;
   }
 
   .thRaid,
   .thOther {
-    width: 16%;
-    padding: 0.5rem 0.15rem;
+    width: 14%;
+    padding: 0.5rem 0.1rem;
     font-size: 0.55rem;
   }
 

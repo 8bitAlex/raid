@@ -149,6 +149,7 @@ function ComparisonSection() {
                 <th className={styles.thOther}>make</th>
                 <th className={styles.thOther}>just</th>
                 <th className={styles.thOther}>mise</th>
+                <th className={styles.thOther}>turbo</th>
               </tr>
             </thead>
             <tbody>
@@ -159,6 +160,7 @@ function ComparisonSection() {
                   <td className={styles.cell}><SupportIcon value={row.make} /></td>
                   <td className={styles.cell}><SupportIcon value={row.just} /></td>
                   <td className={styles.cell}><SupportIcon value={row.mise} /></td>
+                  <td className={styles.cell}><SupportIcon value={row.turbo} /></td>
                 </tr>
               ))}
             </tbody>
@@ -174,12 +176,13 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={siteConfig.title}
-      description="Distributed dev environment orchestration. Codify your team's setup into a YAML profile — onboard any repo in one command.">
+      description="Open-source CLI for orchestrating complex development workflows.">
       <HomepageHeader />
       <main>
         <InstallSection />
-        <ComparisonSection />
         <HomepageFeatures />
+        
+        <ComparisonSection />
       </main>
     </Layout>
   );

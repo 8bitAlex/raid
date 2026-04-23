@@ -1,45 +1,105 @@
 .features {
-  padding: 4rem 0;
-  width: 100%;
-  background: var(--ifm-color-emphasis-100);
+  padding: 5rem 0;
+  background: var(--ifm-background-color);
 }
 
-.feature {
-  padding: 1.5rem 1.25rem;
-  text-align: left;
+.featureRow {
+  display: flex;
+  align-items: center;
+  gap: 4rem;
+  padding: 3rem 0;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.featureRow:first-child {
+  padding-top: 0;
+}
+
+.featureRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.featureRowReversed {
+  flex-direction: row-reverse;
+}
+
+.featureText {
+  flex: 1;
+  min-width: 0;
+  max-width: 480px;
+}
+
+.featureVisual {
+  flex: 1;
+  min-width: 0;
 }
 
 .featureIcon {
-  font-size: 2.25rem;
-  margin-bottom: 0.75rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 10px;
+  background: var(--ifm-color-primary-contrast-background);
+  color: var(--ifm-color-primary);
+  margin-bottom: 1.25rem;
 }
 
 .featureTitle {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  line-height: 1.2;
 }
 
 .featureDesc {
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   color: var(--ifm-color-emphasis-700);
-  line-height: 1.6;
+  line-height: 1.65;
   margin: 0;
 }
 
 @media screen and (max-width: 996px) {
-  .feature {
-    flex: 0 0 50%;
-    max-width: 50%;
-    padding: 1.25rem 1rem;
+  .features {
+    padding: 3rem 1rem;
+  }
+
+  .featureRow,
+  .featureRowReversed {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.5rem;
+    padding: 2.5rem 0;
+  }
+
+  .featureText {
+    max-width: none;
+  }
+
+  .featureTitle {
+    font-size: 1.5rem;
+  }
+
+  .featureDesc {
+    font-size: 1rem;
   }
 }
 
 @media screen and (max-width: 480px) {
-  .feature {
-    flex: 0 0 100%;
-    max-width: 100%;
-    padding: 1.25rem 0.75rem;
+  .featureRow,
+  .featureRowReversed {
+    padding: 2rem 0;
+    gap: 1.25rem;
+  }
+
+  .featureIcon {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .featureTitle {
+    font-size: 1.35rem;
   }
 }
