@@ -77,10 +77,8 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://github.com/8bitalex/raid',
+          type: 'custom-github-metrics',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
       ],
     },
