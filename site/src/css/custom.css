@@ -23,6 +23,13 @@
   font-size: 0.85em;
 }
 
+#top,
+#install,
+#features,
+#compare {
+  scroll-margin-top: var(--ifm-navbar-height, 3.75rem);
+}
+
 [data-theme='dark'] {
   --ifm-color-primary: #818cf8;
   --ifm-color-primary-dark: #6366f1;

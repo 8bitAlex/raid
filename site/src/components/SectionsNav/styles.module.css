@@ -1,0 +1,82 @@
+.nav {
+  position: fixed;
+  top: 50%;
+  right: 1.5rem;
+  transform: translateY(-50%);
+  z-index: 50;
+  pointer-events: none;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding: 0.2rem 0;
+  color: var(--ifm-color-emphasis-600);
+  text-decoration: none;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.item:hover {
+  color: var(--ifm-font-color-base);
+  text-decoration: none;
+}
+
+.indicator {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ifm-color-emphasis-400);
+  transition: background 0.2s ease, width 0.2s ease;
+  flex-shrink: 0;
+}
+
+.item:hover .indicator {
+  background: var(--ifm-color-emphasis-700);
+  width: 28px;
+}
+
+.label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.item:hover .label,
+.active .label {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.active {
+  color: var(--ifm-color-primary);
+}
+
+.active .indicator {
+  background: var(--ifm-color-primary);
+  width: 32px;
+}
+
+@media screen and (max-width: 996px) {
+  .nav {
+    display: none;
+  }
+}

@@ -151,7 +151,7 @@ function Feature({icon, title, description, code, reversed}: FeatureItem & {reve
 
 export default function HomepageFeatures(): ReactNode {
   return (
-    <section className={styles.features}>
+    <section id="features" className={styles.features}>
       <div className="container">
         {FeatureList.map((props, idx) => (
           <Feature key={idx} {...props} reversed={idx % 2 === 1} />

@@ -1,6 +1,7 @@
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import SectionsNav from '@site/src/components/SectionsNav';
 import { comparisonFeatures, type Support } from '@site/src/lib/comparison';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
@@ -99,7 +100,7 @@ function CostSavings() {
 
 function HomepageHeader() {
   return (
-    <header className={clsx('hero', styles.heroBanner)}>
+    <header id="top" className={clsx('hero', styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className={styles.heroTitle}>
           <ThemedImage
@@ -164,7 +165,7 @@ function InstallOption({ label, cmd }: { label: string; cmd: string }) {
 
 function InstallSection() {
   return (
-    <section className={styles.install}>
+    <section id="install" className={styles.install}>
       <div className="container">
         <Heading as="h2" className={styles.installTitle}>Easy Install</Heading>
         <div className={styles.installOptions}>
@@ -191,7 +192,7 @@ function SupportIcon({ value }: { value: Support }) {
 
 function ComparisonSection() {
   return (
-    <section className={styles.comparison}>
+    <section id="compare" className={styles.comparison}>
       <div className="container">
         <div className={styles.tableWrapper}>
           <Heading as="h2" className={styles.comparisonTitle}>How does Raid stack up?</Heading>
@@ -234,11 +235,18 @@ export default function Home(): ReactNode {
     <Layout
       title={siteConfig.title}
       description="Open-source CLI for orchestrating complex development workflows.">
+      <SectionsNav
+        sections={[
+          {id: 'top', label: 'Top'},
+          {id: 'install', label: 'Install'},
+          {id: 'features', label: 'Features'},
+          {id: 'compare', label: 'Compare'},
+        ]}
+      />
       <HomepageHeader />
       <main>
         <InstallSection />
         <HomepageFeatures />
-        
         <ComparisonSection />
       </main>
     </Layout>
