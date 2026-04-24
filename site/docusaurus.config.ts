@@ -56,7 +56,8 @@ const config: Config = {
   themeConfig: {
     image: 'img/social-preview.png',
     colorMode: {
-      respectPrefersColorScheme: true,
+      defaultMode: 'dark',
+      respectPrefersColorScheme: false,
     },
     navbar: {
       title: 'Raid',
@@ -77,10 +78,8 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://github.com/8bitalex/raid',
+          type: 'custom-github-metrics',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
       ],
     },
