@@ -6,39 +6,10 @@ import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import ThemedImage from '@theme/ThemedImage';
 import clsx from 'clsx';
-import { Check, Copy, Minus, Star, X } from 'lucide-react';
+import { Check, Copy, Minus, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import styles from './index.module.css';
-
-function GitHubButtons() {
-  const [stars, setStars] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch('https://api.github.com/repos/8bitalex/raid')
-      .then((res) => res.json())
-      .then((data) => setStars(data.stargazers_count))
-      .catch(() => {});
-  }, []);
-
-  return (
-    <a
-      href="https://github.com/8bitalex/raid"
-      target="_blank"
-      rel="noopener noreferrer"
-      className={styles.githubGroup}>
-      <span className={clsx('button button--lg', styles.buttonGhost, styles.githubLabel)}>
-        View on GitHub
-      </span>
-      {stars !== null && (
-        <span className={clsx('button button--lg', styles.buttonGhost, styles.starButton)}>
-          <Star size={14} />
-          {stars.toLocaleString()}
-        </span>
-      )}
-    </a>
-  );
-}
 
 function CostSavings() {
   const HOURS_INCREMENT = 48;
@@ -146,10 +117,9 @@ function HomepageHeader() {
         </p>
         <CostSavings />
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/overview">
+          <Link className={clsx('button button--primary button--lg', styles.ctaPrimary)} to="/docs/overview">
             Get Started
           </Link>
-          <GitHubButtons />
           <a
             href="https://www.producthunt.com/products/raid?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-raid"
             target="_blank"

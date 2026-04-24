@@ -56,6 +56,7 @@ const config: Config = {
   themeConfig: {
     image: 'img/social-preview.png',
     colorMode: {
+      defaultMode: 'dark',
       respectPrefersColorScheme: false,
     },
     navbar: {
