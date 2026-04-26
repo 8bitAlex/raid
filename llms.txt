@@ -8,34 +8,69 @@ Raid is written in Go, distributed as a single self-contained binary, and publis
 
 ## Docs
 
-- [README](https://github.com/8bitAlex/raid/blob/main/README.md): Overview, installation, quickstart, commands reference, configuration reference, task types, best practices, comparison vs. Make/Taskfile/Just, and FAQ
+- [Documentation site](https://raidcli.dev): Primary documentation — guides, features, reference, and examples
+- [Overview](https://raidcli.dev/docs/overview): What Raid is, key concepts, and when to reach for it
+- [Getting started](https://raidcli.dev/docs/start): Install, create a profile, and run your first command
+- [README](https://github.com/8bitalex/raid/blob/main/README.md): Repo overview, installation, quickstart, full command and configuration reference, task types, best practices, comparison vs. Make/Taskfile/Just, and FAQ
 - [Design proposal](https://alexsalerno.dev/blog/raid-design-proposal): Rationale and design motivation for Raid
-- [Contributing guide](https://github.com/8bitAlex/raid/blob/main/docs/CONTRIBUTING.md): Developer setup, code style, testing, and PR workflow
+- [Contributing guide](https://github.com/8bitalex/raid/blob/main/docs/CONTRIBUTING.md): Developer setup, code style, testing, and PR workflow
+
+## Features
+
+- [Profiles](https://raidcli.dev/docs/features/profiles): Top-level `*.raid.yaml` that describes the full development environment
+- [Repository config](https://raidcli.dev/docs/features/repo-config): Per-repo `raid.yaml` merged into the active profile at load time
+- [Environments](https://raidcli.dev/docs/features/environments): Variables and tasks that switch with `raid env <name>`
+- [Tasks](https://raidcli.dev/docs/features/tasks): All 11 task types — Shell, Script, Set, Git, HTTP, Wait, Prompt, Confirm, Print, Template, Group
+- [Task groups](https://raidcli.dev/docs/features/task-groups): Reusable task sequences invoked by `ref`
+- [Variables](https://raidcli.dev/docs/features/variables): Variable scoping, substitution, defaults, and overrides
+
+## Usage
+
+- [raid install](https://raidcli.dev/docs/usage/install): Clone repositories and run install tasks across your profile
+- [raid env](https://raidcli.dev/docs/usage/env): Switch between development, staging, and production environments
+- [raid profile](https://raidcli.dev/docs/usage/profile): Add, list, switch, and remove profiles
+- [Custom commands](https://raidcli.dev/docs/usage/custom): Define and invoke `raid <cmd>` team workflows
+- [raid doctor](https://raidcli.dev/docs/usage/doctor): Diagnose profile and repo configuration issues
+- [raid root command](https://raidcli.dev/docs/usage/raid): Global flags and top-level invocation
+
+## Reference
+
+- [Commands reference](https://raidcli.dev/docs/references/commands): Every built-in and user-defined command with flags and behavior
+- [Schema reference](https://raidcli.dev/docs/references/schema): Profile and per-repo YAML schemas — every field, type, and default
 
 ## Schemas
 
-- [Profile JSON Schema](https://raw.githubusercontent.com/8bitAlex/raid/main/schemas/raid-profile.schema.json): Validation schema for `*.raid.yaml` profile files
-- [Repository JSON Schema](https://raw.githubusercontent.com/8bitAlex/raid/main/schemas/raid-repo.schema.json): Validation schema for per-repo `raid.yaml` files
+- [Profile JSON Schema](https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json): Validation schema for `*.raid.yaml` profile files
+- [Repository JSON Schema](https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json): Validation schema for per-repo `raid.yaml` files
+- [Shared definitions schema](https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json): Common type definitions referenced by both schemas
 - [SchemaStore catalog](https://www.schemastore.org/api/json/catalog.json): Published catalog entries — auto-discovered by VS Code, JetBrains, Neovim, and other editors using the schemastore catalog
 
 ## Examples
 
-- [Single profile example](https://github.com/8bitAlex/raid/blob/main/docs/examples/example.raid.yaml)
-- [Multi-profile YAML](https://github.com/8bitAlex/raid/blob/main/docs/examples/multiple-profiles.yaml)
-- [Multi-profile JSON](https://github.com/8bitAlex/raid/blob/main/docs/examples/multiple-profiles.json)
-- [Install task demo](https://github.com/8bitAlex/raid/blob/main/docs/examples/install-demo.raid.yaml)
-- [Environment task demo](https://github.com/8bitAlex/raid/blob/main/docs/examples/env-demo.raid.yaml)
-- [Per-repo raid.yaml example](https://github.com/8bitAlex/raid/blob/main/docs/examples/raid.yaml)
+Docsite walk-throughs:
+
+- [New developer onboarding](https://raidcli.dev/docs/examples/new-developer): End-to-end first-day setup using `raid install`
+- [Custom commands](https://raidcli.dev/docs/examples/custom-commands): Authoring simple team `raid <cmd>` subcommands
+- [Advanced commands](https://raidcli.dev/docs/examples/advanced-commands): Prompts, confirms, conditional and cross-repo workflows
+- [Environments](https://raidcli.dev/docs/examples/environments): Switching variables and starting services per environment
+- [Cross-platform tasks](https://raidcli.dev/docs/examples/cross-platform): Writing tasks that work on macOS, Linux, and Windows
+
+Raw YAML samples in the repo:
+
+- [Single profile example](https://github.com/8bitalex/raid/blob/main/docs/examples/example.raid.yaml)
+- [Multi-profile YAML](https://github.com/8bitalex/raid/blob/main/docs/examples/multiple-profiles.yaml)
+- [Multi-profile JSON](https://github.com/8bitalex/raid/blob/main/docs/examples/multiple-profiles.json)
+- [Install task demo](https://github.com/8bitalex/raid/blob/main/docs/examples/install-demo.raid.yaml)
+- [Environment task demo](https://github.com/8bitalex/raid/blob/main/docs/examples/env-demo.raid.yaml)
+- [Full demo profile](https://github.com/8bitalex/raid/blob/main/docs/examples/demo.raid.yaml)
+- [Per-repo raid.yaml example](https://github.com/8bitalex/raid/blob/main/docs/examples/raid.yaml)
 
 ## Installation
 
-- [install.sh](https://github.com/8bitAlex/raid/blob/main/install.sh): Linux installer — `curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash`
+- [install.sh](https://github.com/8bitalex/raid/blob/main/install.sh): Linux/macOS installer — `curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash`
 - [Homebrew tap](https://github.com/8bitalex/homebrew-tap): macOS — `brew install 8bitalex/tap/raid`
-- [Releases](https://github.com/8bitAlex/raid/releases): Prebuilt binaries for macOS, Linux, and Windows (amd64 and arm64)
+- [Releases](https://github.com/8bitalex/raid/releases): Prebuilt binaries for macOS, Linux, and Windows (amd64 and arm64)
 
 ## Optional
 
-- [Task reference](https://github.com/8bitAlex/raid/blob/main/README.md#tasks): All 11 task types — Shell, Script, Set, Git, HTTP, Wait, Prompt, Confirm, Print, Template, Group
-- [Commands configuration](https://github.com/8bitAlex/raid/blob/main/README.md#commands-configuration): Defining custom `raid <cmd>` subcommands in profiles and per-repo configs
-- [Best practices](https://github.com/8bitAlex/raid/blob/main/README.md#best-practices): Committing `raid.yaml` to every repo, gating destructive tasks with `Confirm`, organizing profiles, keeping secrets out of config
-- [License (GPL-3.0)](https://github.com/8bitAlex/raid/blob/main/LICENSE)
+- [License (GPL-3.0)](https://github.com/8bitalex/raid/blob/main/LICENSE)
