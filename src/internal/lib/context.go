@@ -3,19 +3,35 @@ package lib
 import (
 	"os/exec"
 	"strings"
+	"time"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/resources"
 )
+
+// raidRepository is the canonical source URL surfaced in WorkspaceContext so
+// agents have a discoverable entry point for additional documentation, issue
+// reporting, and source code search.
+const raidRepository = "https://github.com/8bitalex/raid"
 
 // WorkspaceContext is a condensed snapshot of the active workspace, intended for
 // agent / `raid context` consumption. It is derived from the loaded session
 // context plus on-disk git state per repository.
+//
+// The Tool / Version / Repository / GeneratedAt fields are emitted at the top
+// of the JSON output so an agent that picks up the snapshot in isolation can
+// identify the producer, find the project on GitHub for further context, infer
+// the schema version, and judge freshness without an external wrapper.
 type WorkspaceContext struct {
-	Profile  string             `json:"profile"`
-	Env      string             `json:"env,omitempty"`
-	Repos    []WorkspaceRepo    `json:"repos"`
-	Commands []WorkspaceCommand `json:"commands"`
-	Recent   []RecentEntry      `json:"recent,omitempty"`
+	Tool        string             `json:"tool"`
+	Version     string             `json:"version,omitempty"`
+	Repository  string             `json:"repository,omitempty"`
+	GeneratedAt time.Time          `json:"generated_at"`
+	Profile     string             `json:"profile"`
+	Env         string             `json:"env,omitempty"`
+	Repos       []WorkspaceRepo    `json:"repos"`
+	Commands    []WorkspaceCommand `json:"commands"`
+	Recent      []RecentEntry      `json:"recent,omitempty"`
 }
 
 // WorkspaceRepo describes a single repository in the active profile, as it
@@ -50,10 +66,15 @@ var runGitFn = func(dir string, args ...string) (string, error) {
 // the returned WorkspaceContext has empty Profile and empty Repos / Commands
 // slices.
 func GetWorkspaceContext() WorkspaceContext {
+	version, _ := resources.GetProperty(resources.PropertyVersion)
 	wc := WorkspaceContext{
-		Repos:    []WorkspaceRepo{},
-		Commands: []WorkspaceCommand{},
-		Recent:   ReadRecent(),
+		Tool:        "raid",
+		Version:     version,
+		Repository:  raidRepository,
+		GeneratedAt: recentNowFn().UTC().Truncate(time.Second),
+		Repos:       []WorkspaceRepo{},
+		Commands:    []WorkspaceCommand{},
+		Recent:      ReadRecent(),
 	}
 	if context == nil {
 		return wc

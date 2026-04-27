@@ -10,6 +10,53 @@ import (
 	rctx "github.com/8bitalex/raid/src/raid/context"
 )
 
+func TestWritePretty_includesAgentHeader(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Workspace{
+		Tool:       "raid",
+		Version:    "1.2.3",
+		Repository: "https://github.com/8bitalex/raid",
+		Profile:    "demo",
+		Repos:      []rctx.Repo{},
+	}
+	if err := writePretty(&buf, ws); err != nil {
+		t.Fatalf("writePretty: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"# raid", "v1.2.3", "workspace context", "https://github.com/8bitalex/raid"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("header missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+}
+
+func TestWriteJSON_includesAgentHeader(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Workspace{
+		Tool:       "raid",
+		Version:    "1.2.3",
+		Repository: "https://github.com/8bitalex/raid",
+		Profile:    "demo",
+		Repos:      []rctx.Repo{},
+	}
+	if err := writeJSON(&buf, ws); err != nil {
+		t.Fatalf("writeJSON: %v", err)
+	}
+	var decoded rctx.Workspace
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if decoded.Tool != "raid" {
+		t.Errorf("Tool = %q, want %q", decoded.Tool, "raid")
+	}
+	if decoded.Version != "1.2.3" {
+		t.Errorf("Version = %q, want %q", decoded.Version, "1.2.3")
+	}
+	if decoded.Repository != "https://github.com/8bitalex/raid" {
+		t.Errorf("Repository = %q, want canonical URL", decoded.Repository)
+	}
+}
+
 func TestWritePretty_noProfile(t *testing.T) {
 	var buf bytes.Buffer
 	if err := writePretty(&buf, rctx.Workspace{Repos: []rctx.Repo{}}); err != nil {
@@ -138,6 +185,25 @@ func TestWritePretty_commands(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q\n--- output ---\n%s", want, out)
 		}
+	}
+}
+
+func TestRecentStatusText(t *testing.T) {
+	tests := []struct {
+		name string
+		in   rctx.Recent
+		want string
+	}{
+		{"completed ok", rctx.Recent{Status: rctx.RecentStatusCompleted, ExitCode: 0}, "ok"},
+		{"completed fail", rctx.Recent{Status: rctx.RecentStatusCompleted, ExitCode: 1}, "failed"},
+		{"interrupted", rctx.Recent{Status: rctx.RecentStatusInterrupted}, "interrupted"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := recentStatusText(tt.in); got != tt.want {
+				t.Errorf("recentStatusText = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

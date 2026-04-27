@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"time"
+	"unicode/utf8"
 
 	"github.com/8bitalex/raid/src/raid/context"
 	"github.com/spf13/cobra"
@@ -41,6 +42,7 @@ func writeJSON(w io.Writer, ws context.Workspace) error {
 }
 
 func writePretty(w io.Writer, ws context.Workspace) error {
+	writeHeader(w, ws)
 	if ws.Profile == "" {
 		fmt.Fprintln(w, "No active profile.")
 		return nil
@@ -55,6 +57,26 @@ func writePretty(w io.Writer, ws context.Workspace) error {
 	writeCommands(w, ws.Commands)
 	writeRecent(w, ws.Recent)
 	return nil
+}
+
+// writeHeader emits an agent-readable preamble so the snapshot is
+// self-describing when piped or pasted out of context. The repository URL is
+// included as a discoverable entry point an agent can follow for additional
+// documentation, issue reporting, or source code search.
+func writeHeader(w io.Writer, ws context.Workspace) {
+	tool := ws.Tool
+	if tool == "" {
+		tool = "raid"
+	}
+	if ws.Version != "" {
+		fmt.Fprintf(w, "# %s v%s workspace context (%s)\n", tool, ws.Version, ws.GeneratedAt.Format(time.RFC3339))
+	} else {
+		fmt.Fprintf(w, "# %s workspace context (%s)\n", tool, ws.GeneratedAt.Format(time.RFC3339))
+	}
+	if ws.Repository != "" {
+		fmt.Fprintf(w, "# %s\n", ws.Repository)
+	}
+	fmt.Fprintln(w)
 }
 
 func writeRepos(w io.Writer, repos []context.Repo) {
@@ -107,26 +129,79 @@ func writeRecent(w io.Writer, entries []context.Recent) {
 	if len(entries) == 0 {
 		return
 	}
-	nameW := 0
-	for _, e := range entries {
+	nameW, statusW, durationW := 0, 0, 0
+	statuses := make([]string, len(entries))
+	durations := make([]string, len(entries))
+	for i, e := range entries {
 		if len(e.Command) > nameW {
 			nameW = len(e.Command)
+		}
+		statuses[i] = recentStatusText(e)
+		if w := utf8.RuneCountInString(statuses[i]); w > statusW {
+			statusW = w
+		}
+		durations[i] = recentDuration(e)
+		if w := utf8.RuneCountInString(durations[i]); w > durationW {
+			durationW = w
 		}
 	}
 	fmt.Fprintf(w, "\nRecent (%d):\n", len(entries))
 	now := time.Now()
-	for _, e := range entries {
-		mark := "✓"
-		if e.ExitCode != 0 {
-			mark = "✗"
-		}
-		fmt.Fprintf(w, "  %s %-*s  %6s  %s\n",
-			mark,
+	for i, e := range entries {
+		fmt.Fprintf(w, "  %s %-*s  %s%s  %s%s  %s\n",
+			recentMark(e),
 			nameW, e.Command,
-			formatDuration(e.DurationMs),
+			statuses[i], padRunes(statuses[i], statusW),
+			durations[i], padRunes(durations[i], durationW),
 			relativeTime(now, e.StartedAt),
 		)
 	}
+}
+
+func recentStatusText(e context.Recent) string {
+	switch e.Status {
+	case context.RecentStatusInterrupted:
+		return "interrupted"
+	default:
+		if e.ExitCode != 0 {
+			return "failed"
+		}
+		return "ok"
+	}
+}
+
+// padRunes returns spaces needed to right-pad s to width visible runes. Used
+// instead of "%-*s" because that flag pads by byte count, which over-pads
+// non-ASCII content (e.g. the 3-byte em-dash placeholder).
+func padRunes(s string, width int) string {
+	n := width - utf8.RuneCountInString(s)
+	if n <= 0 {
+		return ""
+	}
+	pad := make([]byte, n)
+	for i := range pad {
+		pad[i] = ' '
+	}
+	return string(pad)
+}
+
+func recentMark(e context.Recent) string {
+	switch e.Status {
+	case context.RecentStatusInterrupted:
+		return "⊘"
+	default:
+		if e.ExitCode != 0 {
+			return "✗"
+		}
+		return "✓"
+	}
+}
+
+func recentDuration(e context.Recent) string {
+	if e.Status == context.RecentStatusInterrupted {
+		return "—"
+	}
+	return formatDuration(e.DurationMs)
 }
 
 func repoStatus(r context.Repo) string {

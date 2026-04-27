@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func resetWorkspaceContextState(t *testing.T) {
@@ -88,7 +87,8 @@ func TestGetWorkspaceContext_includesRecent(t *testing.T) {
 	resetWorkspaceContextState(t)
 	setupRecentTempPath(t)
 
-	RecordRecent("deploy", nil, time.Now())
+	started := RecordRecentStart("deploy")
+	RecordRecentEnd("deploy", nil, started)
 	context = &Context{
 		Profile: Profile{Name: "demo", Path: "/tmp/demo.raid.yaml"},
 	}
@@ -96,6 +96,9 @@ func TestGetWorkspaceContext_includesRecent(t *testing.T) {
 	got := GetWorkspaceContext()
 	if len(got.Recent) != 1 || got.Recent[0].Command != "deploy" {
 		t.Errorf("Recent = %+v, want one 'deploy' entry", got.Recent)
+	}
+	if got.Recent[0].Status != RecentStatusCompleted {
+		t.Errorf("Recent[0].Status = %q, want %q", got.Recent[0].Status, RecentStatusCompleted)
 	}
 }
 

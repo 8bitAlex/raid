@@ -18,6 +18,12 @@ func setupRecentTempPath(t *testing.T) string {
 	return path
 }
 
+// recordCompleted runs the full Start→End lifecycle for a single command.
+func recordCompleted(command string, runErr error) {
+	started := RecordRecentStart(command)
+	RecordRecentEnd(command, runErr, started)
+}
+
 func TestReadRecent_missingFileReturnsNil(t *testing.T) {
 	setupRecentTempPath(t)
 	if got := ReadRecent(); got != nil {
@@ -25,16 +31,24 @@ func TestReadRecent_missingFileReturnsNil(t *testing.T) {
 	}
 }
 
-func TestRecordRecent_writesEntry(t *testing.T) {
+func TestRecordRecent_writesCompletedEntry(t *testing.T) {
 	setupRecentTempPath(t)
 
 	now := time.Date(2026, 4, 27, 12, 0, 5, 0, time.UTC)
 	oldNow := recentNowFn
 	t.Cleanup(func() { recentNowFn = oldNow })
-	recentNowFn = func() time.Time { return now }
 
-	start := now.Add(-2 * time.Second)
-	RecordRecent("deploy", nil, start)
+	tickCount := 0
+	recentNowFn = func() time.Time {
+		tickCount++
+		// First call (Start) returns t0; second call (End) returns t0 + 2s.
+		if tickCount == 1 {
+			return now
+		}
+		return now.Add(2 * time.Second)
+	}
+
+	recordCompleted("deploy", nil)
 
 	entries := ReadRecent()
 	if len(entries) != 1 {
@@ -43,6 +57,9 @@ func TestRecordRecent_writesEntry(t *testing.T) {
 	e := entries[0]
 	if e.Command != "deploy" {
 		t.Errorf("Command = %q, want %q", e.Command, "deploy")
+	}
+	if e.Status != RecentStatusCompleted {
+		t.Errorf("Status = %q, want %q", e.Status, RecentStatusCompleted)
 	}
 	if e.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0", e.ExitCode)
@@ -54,11 +71,14 @@ func TestRecordRecent_writesEntry(t *testing.T) {
 
 func TestRecordRecent_capturesExitCodeFromError(t *testing.T) {
 	setupRecentTempPath(t)
-	RecordRecent("test", errors.New("boom"), time.Now())
+	recordCompleted("test", errors.New("boom"))
 
 	entries := ReadRecent()
 	if len(entries) != 1 || entries[0].ExitCode != 1 {
 		t.Errorf("expected exit_code=1 from generic error, got: %+v", entries)
+	}
+	if entries[0].Status != RecentStatusCompleted {
+		t.Errorf("Status = %q, want completed", entries[0].Status)
 	}
 }
 
@@ -66,7 +86,7 @@ func TestRecordRecent_prependsAndCaps(t *testing.T) {
 	setupRecentTempPath(t)
 
 	for i := 0; i < recentMaxEntries+5; i++ {
-		RecordRecent("cmd", nil, time.Now())
+		recordCompleted("cmd", nil)
 	}
 
 	entries := ReadRecent()
@@ -78,9 +98,9 @@ func TestRecordRecent_prependsAndCaps(t *testing.T) {
 func TestRecordRecent_mostRecentFirst(t *testing.T) {
 	setupRecentTempPath(t)
 
-	RecordRecent("first", nil, time.Now())
-	RecordRecent("second", nil, time.Now())
-	RecordRecent("third", nil, time.Now())
+	recordCompleted("first", nil)
+	recordCompleted("second", nil)
+	recordCompleted("third", nil)
 
 	entries := ReadRecent()
 	if len(entries) != 3 {
@@ -91,6 +111,69 @@ func TestRecordRecent_mostRecentFirst(t *testing.T) {
 	}
 }
 
+// TestReadRecent_runningEntryReportedAsInterrupted simulates a process that
+// was killed mid-command: it called RecordRecentStart but never reached
+// RecordRecentEnd. ReadRecent should rewrite the surviving "running" entry to
+// "interrupted" so callers see a terminal state.
+func TestReadRecent_runningEntryReportedAsInterrupted(t *testing.T) {
+	setupRecentTempPath(t)
+
+	RecordRecentStart("deploy") // no matching End
+
+	entries := ReadRecent()
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1", len(entries))
+	}
+	if entries[0].Status != RecentStatusInterrupted {
+		t.Errorf("Status = %q, want %q", entries[0].Status, RecentStatusInterrupted)
+	}
+}
+
+// TestRecordRecentEnd_updatesMatchingEntry confirms that when a command runs
+// to completion, the placeholder pre-recorded by Start is upgraded in place,
+// not duplicated.
+func TestRecordRecentEnd_updatesMatchingEntry(t *testing.T) {
+	setupRecentTempPath(t)
+
+	started := RecordRecentStart("deploy")
+	RecordRecentEnd("deploy", nil, started)
+
+	entries := ReadRecent()
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1 (no duplicates)", len(entries))
+	}
+	if entries[0].Status != RecentStatusCompleted {
+		t.Errorf("Status = %q, want completed", entries[0].Status)
+	}
+}
+
+// TestRecordRecentEnd_interleavedRuns ensures End updates the matching Start
+// even when an unrelated command runs in between (the entry is identified by
+// command name + StartedAt, not by position).
+func TestRecordRecentEnd_interleavedRuns(t *testing.T) {
+	setupRecentTempPath(t)
+
+	deployStart := RecordRecentStart("deploy")
+	recordCompleted("test", nil)
+	RecordRecentEnd("deploy", errors.New("oops"), deployStart)
+
+	entries := ReadRecent()
+	if len(entries) != 2 {
+		t.Fatalf("entries len = %d, want 2", len(entries))
+	}
+	// Entries are most-recent first, so test (the second Start) is index 0,
+	// deploy (the first Start) is index 1.
+	if entries[1].Command != "deploy" {
+		t.Fatalf("expected deploy at index 1, got: %+v", entries[1])
+	}
+	if entries[1].Status != RecentStatusCompleted {
+		t.Errorf("deploy Status = %q, want completed", entries[1].Status)
+	}
+	if entries[1].ExitCode != 1 {
+		t.Errorf("deploy ExitCode = %d, want 1", entries[1].ExitCode)
+	}
+}
+
 func TestExitCodeFromError(t *testing.T) {
 	if got := exitCodeFromError(nil); got != 0 {
 		t.Errorf("nil error = %d, want 0", got)
@@ -98,7 +181,6 @@ func TestExitCodeFromError(t *testing.T) {
 	if got := exitCodeFromError(errors.New("plain")); got != 1 {
 		t.Errorf("plain error = %d, want 1", got)
 	}
-	// Synthesise an *exec.ExitError by running a command that exits non-zero.
 	cmd := exec.Command("sh", "-c", "exit 42")
 	err := cmd.Run()
 	if got := exitCodeFromError(err); got != 42 {

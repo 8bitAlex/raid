@@ -13,11 +13,20 @@ raid context --json    # machine-readable JSON
 
 ## What it emits
 
+Every snapshot is **self-describing** so an agent that picks it up out of context can identify the producer:
+
+- **Tool** — always `raid`
+- **Version** — the raid binary version, useful for feature/schema detection
+- **Repository** — canonical GitHub URL the agent can follow for additional documentation, source code search, or issue reporting
+- **Generated at** — UTC timestamp of when the snapshot was produced
+
+Followed by the workspace data:
+
 - **Active profile name**
 - **Active environment** (if one is set)
 - **Repositories** — name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
 - **Commands** — name and short description of every `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets.
-- **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`)
+- **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`). A run that was killed mid-execution (Ctrl+C, SIGTERM, etc.) is recorded as `interrupted` so you don't lose visibility into terminated commands.
 
 Future iterations will surface the same data as an MCP resource. Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
 
@@ -26,6 +35,9 @@ Future iterations will surface the same data as an MCP resource. Output is inten
 Default invocation produces a fixed-width table for human reading:
 
 ```
+# raid v1.2.3 workspace context (2026-04-27T18:00:00Z)
+# https://github.com/8bitalex/raid
+
 Profile: my-project
 Env:     dev
 
@@ -39,10 +51,19 @@ Commands (3):
   test      Run tests
   reset-db  Reset local database
 
-Recent (2):
-  ✓ deploy   12.3s   2m ago
-  ✗ test      4.5s   5m ago
+Recent (3):
+  ✓ deploy   ok           12.3s  2m ago
+  ✗ test     failed       4.5s   5m ago
+  ⊘ migrate  interrupted  —      18m ago
 ```
+
+Each row shows a status glyph, the command name, a status word, the duration, and a relative timestamp.
+
+| Glyph | Status word | Meaning |
+|---|---|---|
+| `✓` | `ok` | Command completed with exit code 0 |
+| `✗` | `failed` | Command completed with a non-zero exit code |
+| `⊘` | `interrupted` | Command was killed before completing (SIGINT, SIGTERM, etc.). Duration is unknown and shown as `—`. |
 
 Status values:
 
@@ -58,6 +79,10 @@ Status values:
 
 ```json
 {
+  "tool": "raid",
+  "version": "1.2.3",
+  "repository": "https://github.com/8bitalex/raid",
+  "generated_at": "2026-04-27T18:00:00Z",
   "profile": "my-project",
   "env": "dev",
   "repos": [
@@ -81,9 +106,16 @@ Status values:
   "recent": [
     {
       "command": "deploy",
+      "status": "completed",
       "exit_code": 0,
       "started_at": "2026-04-27T12:00:00Z",
       "duration_ms": 12300
+    },
+    {
+      "command": "migrate",
+      "status": "interrupted",
+      "exit_code": 0,
+      "started_at": "2026-04-27T11:42:00Z"
     }
   ]
 }

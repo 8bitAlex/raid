@@ -15,6 +15,12 @@ type Command = lib.WorkspaceCommand
 // Recent describes a previously executed `raid <command>` invocation.
 type Recent = lib.RecentEntry
 
+// Recent status values surfaced via Workspace.Recent.
+const (
+	RecentStatusCompleted   = lib.RecentStatusCompleted
+	RecentStatusInterrupted = lib.RecentStatusInterrupted
+)
+
 // Get returns a snapshot of the currently loaded workspace context.
 func Get() Workspace {
 	return lib.GetWorkspaceContext()

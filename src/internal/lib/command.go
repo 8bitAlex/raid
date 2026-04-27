@@ -64,9 +64,9 @@ func ExecuteCommand(name string, args []string) error {
 	startSession()
 	defer endSession()
 
-	startedAt := recentNowFn()
+	startedAt := RecordRecentStart(found.Name)
 	err := runCommand(found)
-	RecordRecent(found.Name, err, startedAt)
+	RecordRecentEnd(found.Name, err, startedAt)
 	return err
 }
 
