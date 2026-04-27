@@ -4,6 +4,15 @@ export type Tool = 'raid' | 'make' | 'just' | 'mise' | 'turbo';
 
 export type ComparisonFeature = { label: string } & Record<Tool, Support>;
 
+/** Tools in display order, with the label rendered in the comparison table header. */
+export const tools: { id: Tool; label: string }[] = [
+  { id: 'raid',  label: 'Raid'  },
+  { id: 'make',  label: 'make'  },
+  { id: 'just',  label: 'just'  },
+  { id: 'mise',  label: 'mise'  },
+  { id: 'turbo', label: 'turbo' },
+];
+
 export const comparisonFeatures: ComparisonFeature[] = [
   { label: 'Multi-repo orchestration', raid: 'yes', make: 'no',      just: 'no',      mise: 'partial', turbo: 'partial' },
   { label: 'Team profile sharing',     raid: 'yes', make: 'no',      just: 'no',      mise: 'no',      turbo: 'no'      },

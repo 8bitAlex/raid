@@ -2,7 +2,7 @@ import {
   comparisonFeatures,
   supportScore,
   toolScore,
-  type Tool,
+  tools,
 } from '../comparison';
 
 describe('supportScore', () => {
@@ -26,15 +26,14 @@ describe('toolScore', () => {
 
   test('raid scores strictly higher than every other tool', () => {
     const raid = toolScore(comparisonFeatures, 'raid');
-    for (const tool of ['make', 'just', 'mise'] as const) {
-      expect(raid).toBeGreaterThan(toolScore(comparisonFeatures, tool));
+    for (const {id} of tools.filter((t) => t.id !== 'raid')) {
+      expect(raid).toBeGreaterThan(toolScore(comparisonFeatures, id));
     }
   });
 
   test('score is bounded by the number of features', () => {
-    const tools: Tool[] = ['raid', 'make', 'just', 'mise'];
-    for (const tool of tools) {
-      const score = toolScore(comparisonFeatures, tool);
+    for (const {id} of tools) {
+      const score = toolScore(comparisonFeatures, id);
       expect(score).toBeGreaterThanOrEqual(0);
       expect(score).toBeLessThanOrEqual(comparisonFeatures.length);
     }
@@ -51,11 +50,10 @@ describe('comparisonFeatures', () => {
   });
 
   test('every feature has a non-empty label and a support value for every tool', () => {
-    const tools: Tool[] = ['raid', 'make', 'just', 'mise'];
     for (const feature of comparisonFeatures) {
       expect(feature.label).toBeTruthy();
-      for (const tool of tools) {
-        expect(['yes', 'no', 'partial']).toContain(feature[tool]);
+      for (const {id} of tools) {
+        expect(['yes', 'no', 'partial']).toContain(feature[id]);
       }
     }
   });

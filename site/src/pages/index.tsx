@@ -2,7 +2,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import SectionsNav from '@site/src/components/SectionsNav';
-import { comparisonFeatures, type Support } from '@site/src/lib/comparison';
+import { comparisonFeatures, tools, type Support } from '@site/src/lib/comparison';
 import Heading from '@theme/Heading';
 import Layout from '@theme/Layout';
 import ThemedImage from '@theme/ThemedImage';
@@ -173,7 +173,7 @@ function InstallSection() {
           <InstallOption label="Script" cmd="curl -fsSL https://raidcli.dev/install.sh | bash" />
         </div>
         <a
-          href="https://github.com/8bitAlex/raid/releases/latest"
+          href="https://github.com/8bitalex/raid/releases/latest"
           target="_blank"
           rel="noopener noreferrer"
           className={styles.manualDownload}>
@@ -203,22 +203,20 @@ function ComparisonSection() {
             <thead>
               <tr>
                 <th className={styles.thFeature}></th>
-                <th className={styles.thRaid}>Raid</th>
-                <th className={styles.thOther}>make</th>
-                <th className={styles.thOther}>just</th>
-                <th className={styles.thOther}>mise</th>
-                <th className={styles.thOther}>turbo</th>
+                {tools.map(({id, label}) => (
+                  <th key={id} className={id === 'raid' ? styles.thRaid : styles.thOther}>{label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {comparisonFeatures.map((row) => (
                 <tr key={row.label} className={styles.tableRow}>
                   <td className={styles.featureLabel}>{row.label}</td>
-                  <td className={clsx(styles.cell, styles.colRaid)}><SupportIcon value={row.raid} /></td>
-                  <td className={styles.cell}><SupportIcon value={row.make} /></td>
-                  <td className={styles.cell}><SupportIcon value={row.just} /></td>
-                  <td className={styles.cell}><SupportIcon value={row.mise} /></td>
-                  <td className={styles.cell}><SupportIcon value={row.turbo} /></td>
+                  {tools.map(({id}) => (
+                    <td key={id} className={clsx(styles.cell, id === 'raid' && styles.colRaid)}>
+                      <SupportIcon value={row[id]} />
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

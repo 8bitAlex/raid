@@ -60,35 +60,30 @@ function ShellOutput({code}: {code: string}) {
   );
 }
 
+type PrefixRule = {
+  prefix: string;
+  symbolClass: string;
+  bodyClass?: string;
+};
+
+const PREFIX_RULES: PrefixRule[] = [
+  { prefix: '$ ', symbolClass: styles.prompt },
+  { prefix: '→ ', symbolClass: styles.arrow, bodyClass: styles.arrowText },
+  { prefix: '✓ ', symbolClass: styles.check },
+  { prefix: '✗ ', symbolClass: styles.xmark },
+];
+
 function renderShellLine(line: string): ReactNode {
-  if (line.startsWith('$ ')) {
-    return (
-      <>
-        <span className={styles.prompt}>$</span> {line.slice(2)}
-      </>
-    );
-  }
-  if (line.startsWith('→ ')) {
-    return (
-      <>
-        <span className={styles.arrow}>→</span>{' '}
-        <span className={styles.arrowText}>{line.slice(2)}</span>
-      </>
-    );
-  }
-  if (line.startsWith('✓ ')) {
-    return (
-      <>
-        <span className={styles.check}>✓</span> {line.slice(2)}
-      </>
-    );
-  }
-  if (line.startsWith('✗ ')) {
-    return (
-      <>
-        <span className={styles.xmark}>✗</span> {line.slice(2)}
-      </>
-    );
+  for (const {prefix, symbolClass, bodyClass} of PREFIX_RULES) {
+    if (line.startsWith(prefix)) {
+      const body = line.slice(prefix.length);
+      return (
+        <>
+          <span className={symbolClass}>{prefix.trimEnd()}</span>{' '}
+          {bodyClass ? <span className={bodyClass}>{body}</span> : body}
+        </>
+      );
+    }
   }
   if (/^Done\b/.test(line)) {
     return <span className={styles.done}>{line}</span>;
