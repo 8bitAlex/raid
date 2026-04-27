@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	contextcmd "github.com/8bitalex/raid/src/cmd/context"
 	"github.com/8bitalex/raid/src/cmd/doctor"
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
@@ -24,6 +25,7 @@ var reservedNames = map[string]bool{
 	"install":    true,
 	"env":        true,
 	"doctor":     true,
+	"context":    true,
 	"help":       true,
 	"version":    true,
 	"completion": true,
@@ -50,6 +52,7 @@ func init() {
 	rootCmd.AddCommand(install.Command)
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(doctor.Command)
+	rootCmd.AddCommand(contextcmd.Command)
 }
 
 // isInfoCommand reports whether the invocation is for a built-in informational

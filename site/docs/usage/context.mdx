@@ -1,0 +1,81 @@
+---
+sidebar_position: 7
+---
+
+# Context
+
+Print a condensed snapshot of the active workspace — the profile, environment, and per-repository git state. Designed to be terse enough to paste into a chat agent or pipe into another tool.
+
+```bash
+raid context           # pretty-printed for humans
+raid context --json    # machine-readable JSON
+```
+
+## What it emits
+
+The first iteration emits:
+
+- **Active profile name**
+- **Active environment** (if one is set)
+- **Repositories**, with for each: name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
+
+Future iterations will add task definitions, recent task exit statuses, and an MCP resource surface. Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
+
+## Pretty output
+
+Default invocation produces a fixed-width table for human reading:
+
+```
+Profile: my-project
+Env:     dev
+
+Repos (3):
+  api       ~/dev/my-project/api       main      clean
+  frontend  ~/dev/my-project/frontend  develop   dirty
+  worker    ~/dev/my-project/worker              not cloned
+```
+
+Status values:
+
+| Status | Meaning |
+|---|---|
+| `clean` | Repository is cloned and has no uncommitted changes |
+| `dirty` | Repository is cloned and has uncommitted changes (per `git status --porcelain`) |
+| `not cloned` | Path from the profile does not exist on disk, or is not a git repository |
+
+## JSON output
+
+`raid context --json` emits a stable, agent-friendly schema:
+
+```json
+{
+  "profile": "my-project",
+  "env": "dev",
+  "repos": [
+    {
+      "name": "api",
+      "path": "~/dev/my-project/api",
+      "cloned": true,
+      "branch": "main",
+      "dirty": false
+    },
+    {
+      "name": "worker",
+      "path": "~/dev/my-project/worker",
+      "cloned": false
+    }
+  ]
+}
+```
+
+When a repository is not cloned, `branch` and `dirty` are omitted.
+
+## Common uses
+
+```bash
+# Drop the current workspace state into a chat agent
+raid context | pbcopy
+
+# Feed JSON into another tool
+raid context --json | jq '.repos[] | select(.dirty)'
+```
