@@ -14,8 +14,12 @@ type Workspace = lib.Workspace
 // Repo describes a single repository in the workspace snapshot.
 type Repo = lib.WorkspaceRepo
 
-// Command is a profile command, exposed as name + short description only.
+// Command is a profile command, exposed as name + short description, plus an
+// optional Steps outline derived from named tasks.
 type Command = lib.WorkspaceCommand
+
+// Step describes one named task inside a command's task sequence.
+type Step = lib.WorkspaceStep
 
 // Tool is a built-in `raid` subcommand exposed for agent discovery.
 type Tool = lib.WorkspaceTool

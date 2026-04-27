@@ -27,7 +27,7 @@ Followed by the workspace data:
 - **Active profile name**
 - **Active environment** (if one is set)
 - **Repositories** — name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
-- **Commands** — name and short description of every user-defined `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets. Built-in subcommands are listed under **Tools** above and are not duplicated here.
+- **Commands** — name and short description of every user-defined `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets. If any of a command's tasks have a `name` field set, those names also surface as a `steps` array — letting an agent see the outline of what the command does without exposing the underlying scripts. Built-in subcommands are listed under **Tools** above and are not duplicated here.
 - **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`). A run that was killed mid-execution (Ctrl+C, SIGTERM, etc.) is recorded as `interrupted` so you don't lose visibility into terminated commands.
 
 JSON keys use camelCase and the workspace data is grouped under a single `workspace` object. This shape aligns with the [Model Context Protocol](https://modelcontextprotocol.io) so a future `raid context serve` mode (a stdio MCP server) can lift these structures directly into JSON-RPC responses without translation.
@@ -59,6 +59,9 @@ Tools (5):
 
 Commands (3):
   deploy    Deploy to production
+            1. Build artifact
+            2. Push to registry
+            3. Apply migrations
   test      Run tests
   reset-db  Reset local database
 
@@ -120,8 +123,16 @@ Status values:
       }
     ],
     "commands": [
-      { "name": "deploy", "description": "Deploy to production" },
-      { "name": "test",   "description": "Run tests" }
+      {
+        "name": "deploy",
+        "description": "Deploy to production",
+        "steps": [
+          { "name": "Build artifact" },
+          { "name": "Push to registry" },
+          { "name": "Apply migrations" }
+        ]
+      },
+      { "name": "test", "description": "Run tests" }
     ],
     "recent": [
       {

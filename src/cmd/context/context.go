@@ -180,6 +180,9 @@ func writeCommands(w io.Writer, cmds []context.Command) {
 	fmt.Fprintf(w, "\nCommands (%d):\n", len(cmds))
 	for _, c := range cmds {
 		fmt.Fprintf(w, "  %-*s  %s\n", nameW, c.Name, c.Description)
+		for i, step := range c.Steps {
+			fmt.Fprintf(w, "  %-*s  %d. %s\n", nameW, "", i+1, step.Name)
+		}
 	}
 }
 

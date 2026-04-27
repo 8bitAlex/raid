@@ -64,12 +64,22 @@ type WorkspaceRepo struct {
 	Dirty  bool   `json:"dirty,omitempty"`
 }
 
-// WorkspaceCommand exposes a profile command's name and short description
-// only — the script bodies are intentionally excluded so the snapshot stays
-// token-efficient and free of secrets.
+// WorkspaceCommand exposes a profile command's name and short description.
+// Script bodies are intentionally excluded so the snapshot stays token-efficient
+// and free of secrets. If any of the command's tasks have a `name` field set,
+// they're surfaced in Steps as an outline of what the command does — also
+// without script bodies.
 type WorkspaceCommand struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Steps       []WorkspaceStep `json:"steps,omitempty"`
+}
+
+// WorkspaceStep describes one named task inside a command's task sequence.
+// Only tasks with a populated TaskProps.Name appear here; unnamed tasks are
+// omitted to keep the snapshot focused on user-meaningful labels.
+type WorkspaceStep struct {
+	Name string `json:"name"`
 }
 
 // runGitFn invokes git in dir with the given args and returns trimmed stdout.
@@ -120,9 +130,24 @@ func GetWorkspaceContext() WorkspaceContext {
 		wc.Workspace.Commands = append(wc.Workspace.Commands, WorkspaceCommand{
 			Name:        cmd.Name,
 			Description: cmd.Usage,
+			Steps:       collectSteps(cmd.Tasks),
 		})
 	}
 	return wc
+}
+
+// collectSteps returns one WorkspaceStep per task in tasks that has a
+// populated Name. Unnamed tasks are skipped — the goal is an outline of
+// user-meaningful labels, not a full transcript of the task sequence.
+func collectSteps(tasks []Task) []WorkspaceStep {
+	var steps []WorkspaceStep
+	for _, t := range tasks {
+		if t.Name == "" {
+			continue
+		}
+		steps = append(steps, WorkspaceStep{Name: t.Name})
+	}
+	return steps
 }
 
 func describeRepo(repo Repo) WorkspaceRepo {

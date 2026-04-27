@@ -83,6 +83,77 @@ func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 	}
 }
 
+// TestGetWorkspaceContext_commandStepsOnlyNamedTasks verifies that named tasks
+// surface as steps and unnamed tasks are skipped, preserving the original
+// task order.
+func TestGetWorkspaceContext_commandStepsOnlyNamedTasks(t *testing.T) {
+	resetWorkspaceContextState(t)
+	context = &Context{
+		Profile: Profile{
+			Name: "demo",
+			Path: "/tmp/demo.raid.yaml",
+			Commands: []Command{
+				{
+					Name:  "release",
+					Usage: "Cut a release",
+					Tasks: []Task{
+						{TaskProps: TaskProps{Name: "Build artifact"}, Type: Shell, Cmd: "make build"},
+						{Type: Shell, Cmd: "echo unnamed setup"}, // unnamed: skipped
+						{TaskProps: TaskProps{Name: "Push to registry"}, Type: Shell, Cmd: "docker push"},
+						{TaskProps: TaskProps{Name: "Tag release"}, Type: Git, Op: "checkout"},
+					},
+				},
+			},
+		},
+	}
+
+	got := GetWorkspaceContext()
+	if len(got.Workspace.Commands) != 1 {
+		t.Fatalf("Commands len = %d, want 1", len(got.Workspace.Commands))
+	}
+	steps := got.Workspace.Commands[0].Steps
+	if len(steps) != 3 {
+		t.Fatalf("Steps len = %d, want 3 (named tasks only)", len(steps))
+	}
+	wantNames := []string{"Build artifact", "Push to registry", "Tag release"}
+	for i, want := range wantNames {
+		if steps[i].Name != want {
+			t.Errorf("Steps[%d] = %q, want %q", i, steps[i].Name, want)
+		}
+	}
+}
+
+// TestGetWorkspaceContext_commandStepsOmittedWhenNoneNamed confirms that a
+// command with zero named tasks emits no Steps array (omitempty), keeping the
+// JSON tight.
+func TestGetWorkspaceContext_commandStepsOmittedWhenNoneNamed(t *testing.T) {
+	resetWorkspaceContextState(t)
+	context = &Context{
+		Profile: Profile{
+			Name: "demo",
+			Path: "/tmp/demo.raid.yaml",
+			Commands: []Command{
+				{
+					Name:  "lint",
+					Usage: "Lint everything",
+					Tasks: []Task{
+						{Type: Shell, Cmd: "go vet ./..."},
+						{Type: Shell, Cmd: "golangci-lint run"},
+					},
+				},
+			},
+		},
+	}
+
+	got := GetWorkspaceContext()
+	if len(got.Workspace.Commands) != 1 {
+		t.Fatalf("Commands len = %d, want 1", len(got.Workspace.Commands))
+	}
+	if got.Workspace.Commands[0].Steps != nil {
+		t.Errorf("Steps = %+v, want nil (no named tasks)", got.Workspace.Commands[0].Steps)
+	}
+}
+
 func TestGetWorkspaceContext_includesRecent(t *testing.T) {
 	resetWorkspaceContextState(t)
 	setupRecentTempPath(t)

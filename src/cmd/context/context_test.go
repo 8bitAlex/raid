@@ -282,6 +282,50 @@ func TestWritePretty_commands(t *testing.T) {
 	}
 }
 
+// TestWritePretty_commandSteps confirms that commands with named tasks expose
+// numbered step rows under their main row, mirroring what the JSON output
+// emits via the steps[] array.
+func TestWritePretty_commandSteps(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+			Commands: []rctx.Command{
+				{
+					Name:        "release",
+					Description: "Cut a release",
+					Steps: []rctx.Step{
+						{Name: "Build artifact"},
+						{Name: "Push to registry"},
+						{Name: "Tag release"},
+					},
+				},
+				{Name: "lint", Description: "Lint everything"}, // no steps — must not render any
+			},
+		},
+	}
+	if err := writePretty(&buf, ws); err != nil {
+		t.Fatalf("writePretty: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"release",
+		"1. Build artifact",
+		"2. Push to registry",
+		"3. Tag release",
+		"lint",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	// Lint command has no steps; ensure no numbered lines snuck in for it.
+	if strings.Contains(out, "1. ") && strings.Count(out, "1. ") != 1 {
+		t.Errorf("expected exactly one '1.' step row (release's first step), got: %s", out)
+	}
+}
+
 func TestRecentStatusText(t *testing.T) {
 	tests := []struct {
 		name string
