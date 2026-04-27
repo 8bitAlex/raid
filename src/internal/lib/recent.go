@@ -38,9 +38,9 @@ const (
 type RecentEntry struct {
 	Command    string    `json:"command"`
 	Status     string    `json:"status"`
-	ExitCode   int       `json:"exit_code"`
-	StartedAt  time.Time `json:"started_at"`
-	DurationMs int64     `json:"duration_ms,omitempty"`
+	ExitCode   int       `json:"exitCode"`
+	StartedAt  time.Time `json:"startedAt"`
+	DurationMs int64     `json:"durationMs,omitempty"`
 }
 
 // RecentPathOverride redirects the recent.json log path. Intended only for

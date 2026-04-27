@@ -76,28 +76,28 @@ func collectTools(root *cobra.Command) []context.Tool {
 	return tools
 }
 
-func writeJSON(w io.Writer, ws context.Workspace) error {
+func writeJSON(w io.Writer, ws context.Snapshot) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(ws)
 }
 
-func writePretty(w io.Writer, ws context.Workspace) error {
+func writePretty(w io.Writer, ws context.Snapshot) error {
 	writeHeader(w, ws)
-	if ws.Profile == "" {
+	if ws.Workspace.Profile == "" {
 		fmt.Fprintln(w, "No active profile.")
 		return nil
 	}
 
-	fmt.Fprintf(w, "Profile: %s\n", ws.Profile)
-	if ws.Env != "" {
-		fmt.Fprintf(w, "Env:     %s\n", ws.Env)
+	fmt.Fprintf(w, "Profile: %s\n", ws.Workspace.Profile)
+	if ws.Workspace.Env != "" {
+		fmt.Fprintf(w, "Env:     %s\n", ws.Workspace.Env)
 	}
 
-	writeRepos(w, ws.Repos)
+	writeRepos(w, ws.Workspace.Repos)
 	writeTools(w, ws.Tools)
-	writeCommands(w, ws.Commands)
-	writeRecent(w, ws.Recent)
+	writeCommands(w, ws.Workspace.Commands)
+	writeRecent(w, ws.Workspace.Recent)
 	return nil
 }
 
@@ -118,21 +118,21 @@ func writeTools(w io.Writer, tools []context.Tool) {
 }
 
 // writeHeader emits an agent-readable preamble so the snapshot is
-// self-describing when piped or pasted out of context. The repository URL is
+// self-describing when piped or pasted out of context. The website URL is
 // included as a discoverable entry point an agent can follow for additional
 // documentation, issue reporting, or source code search.
-func writeHeader(w io.Writer, ws context.Workspace) {
-	tool := ws.Tool
-	if tool == "" {
-		tool = "raid"
+func writeHeader(w io.Writer, ws context.Snapshot) {
+	name := ws.Name
+	if name == "" {
+		name = "raid"
 	}
 	if ws.Version != "" {
-		fmt.Fprintf(w, "# %s v%s workspace context (%s)\n", tool, ws.Version, ws.GeneratedAt.Format(time.RFC3339))
+		fmt.Fprintf(w, "# %s v%s workspace context (%s)\n", name, ws.Version, ws.GeneratedAt.Format(time.RFC3339))
 	} else {
-		fmt.Fprintf(w, "# %s workspace context (%s)\n", tool, ws.GeneratedAt.Format(time.RFC3339))
+		fmt.Fprintf(w, "# %s workspace context (%s)\n", name, ws.GeneratedAt.Format(time.RFC3339))
 	}
-	if ws.Repository != "" {
-		fmt.Fprintf(w, "# %s\n", ws.Repository)
+	if ws.WebsiteUrl != "" {
+		fmt.Fprintf(w, "# %s\n", ws.WebsiteUrl)
 	}
 	fmt.Fprintln(w)
 }

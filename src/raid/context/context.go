@@ -3,8 +3,13 @@ package context
 
 import "github.com/8bitalex/raid/src/internal/lib"
 
-// Workspace is a snapshot of the active profile, environment, and repositories.
-type Workspace = lib.WorkspaceContext
+// Snapshot is the full `raid context` payload — producer identity (name,
+// version, websiteUrl, generatedAt) plus the inline Workspace state.
+type Snapshot = lib.WorkspaceContext
+
+// Workspace is the inline workspace state nested inside a Snapshot: profile,
+// environment, repositories, user commands, and recent runs.
+type Workspace = lib.Workspace
 
 // Repo describes a single repository in the workspace snapshot.
 type Repo = lib.WorkspaceRepo
@@ -25,6 +30,6 @@ const (
 )
 
 // Get returns a snapshot of the currently loaded workspace context.
-func Get() Workspace {
+func Get() Snapshot {
 	return lib.GetWorkspaceContext()
 }

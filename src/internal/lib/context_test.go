@@ -31,14 +31,14 @@ func TestGetWorkspaceContext_noContext(t *testing.T) {
 	resetWorkspaceContextState(t)
 
 	got := GetWorkspaceContext()
-	if got.Profile != "" {
-		t.Errorf("Profile = %q, want empty", got.Profile)
+	if got.Workspace.Profile != "" {
+		t.Errorf("Profile = %q, want empty", got.Workspace.Profile)
 	}
-	if got.Env != "" {
-		t.Errorf("Env = %q, want empty", got.Env)
+	if got.Workspace.Env != "" {
+		t.Errorf("Env = %q, want empty", got.Workspace.Env)
 	}
-	if len(got.Repos) != 0 {
-		t.Errorf("Repos len = %d, want 0", len(got.Repos))
+	if len(got.Workspace.Repos) != 0 {
+		t.Errorf("Repos len = %d, want 0", len(got.Workspace.Repos))
 	}
 }
 
@@ -47,17 +47,17 @@ func TestGetWorkspaceContext_zeroProfile(t *testing.T) {
 	context = &Context{Env: "dev"}
 
 	got := GetWorkspaceContext()
-	if got.Profile != "" {
-		t.Errorf("Profile = %q, want empty", got.Profile)
+	if got.Workspace.Profile != "" {
+		t.Errorf("Profile = %q, want empty", got.Workspace.Profile)
 	}
-	if got.Env != "dev" {
-		t.Errorf("Env = %q, want %q", got.Env, "dev")
+	if got.Workspace.Env != "dev" {
+		t.Errorf("Env = %q, want %q", got.Workspace.Env, "dev")
 	}
-	if len(got.Repos) != 0 {
-		t.Errorf("Repos len = %d, want 0", len(got.Repos))
+	if len(got.Workspace.Repos) != 0 {
+		t.Errorf("Repos len = %d, want 0", len(got.Workspace.Repos))
 	}
-	if len(got.Commands) != 0 {
-		t.Errorf("Commands len = %d, want 0", len(got.Commands))
+	if len(got.Workspace.Commands) != 0 {
+		t.Errorf("Commands len = %d, want 0", len(got.Workspace.Commands))
 	}
 }
 
@@ -75,11 +75,11 @@ func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	if len(got.Commands) != 2 {
-		t.Fatalf("Commands len = %d, want 2", len(got.Commands))
+	if len(got.Workspace.Commands) != 2 {
+		t.Fatalf("Commands len = %d, want 2", len(got.Workspace.Commands))
 	}
-	if got.Commands[0].Name != "deploy" || got.Commands[0].Description != "Deploy to production" {
-		t.Errorf("Commands[0] = %+v", got.Commands[0])
+	if got.Workspace.Commands[0].Name != "deploy" || got.Workspace.Commands[0].Description != "Deploy to production" {
+		t.Errorf("Commands[0] = %+v", got.Workspace.Commands[0])
 	}
 }
 
@@ -94,11 +94,11 @@ func TestGetWorkspaceContext_includesRecent(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	if len(got.Recent) != 1 || got.Recent[0].Command != "deploy" {
-		t.Errorf("Recent = %+v, want one 'deploy' entry", got.Recent)
+	if len(got.Workspace.Recent) != 1 || got.Workspace.Recent[0].Command != "deploy" {
+		t.Errorf("Recent = %+v, want one 'deploy' entry", got.Workspace.Recent)
 	}
-	if got.Recent[0].Status != RecentStatusCompleted {
-		t.Errorf("Recent[0].Status = %q, want %q", got.Recent[0].Status, RecentStatusCompleted)
+	if got.Workspace.Recent[0].Status != RecentStatusCompleted {
+		t.Errorf("Recent[0].Status = %q, want %q", got.Workspace.Recent[0].Status, RecentStatusCompleted)
 	}
 }
 
@@ -116,13 +116,13 @@ func TestGetWorkspaceContext_repoNotCloned(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	if got.Profile != "demo" {
-		t.Errorf("Profile = %q, want %q", got.Profile, "demo")
+	if got.Workspace.Profile != "demo" {
+		t.Errorf("Profile = %q, want %q", got.Workspace.Profile, "demo")
 	}
-	if len(got.Repos) != 1 {
-		t.Fatalf("Repos len = %d, want 1", len(got.Repos))
+	if len(got.Workspace.Repos) != 1 {
+		t.Fatalf("Repos len = %d, want 1", len(got.Workspace.Repos))
 	}
-	r := got.Repos[0]
+	r := got.Workspace.Repos[0]
 	if r.Cloned {
 		t.Errorf("Cloned = true, want false")
 	}
@@ -163,10 +163,10 @@ func TestGetWorkspaceContext_repoClean(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	if len(got.Repos) != 1 {
-		t.Fatalf("Repos len = %d, want 1", len(got.Repos))
+	if len(got.Workspace.Repos) != 1 {
+		t.Fatalf("Repos len = %d, want 1", len(got.Workspace.Repos))
 	}
-	r := got.Repos[0]
+	r := got.Workspace.Repos[0]
 	if !r.Cloned {
 		t.Errorf("Cloned = false, want true")
 	}
@@ -206,7 +206,7 @@ func TestGetWorkspaceContext_repoDirty(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	r := got.Repos[0]
+	r := got.Workspace.Repos[0]
 	if !r.Cloned {
 		t.Errorf("Cloned = false, want true")
 	}
@@ -239,7 +239,7 @@ func TestGetWorkspaceContext_directoryWithoutGit(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	r := got.Repos[0]
+	r := got.Workspace.Repos[0]
 	if r.Cloned {
 		t.Errorf("Cloned = true, want false (no .git dir)")
 	}
@@ -264,7 +264,7 @@ func TestGetWorkspaceContext_gitErrorsLeaveFieldsZeroed(t *testing.T) {
 	}
 
 	got := GetWorkspaceContext()
-	r := got.Repos[0]
+	r := got.Workspace.Repos[0]
 	if !r.Cloned {
 		t.Errorf("Cloned = false, want true (.git dir present even if git failed)")
 	}

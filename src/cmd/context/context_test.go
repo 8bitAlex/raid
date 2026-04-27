@@ -13,12 +13,14 @@ import (
 
 func TestWritePretty_includesAgentHeader(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Tool:       "raid",
+	ws := rctx.Snapshot{
+		Name:       "raid",
 		Version:    "1.2.3",
-		Repository: "https://github.com/8bitalex/raid",
-		Profile:    "demo",
-		Repos:      []rctx.Repo{},
+		WebsiteUrl: "https://github.com/8bitalex/raid",
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+		},
 	}
 	if err := writePretty(&buf, ws); err != nil {
 		t.Fatalf("writePretty: %v", err)
@@ -33,34 +35,36 @@ func TestWritePretty_includesAgentHeader(t *testing.T) {
 
 func TestWriteJSON_includesAgentHeader(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Tool:       "raid",
+	ws := rctx.Snapshot{
+		Name:       "raid",
 		Version:    "1.2.3",
-		Repository: "https://github.com/8bitalex/raid",
-		Profile:    "demo",
-		Repos:      []rctx.Repo{},
+		WebsiteUrl: "https://github.com/8bitalex/raid",
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+		},
 	}
 	if err := writeJSON(&buf, ws); err != nil {
 		t.Fatalf("writeJSON: %v", err)
 	}
-	var decoded rctx.Workspace
+	var decoded rctx.Snapshot
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if decoded.Tool != "raid" {
-		t.Errorf("Tool = %q, want %q", decoded.Tool, "raid")
+	if decoded.Name != "raid" {
+		t.Errorf("Name = %q, want %q", decoded.Name, "raid")
 	}
 	if decoded.Version != "1.2.3" {
 		t.Errorf("Version = %q, want %q", decoded.Version, "1.2.3")
 	}
-	if decoded.Repository != "https://github.com/8bitalex/raid" {
-		t.Errorf("Repository = %q, want canonical URL", decoded.Repository)
+	if decoded.WebsiteUrl != "https://github.com/8bitalex/raid" {
+		t.Errorf("WebsiteUrl = %q, want canonical URL", decoded.WebsiteUrl)
 	}
 }
 
 func TestWritePretty_noProfile(t *testing.T) {
 	var buf bytes.Buffer
-	if err := writePretty(&buf, rctx.Workspace{Repos: []rctx.Repo{}}); err != nil {
+	if err := writePretty(&buf, rctx.Snapshot{Workspace: rctx.Workspace{Repos: []rctx.Repo{}}}); err != nil {
 		t.Fatalf("writePretty: %v", err)
 	}
 	if !strings.Contains(buf.String(), "No active profile") {
@@ -70,10 +74,12 @@ func TestWritePretty_noProfile(t *testing.T) {
 
 func TestWritePretty_noRepos(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile: "demo",
-		Env:     "dev",
-		Repos:   []rctx.Repo{},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Env:     "dev",
+			Repos:   []rctx.Repo{},
+		},
 	}
 	if err := writePretty(&buf, ws); err != nil {
 		t.Fatalf("writePretty: %v", err)
@@ -92,13 +98,15 @@ func TestWritePretty_noRepos(t *testing.T) {
 
 func TestWritePretty_repoStates(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile: "demo",
-		Env:     "dev",
-		Repos: []rctx.Repo{
-			{Name: "api", Path: "~/dev/api", Cloned: true, Branch: "main"},
-			{Name: "frontend", Path: "~/dev/frontend", Cloned: true, Branch: "develop", Dirty: true},
-			{Name: "worker", Path: "~/dev/worker"},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Env:     "dev",
+			Repos: []rctx.Repo{
+				{Name: "api", Path: "~/dev/api", Cloned: true, Branch: "main"},
+				{Name: "frontend", Path: "~/dev/frontend", Cloned: true, Branch: "develop", Dirty: true},
+				{Name: "worker", Path: "~/dev/worker"},
+			},
 		},
 	}
 	if err := writePretty(&buf, ws); err != nil {
@@ -118,34 +126,117 @@ func TestWritePretty_repoStates(t *testing.T) {
 
 func TestWriteJSON_shape(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile: "demo",
-		Env:     "dev",
-		Repos: []rctx.Repo{
-			{Name: "api", Path: "~/dev/api", Cloned: true, Branch: "main"},
-			{Name: "worker", Path: "~/dev/worker"},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Env:     "dev",
+			Repos: []rctx.Repo{
+				{Name: "api", Path: "~/dev/api", Cloned: true, Branch: "main"},
+				{Name: "worker", Path: "~/dev/worker"},
+			},
 		},
 	}
 	if err := writeJSON(&buf, ws); err != nil {
 		t.Fatalf("writeJSON: %v", err)
 	}
 
-	var decoded rctx.Workspace
+	var decoded rctx.Snapshot
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("invalid JSON output: %v\n%s", err, buf.String())
 	}
 
-	if decoded.Profile != "demo" || decoded.Env != "dev" {
-		t.Errorf("decoded header = %+v", decoded)
+	if decoded.Workspace.Profile != "demo" || decoded.Workspace.Env != "dev" {
+		t.Errorf("decoded workspace = %+v", decoded.Workspace)
 	}
-	if len(decoded.Repos) != 2 {
-		t.Fatalf("repos len = %d, want 2", len(decoded.Repos))
+	if len(decoded.Workspace.Repos) != 2 {
+		t.Fatalf("repos len = %d, want 2", len(decoded.Workspace.Repos))
 	}
-	if decoded.Repos[0].Name != "api" || !decoded.Repos[0].Cloned || decoded.Repos[0].Branch != "main" {
-		t.Errorf("api repo = %+v", decoded.Repos[0])
+	if decoded.Workspace.Repos[0].Name != "api" || !decoded.Workspace.Repos[0].Cloned || decoded.Workspace.Repos[0].Branch != "main" {
+		t.Errorf("api repo = %+v", decoded.Workspace.Repos[0])
 	}
-	if decoded.Repos[1].Name != "worker" || decoded.Repos[1].Cloned {
-		t.Errorf("worker repo = %+v (should be uncloned)", decoded.Repos[1])
+	if decoded.Workspace.Repos[1].Name != "worker" || decoded.Workspace.Repos[1].Cloned {
+		t.Errorf("worker repo = %+v (should be uncloned)", decoded.Workspace.Repos[1])
+	}
+}
+
+// TestWriteJSON_workspaceIsNested guards the structural promise of step 1: the
+// workspace data must live under a single `workspace` key, with no leakage of
+// snake_case or flat top-level fields. A regression here defeats the whole
+// MCP-shape alignment.
+func TestWriteJSON_workspaceIsNested(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Snapshot{
+		Name:       "raid",
+		Version:    "1.2.3",
+		WebsiteUrl: "https://github.com/8bitalex/raid",
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Env:     "dev",
+			Repos:   []rctx.Repo{{Name: "api", Path: "~/dev/api"}},
+			Commands: []rctx.Command{{Name: "deploy"}},
+		},
+	}
+	if err := writeJSON(&buf, ws); err != nil {
+		t.Fatalf("writeJSON: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// Top-level must NOT contain flat workspace keys or any snake_case names.
+	for _, forbidden := range []string{"profile", "env", "repos", "commands", "recent", "tool", "repository", "generated_at"} {
+		if _, present := decoded[forbidden]; present {
+			t.Errorf("top-level should not contain %q (workspace data must nest under 'workspace')", forbidden)
+		}
+	}
+	// Workspace key must exist and contain the data.
+	wsObj, ok := decoded["workspace"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'workspace' object, got: %T", decoded["workspace"])
+	}
+	for _, want := range []string{"profile", "env", "repos", "commands"} {
+		if _, present := wsObj[want]; !present {
+			t.Errorf("workspace missing key %q", want)
+		}
+	}
+}
+
+// TestWriteJSON_recentUsesCamelCase ensures the recent log fields are emitted
+// with MCP-aligned camelCase keys, not the prior snake_case form.
+func TestWriteJSON_recentUsesCamelCase(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+			Recent: []rctx.Recent{
+				{Command: "deploy", Status: rctx.RecentStatusCompleted, ExitCode: 0, DurationMs: 1234},
+			},
+		},
+	}
+	if err := writeJSON(&buf, ws); err != nil {
+		t.Fatalf("writeJSON: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	wsObj := decoded["workspace"].(map[string]any)
+	recent := wsObj["recent"].([]any)
+	first := recent[0].(map[string]any)
+
+	for _, camel := range []string{"exitCode", "startedAt", "durationMs"} {
+		if _, present := first[camel]; !present {
+			t.Errorf("recent entry missing camelCase key %q (got %v)", camel, first)
+		}
+	}
+	for _, snake := range []string{"exit_code", "started_at", "duration_ms"} {
+		if _, present := first[snake]; present {
+			t.Errorf("recent entry should not contain snake_case key %q", snake)
+		}
 	}
 }
 
@@ -170,12 +261,14 @@ func TestRepoStatus(t *testing.T) {
 
 func TestWritePretty_commands(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile:  "demo",
-		Repos:    []rctx.Repo{},
-		Commands: []rctx.Command{
-			{Name: "deploy", Description: "Deploy to production"},
-			{Name: "test", Description: "Run tests"},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+			Commands: []rctx.Command{
+				{Name: "deploy", Description: "Deploy to production"},
+				{Name: "test", Description: "Run tests"},
+			},
 		},
 	}
 	if err := writePretty(&buf, ws); err != nil {
@@ -210,12 +303,14 @@ func TestRecentStatusText(t *testing.T) {
 
 func TestWritePretty_recent(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile: "demo",
-		Repos:   []rctx.Repo{},
-		Recent: []rctx.Recent{
-			{Command: "deploy", ExitCode: 0, DurationMs: 12300},
-			{Command: "test", ExitCode: 1, DurationMs: 4500},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+			Recent: []rctx.Recent{
+				{Command: "deploy", ExitCode: 0, DurationMs: 12300},
+				{Command: "test", ExitCode: 1, DurationMs: 4500},
+			},
 		},
 	}
 	if err := writePretty(&buf, ws); err != nil {
@@ -231,25 +326,27 @@ func TestWritePretty_recent(t *testing.T) {
 
 func TestWriteJSON_includesAllSections(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile:  "demo",
-		Env:      "dev",
-		Repos:    []rctx.Repo{{Name: "api", Path: "~/dev/api", Cloned: true, Branch: "main"}},
-		Commands: []rctx.Command{{Name: "deploy", Description: "Deploy"}},
-		Recent:   []rctx.Recent{{Command: "deploy", ExitCode: 0, DurationMs: 1234}},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile:  "demo",
+			Env:      "dev",
+			Repos:    []rctx.Repo{{Name: "api", Path: "~/dev/api", Cloned: true, Branch: "main"}},
+			Commands: []rctx.Command{{Name: "deploy", Description: "Deploy"}},
+			Recent:   []rctx.Recent{{Command: "deploy", ExitCode: 0, DurationMs: 1234}},
+		},
 	}
 	if err := writeJSON(&buf, ws); err != nil {
 		t.Fatalf("writeJSON: %v", err)
 	}
-	var decoded rctx.Workspace
+	var decoded rctx.Snapshot
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if len(decoded.Commands) != 1 || decoded.Commands[0].Name != "deploy" {
-		t.Errorf("commands round-trip failed: %+v", decoded.Commands)
+	if len(decoded.Workspace.Commands) != 1 || decoded.Workspace.Commands[0].Name != "deploy" {
+		t.Errorf("commands round-trip failed: %+v", decoded.Workspace.Commands)
 	}
-	if len(decoded.Recent) != 1 || decoded.Recent[0].Command != "deploy" {
-		t.Errorf("recent round-trip failed: %+v", decoded.Recent)
+	if len(decoded.Workspace.Recent) != 1 || decoded.Workspace.Recent[0].Command != "deploy" {
+		t.Errorf("recent round-trip failed: %+v", decoded.Workspace.Recent)
 	}
 }
 
@@ -334,9 +431,11 @@ func TestCollectTools_keepsCobraShortAsDescription(t *testing.T) {
 
 func TestWritePretty_includesToolsSection(t *testing.T) {
 	var buf bytes.Buffer
-	ws := rctx.Workspace{
-		Profile: "demo",
-		Repos:   []rctx.Repo{},
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos:   []rctx.Repo{},
+		},
 		Tools: []rctx.Tool{
 			{Name: "install", Description: "Install the active profile"},
 			{Name: "env", Description: "Execute an environment"},

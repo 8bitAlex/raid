@@ -15,9 +15,10 @@ raid context --json    # machine-readable JSON
 
 Every snapshot is **self-describing** so an agent that picks it up out of context can identify the producer:
 
-- **Tool** — always `raid`
+- **Name** — always `raid`
+- **Title** — the human-readable display name, `Raid`
 - **Version** — the raid binary version, useful for feature/schema detection
-- **Repository** — canonical GitHub URL the agent can follow for additional documentation, source code search, or issue reporting
+- **Website URL** — canonical GitHub URL the agent can follow for additional documentation, source code search, or issue reporting
 - **Generated at** — UTC timestamp of when the snapshot was produced
 
 Followed by the workspace data:
@@ -29,7 +30,9 @@ Followed by the workspace data:
 - **Commands** — name and short description of every user-defined `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets. Built-in subcommands are listed under **Tools** above and are not duplicated here.
 - **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`). A run that was killed mid-execution (Ctrl+C, SIGTERM, etc.) is recorded as `interrupted` so you don't lose visibility into terminated commands.
 
-Future iterations will surface the same data as an MCP resource. Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
+JSON keys use camelCase and the workspace data is grouped under a single `workspace` object. This shape aligns with the [Model Context Protocol](https://modelcontextprotocol.io) so a future `raid context serve` mode (a stdio MCP server) can lift these structures directly into JSON-RPC responses without translation.
+
+Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
 
 ## Pretty output
 
@@ -87,10 +90,11 @@ Status values:
 
 ```json
 {
-  "tool": "raid",
+  "name": "raid",
+  "title": "Raid",
   "version": "1.2.3",
-  "repository": "https://github.com/8bitalex/raid",
-  "generated_at": "2026-04-27T18:00:00Z",
+  "websiteUrl": "https://github.com/8bitalex/raid",
+  "generatedAt": "2026-04-27T18:00:00Z",
   "tools": [
     { "name": "context", "description": "Print a condensed summary of the active workspace" },
     { "name": "doctor",  "description": "Check the raid configuration and report any issues" },
@@ -98,45 +102,47 @@ Status values:
     { "name": "install", "description": "Install the active profile" },
     { "name": "profile", "description": "Manage raid profiles" }
   ],
-  "profile": "my-project",
-  "env": "dev",
-  "repos": [
-    {
-      "name": "api",
-      "path": "~/dev/my-project/api",
-      "cloned": true,
-      "branch": "main",
-      "dirty": false
-    },
-    {
-      "name": "worker",
-      "path": "~/dev/my-project/worker",
-      "cloned": false
-    }
-  ],
-  "commands": [
-    { "name": "deploy", "description": "Deploy to production" },
-    { "name": "test", "description": "Run tests" }
-  ],
-  "recent": [
-    {
-      "command": "deploy",
-      "status": "completed",
-      "exit_code": 0,
-      "started_at": "2026-04-27T12:00:00Z",
-      "duration_ms": 12300
-    },
-    {
-      "command": "migrate",
-      "status": "interrupted",
-      "exit_code": 0,
-      "started_at": "2026-04-27T11:42:00Z"
-    }
-  ]
+  "workspace": {
+    "profile": "my-project",
+    "env": "dev",
+    "repos": [
+      {
+        "name": "api",
+        "path": "~/dev/my-project/api",
+        "cloned": true,
+        "branch": "main",
+        "dirty": false
+      },
+      {
+        "name": "worker",
+        "path": "~/dev/my-project/worker",
+        "cloned": false
+      }
+    ],
+    "commands": [
+      { "name": "deploy", "description": "Deploy to production" },
+      { "name": "test",   "description": "Run tests" }
+    ],
+    "recent": [
+      {
+        "command": "deploy",
+        "status": "completed",
+        "exitCode": 0,
+        "startedAt": "2026-04-27T12:00:00Z",
+        "durationMs": 12300
+      },
+      {
+        "command": "migrate",
+        "status": "interrupted",
+        "exitCode": 0,
+        "startedAt": "2026-04-27T11:42:00Z"
+      }
+    ]
+  }
 }
 ```
 
-When a repository is not cloned, `branch` and `dirty` are omitted. The `recent` array is omitted entirely when no commands have been run yet.
+When a repository is not cloned, `branch` and `dirty` are omitted. The `workspace.recent` array is omitted entirely when no commands have been run yet.
 
 ## Common uses
 
@@ -145,5 +151,5 @@ When a repository is not cloned, `branch` and `dirty` are omitted. The `recent` 
 raid context | pbcopy
 
 # Feed JSON into another tool
-raid context --json | jq '.repos[] | select(.dirty)'
+raid context --json | jq '.workspace.repos[] | select(.dirty)'
 ```

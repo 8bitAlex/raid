@@ -9,35 +9,46 @@ import (
 	"github.com/8bitalex/raid/src/resources"
 )
 
-// raidRepository is the canonical source URL surfaced in WorkspaceContext so
+// raidWebsiteUrl is the canonical project URL surfaced in WorkspaceContext so
 // agents have a discoverable entry point for additional documentation, issue
 // reporting, and source code search.
-const raidRepository = "https://github.com/8bitalex/raid"
+const raidWebsiteUrl = "https://github.com/8bitalex/raid"
 
 // WorkspaceContext is a condensed snapshot of the active workspace, intended for
 // agent / `raid context` consumption. It is derived from the loaded session
 // context plus on-disk git state per repository.
 //
-// The Tool / Version / Repository / GeneratedAt fields are emitted at the top
-// of the JSON output so an agent that picks up the snapshot in isolation can
-// identify the producer, find the project on GitHub for further context, infer
-// the schema version, and judge freshness without an external wrapper.
+// The top-level Name / Version / WebsiteUrl / GeneratedAt fields identify the
+// producer so an agent that picks up the snapshot in isolation can find the
+// project on GitHub for further context and judge freshness. The Workspace
+// sub-object holds the actual workspace state.
+//
+// Field naming follows MCP (camelCase) so this shape can be lifted directly
+// into the future `raid context serve` MCP server responses with no further
+// translation.
 type WorkspaceContext struct {
-	Tool        string             `json:"tool"`
-	Version     string             `json:"version,omitempty"`
-	Repository  string             `json:"repository,omitempty"`
-	GeneratedAt time.Time          `json:"generated_at"`
-	Tools       []WorkspaceTool    `json:"tools,omitempty"`
-	Profile     string             `json:"profile"`
-	Env         string             `json:"env,omitempty"`
-	Repos       []WorkspaceRepo    `json:"repos"`
-	Commands    []WorkspaceCommand `json:"commands"`
-	Recent      []RecentEntry      `json:"recent,omitempty"`
+	Name        string          `json:"name"`
+	Title       string          `json:"title,omitempty"`
+	Version     string          `json:"version,omitempty"`
+	WebsiteUrl  string          `json:"websiteUrl,omitempty"`
+	GeneratedAt time.Time       `json:"generatedAt"`
+	Tools       []WorkspaceTool `json:"tools,omitempty"`
+	Workspace   Workspace       `json:"workspace"`
+}
+
+// Workspace is the inline workspace state — what would be served via
+// `resources/read` against a `raid://workspace/*` URI by an MCP server.
+type Workspace struct {
+	Profile  string             `json:"profile"`
+	Env      string             `json:"env,omitempty"`
+	Repos    []WorkspaceRepo    `json:"repos"`
+	Commands []WorkspaceCommand `json:"commands"`
+	Recent   []RecentEntry      `json:"recent,omitempty"`
 }
 
 // WorkspaceTool describes a built-in `raid` subcommand the agent can invoke
 // directly (e.g. `raid install`, `raid env`). User-defined commands live in
-// WorkspaceContext.Commands and are not duplicated here.
+// Workspace.Commands and are not duplicated here.
 type WorkspaceTool struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -72,38 +83,41 @@ var runGitFn = func(dir string, args ...string) (string, error) {
 
 // GetWorkspaceContext returns a snapshot of the active workspace. The session
 // context must already be loaded (Load / ForceLoad). If no profile is active
-// the returned WorkspaceContext has empty Profile and empty Repos / Commands
-// slices.
+// the returned WorkspaceContext has empty Workspace.Profile and empty Repos /
+// Commands slices.
 func GetWorkspaceContext() WorkspaceContext {
 	version, _ := resources.GetProperty(resources.PropertyVersion)
 	wc := WorkspaceContext{
-		Tool:        "raid",
+		Name:        "raid",
+		Title:       "Raid",
 		Version:     version,
-		Repository:  raidRepository,
+		WebsiteUrl:  raidWebsiteUrl,
 		GeneratedAt: recentNowFn().UTC().Truncate(time.Second),
-		Repos:       []WorkspaceRepo{},
-		Commands:    []WorkspaceCommand{},
-		Recent:      ReadRecent(),
+		Workspace: Workspace{
+			Repos:    []WorkspaceRepo{},
+			Commands: []WorkspaceCommand{},
+			Recent:   ReadRecent(),
+		},
 	}
 	if context == nil {
 		return wc
 	}
-	wc.Env = context.Env
+	wc.Workspace.Env = context.Env
 
 	profile := context.Profile
 	if profile.IsZero() {
 		return wc
 	}
-	wc.Profile = profile.Name
+	wc.Workspace.Profile = profile.Name
 
-	wc.Repos = make([]WorkspaceRepo, 0, len(profile.Repositories))
+	wc.Workspace.Repos = make([]WorkspaceRepo, 0, len(profile.Repositories))
 	for _, repo := range profile.Repositories {
-		wc.Repos = append(wc.Repos, describeRepo(repo))
+		wc.Workspace.Repos = append(wc.Workspace.Repos, describeRepo(repo))
 	}
 
-	wc.Commands = make([]WorkspaceCommand, 0, len(profile.Commands))
+	wc.Workspace.Commands = make([]WorkspaceCommand, 0, len(profile.Commands))
 	for _, cmd := range profile.Commands {
-		wc.Commands = append(wc.Commands, WorkspaceCommand{
+		wc.Workspace.Commands = append(wc.Workspace.Commands, WorkspaceCommand{
 			Name:        cmd.Name,
 			Description: cmd.Usage,
 		})
