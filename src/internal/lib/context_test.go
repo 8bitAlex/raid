@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func resetWorkspaceContextState(t *testing.T) {
@@ -55,6 +56,46 @@ func TestGetWorkspaceContext_zeroProfile(t *testing.T) {
 	}
 	if len(got.Repos) != 0 {
 		t.Errorf("Repos len = %d, want 0", len(got.Repos))
+	}
+	if len(got.Commands) != 0 {
+		t.Errorf("Commands len = %d, want 0", len(got.Commands))
+	}
+}
+
+func TestGetWorkspaceContext_includesCommands(t *testing.T) {
+	resetWorkspaceContextState(t)
+	context = &Context{
+		Profile: Profile{
+			Name: "demo",
+			Path: "/tmp/demo.raid.yaml",
+			Commands: []Command{
+				{Name: "deploy", Usage: "Deploy to production"},
+				{Name: "test", Usage: "Run tests"},
+			},
+		},
+	}
+
+	got := GetWorkspaceContext()
+	if len(got.Commands) != 2 {
+		t.Fatalf("Commands len = %d, want 2", len(got.Commands))
+	}
+	if got.Commands[0].Name != "deploy" || got.Commands[0].Description != "Deploy to production" {
+		t.Errorf("Commands[0] = %+v", got.Commands[0])
+	}
+}
+
+func TestGetWorkspaceContext_includesRecent(t *testing.T) {
+	resetWorkspaceContextState(t)
+	setupRecentTempPath(t)
+
+	RecordRecent("deploy", nil, time.Now())
+	context = &Context{
+		Profile: Profile{Name: "demo", Path: "/tmp/demo.raid.yaml"},
+	}
+
+	got := GetWorkspaceContext()
+	if len(got.Recent) != 1 || got.Recent[0].Command != "deploy" {
+		t.Errorf("Recent = %+v, want one 'deploy' entry", got.Recent)
 	}
 }
 

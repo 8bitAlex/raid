@@ -13,13 +13,13 @@ raid context --json    # machine-readable JSON
 
 ## What it emits
 
-The first iteration emits:
-
 - **Active profile name**
 - **Active environment** (if one is set)
-- **Repositories**, with for each: name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
+- **Repositories** — name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
+- **Commands** — name and short description of every `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets.
+- **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`)
 
-Future iterations will add task definitions, recent task exit statuses, and an MCP resource surface. Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
+Future iterations will surface the same data as an MCP resource. Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
 
 ## Pretty output
 
@@ -33,6 +33,15 @@ Repos (3):
   api       ~/dev/my-project/api       main      clean
   frontend  ~/dev/my-project/frontend  develop   dirty
   worker    ~/dev/my-project/worker              not cloned
+
+Commands (3):
+  deploy    Deploy to production
+  test      Run tests
+  reset-db  Reset local database
+
+Recent (2):
+  ✓ deploy   12.3s   2m ago
+  ✗ test      4.5s   5m ago
 ```
 
 Status values:
@@ -64,11 +73,23 @@ Status values:
       "path": "~/dev/my-project/worker",
       "cloned": false
     }
+  ],
+  "commands": [
+    { "name": "deploy", "description": "Deploy to production" },
+    { "name": "test", "description": "Run tests" }
+  ],
+  "recent": [
+    {
+      "command": "deploy",
+      "exit_code": 0,
+      "started_at": "2026-04-27T12:00:00Z",
+      "duration_ms": 12300
+    }
   ]
 }
 ```
 
-When a repository is not cloned, `branch` and `dirty` are omitted.
+When a repository is not cloned, `branch` and `dirty` are omitted. The `recent` array is omitted entirely when no commands have been run yet.
 
 ## Common uses
 

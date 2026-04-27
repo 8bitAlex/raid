@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/8bitalex/raid/src/raid/context"
 	"github.com/spf13/cobra"
@@ -50,42 +51,82 @@ func writePretty(w io.Writer, ws context.Workspace) error {
 		fmt.Fprintf(w, "Env:     %s\n", ws.Env)
 	}
 
-	if len(ws.Repos) == 0 {
-		fmt.Fprintln(w, "\nNo repositories configured.")
-		return nil
-	}
-
-	pathWidth, branchWidth := 0, 0
-	for _, r := range ws.Repos {
-		if len(r.Path) > pathWidth {
-			pathWidth = len(r.Path)
-		}
-		if len(r.Branch) > branchWidth {
-			branchWidth = len(r.Branch)
-		}
-	}
-
-	fmt.Fprintf(w, "\nRepos (%d):\n", len(ws.Repos))
-	for _, r := range ws.Repos {
-		status := repoStatus(r)
-		fmt.Fprintf(w, "  %-*s  %-*s  %-*s  %s\n",
-			nameWidth(ws.Repos), r.Name,
-			pathWidth, r.Path,
-			branchWidth, r.Branch,
-			status,
-		)
-	}
+	writeRepos(w, ws.Repos)
+	writeCommands(w, ws.Commands)
+	writeRecent(w, ws.Recent)
 	return nil
 }
 
-func nameWidth(repos []context.Repo) int {
-	w := 0
+func writeRepos(w io.Writer, repos []context.Repo) {
+	if len(repos) == 0 {
+		fmt.Fprintln(w, "\nRepos: none configured")
+		return
+	}
+
+	nameW, pathW, branchW := 0, 0, 0
 	for _, r := range repos {
-		if len(r.Name) > w {
-			w = len(r.Name)
+		if len(r.Name) > nameW {
+			nameW = len(r.Name)
+		}
+		if len(r.Path) > pathW {
+			pathW = len(r.Path)
+		}
+		if len(r.Branch) > branchW {
+			branchW = len(r.Branch)
 		}
 	}
-	return w
+
+	fmt.Fprintf(w, "\nRepos (%d):\n", len(repos))
+	for _, r := range repos {
+		fmt.Fprintf(w, "  %-*s  %-*s  %-*s  %s\n",
+			nameW, r.Name,
+			pathW, r.Path,
+			branchW, r.Branch,
+			repoStatus(r),
+		)
+	}
+}
+
+func writeCommands(w io.Writer, cmds []context.Command) {
+	if len(cmds) == 0 {
+		return
+	}
+	nameW := 0
+	for _, c := range cmds {
+		if len(c.Name) > nameW {
+			nameW = len(c.Name)
+		}
+	}
+	fmt.Fprintf(w, "\nCommands (%d):\n", len(cmds))
+	for _, c := range cmds {
+		fmt.Fprintf(w, "  %-*s  %s\n", nameW, c.Name, c.Description)
+	}
+}
+
+func writeRecent(w io.Writer, entries []context.Recent) {
+	if len(entries) == 0 {
+		return
+	}
+	nameW := 0
+	for _, e := range entries {
+		if len(e.Command) > nameW {
+			nameW = len(e.Command)
+		}
+	}
+	fmt.Fprintf(w, "\nRecent (%d):\n", len(entries))
+	now := time.Now()
+	for _, e := range entries {
+		mark := "✓"
+		if e.ExitCode != 0 {
+			mark = "✗"
+		}
+		fmt.Fprintf(w, "  %s %-*s  %6s  %s\n",
+			mark,
+			nameW, e.Command,
+			formatDuration(e.DurationMs),
+			relativeTime(now, e.StartedAt),
+		)
+	}
 }
 
 func repoStatus(r context.Repo) string {
@@ -96,4 +137,37 @@ func repoStatus(r context.Repo) string {
 		return "dirty"
 	}
 	return "clean"
+}
+
+func formatDuration(ms int64) string {
+	d := time.Duration(ms) * time.Millisecond
+	switch {
+	case d < time.Second:
+		return fmt.Sprintf("%dms", ms)
+	case d < time.Minute:
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	case d < time.Hour:
+		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	default:
+		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+}
+
+func relativeTime(now, then time.Time) string {
+	if then.IsZero() {
+		return ""
+	}
+	d := now.Sub(then)
+	switch {
+	case d < 30*time.Second:
+		return "just now"
+	case d < time.Minute:
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
 }

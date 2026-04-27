@@ -18,14 +18,19 @@ func setupTestConfig(t *testing.T) {
 
 	oldCfgPath := CfgPath
 	oldContext := context
+	oldRecent := RecentPathOverride
 	t.Cleanup(func() {
 		CfgPath = oldCfgPath
 		context = oldContext
+		RecentPathOverride = oldRecent
 		viper.Reset()
 	})
 
 	CfgPath = configPath
 	context = nil
+	// Redirect recent.json so tests that exercise ExecuteCommand don't
+	// pollute the developer's real ~/.raid/recent.json.
+	RecentPathOverride = filepath.Join(dir, "recent.json")
 
 	if err := InitConfig(); err != nil {
 		t.Fatalf("setupTestConfig: InitConfig() error: %v", err)

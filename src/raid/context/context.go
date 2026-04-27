@@ -9,6 +9,12 @@ type Workspace = lib.WorkspaceContext
 // Repo describes a single repository in the workspace snapshot.
 type Repo = lib.WorkspaceRepo
 
+// Command is a profile command, exposed as name + short description only.
+type Command = lib.WorkspaceCommand
+
+// Recent describes a previously executed `raid <command>` invocation.
+type Recent = lib.RecentEntry
+
 // Get returns a snapshot of the currently loaded workspace context.
 func Get() Workspace {
 	return lib.GetWorkspaceContext()
