@@ -1,9 +1,12 @@
 package lib
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestTaskIsZero(t *testing.T) {
@@ -116,4 +119,110 @@ func TestTaskExpand_doesNotMutateOriginal(t *testing.T) {
 	if original.Cmd != "echo $RAID_TEST_ORIG" {
 		t.Errorf("Expand() mutated original: Cmd = %q", original.Cmd)
 	}
+}
+
+// --- TaskProps ---
+
+func TestTaskProps_namePromotedAndSet(t *testing.T) {
+	task := Task{TaskProps: TaskProps{Name: "build app"}, Type: Shell, Cmd: "make"}
+	if task.Name != "build app" {
+		t.Errorf("task.Name (promoted) = %q, want %q", task.Name, "build app")
+	}
+	if task.TaskProps.Name != "build app" {
+		t.Errorf("task.TaskProps.Name = %q, want %q", task.TaskProps.Name, "build app")
+	}
+}
+
+func TestTaskExpand_preservesName(t *testing.T) {
+	task := Task{TaskProps: TaskProps{Name: "build app"}, Type: Shell, Cmd: "echo hi"}
+	got := task.Expand()
+	if got.Name != "build app" {
+		t.Errorf("Expand().Name = %q, want %q", got.Name, "build app")
+	}
+}
+
+func TestTaskProps_yamlRoundTrip(t *testing.T) {
+	src := []byte("name: build app\ntype: Shell\ncmd: make\n")
+	var task Task
+	if err := yaml.Unmarshal(src, &task); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if task.Name != "build app" {
+		t.Errorf("Name after YAML unmarshal = %q, want %q", task.Name, "build app")
+	}
+	if task.Type != "Shell" || task.Cmd != "make" {
+		t.Errorf("other fields lost: type=%q cmd=%q", task.Type, task.Cmd)
+	}
+
+	out, err := yaml.Marshal(task)
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+	if !containsLine(out, "name: build app") {
+		t.Errorf("re-marshalled YAML missing 'name' line:\n%s", out)
+	}
+}
+
+func TestTaskProps_jsonRoundTrip(t *testing.T) {
+	src := []byte(`{"name":"build app","type":"Shell","cmd":"make"}`)
+	var task Task
+	if err := json.Unmarshal(src, &task); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if task.Name != "build app" {
+		t.Errorf("Name after JSON unmarshal = %q, want %q", task.Name, "build app")
+	}
+
+	out, err := json.Marshal(task)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal of marshalled output: %v", err)
+	}
+	if decoded["name"] != "build app" {
+		t.Errorf("re-marshalled JSON missing or wrong 'name': %v", decoded["name"])
+	}
+}
+
+func TestTaskProps_omittedWhenEmpty(t *testing.T) {
+	task := Task{Type: Shell, Cmd: "echo hi"}
+	out, err := json.Marshal(task)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if _, present := decoded["name"]; present {
+		t.Errorf("expected 'name' to be omitted when empty, got: %v", decoded)
+	}
+}
+
+// containsLine reports whether buf contains line as a complete line (between newlines or at edges).
+func containsLine(buf []byte, line string) bool {
+	s := string(buf)
+	for _, l := range splitLines(s) {
+		if l == line {
+			return true
+		}
+	}
+	return false
+}
+
+func splitLines(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		out = append(out, s[start:])
+	}
+	return out
 }

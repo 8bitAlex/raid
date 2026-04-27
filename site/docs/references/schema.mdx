@@ -183,6 +183,7 @@ All tasks share these common fields:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | [`type`](#task-types) | string | Yes | Task type (case-sensitive, Title Case) |
+| `name` | string | No | Human-readable label, surfaced in logs and agent output. Does not affect execution. |
 | `concurrent` | bool | No | Run in parallel with adjacent concurrent tasks |
 | [`condition`](#condition) | object | No | Conditions that must all pass for the task to run |
 

@@ -396,6 +396,48 @@ func TestValidateProfile_schemaViolation(t *testing.T) {
 	}
 }
 
+// TestValidateProfile_taskAcceptsSharedAndVariantFields verifies that the
+// allOf+taskCommon schema refactor still permits both shared task properties
+// (name, concurrent, condition) and variant-specific ones (cmd) on the same
+// task. A regression here would mean unevaluatedProperties:false isn't
+// recognising the inherited shared properties.
+func TestValidateProfile_taskAcceptsSharedAndVariantFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	body := `name: test
+install:
+  tasks:
+    - type: Shell
+      name: hello
+      concurrent: true
+      cmd: echo hi
+`
+	os.WriteFile(path, []byte(body), 0644)
+	if err := ValidateProfile(path); err != nil {
+		t.Fatalf("ValidateProfile() unexpected error: %v", err)
+	}
+}
+
+// TestValidateProfile_taskRejectsUnknownField verifies that an unknown
+// property on a task is still rejected after the schema was refactored to use
+// allOf + unevaluatedProperties:false instead of additionalProperties:false on
+// each variant.
+func TestValidateProfile_taskRejectsUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	body := `name: test
+install:
+  tasks:
+    - type: Shell
+      cmd: echo hi
+      bogusfield: nope
+`
+	os.WriteFile(path, []byte(body), 0644)
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() expected error for unknown task field")
+	}
+}
+
 // --- WriteProfileFile ---
 
 func TestWriteProfileFile_createsFile(t *testing.T) {
