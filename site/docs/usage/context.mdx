@@ -22,10 +22,11 @@ Every snapshot is **self-describing** so an agent that picks it up out of contex
 
 Followed by the workspace data:
 
+- **Tools** — name and short description of every built-in `raid` subcommand (`install`, `env`, `doctor`, `profile`, `context`). Lets an agent discover what raid itself can do without having to invoke `raid --help`.
 - **Active profile name**
 - **Active environment** (if one is set)
 - **Repositories** — name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
-- **Commands** — name and short description of every `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets.
+- **Commands** — name and short description of every user-defined `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets. Built-in subcommands are listed under **Tools** above and are not duplicated here.
 - **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`). A run that was killed mid-execution (Ctrl+C, SIGTERM, etc.) is recorded as `interrupted` so you don't lose visibility into terminated commands.
 
 Future iterations will surface the same data as an MCP resource. Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
@@ -45,6 +46,13 @@ Repos (3):
   api       ~/dev/my-project/api       main      clean
   frontend  ~/dev/my-project/frontend  develop   dirty
   worker    ~/dev/my-project/worker              not cloned
+
+Tools (5):
+  context  Print a condensed summary of the active workspace
+  doctor   Check the raid configuration and report any issues
+  env      Execute an environment
+  install  Install the active profile
+  profile  Manage raid profiles
 
 Commands (3):
   deploy    Deploy to production
@@ -83,6 +91,13 @@ Status values:
   "version": "1.2.3",
   "repository": "https://github.com/8bitalex/raid",
   "generated_at": "2026-04-27T18:00:00Z",
+  "tools": [
+    { "name": "context", "description": "Print a condensed summary of the active workspace" },
+    { "name": "doctor",  "description": "Check the raid configuration and report any issues" },
+    { "name": "env",     "description": "Execute an environment" },
+    { "name": "install", "description": "Install the active profile" },
+    { "name": "profile", "description": "Manage raid profiles" }
+  ],
   "profile": "my-project",
   "env": "dev",
   "repos": [

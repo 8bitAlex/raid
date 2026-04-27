@@ -27,11 +27,20 @@ type WorkspaceContext struct {
 	Version     string             `json:"version,omitempty"`
 	Repository  string             `json:"repository,omitempty"`
 	GeneratedAt time.Time          `json:"generated_at"`
+	Tools       []WorkspaceTool    `json:"tools,omitempty"`
 	Profile     string             `json:"profile"`
 	Env         string             `json:"env,omitempty"`
 	Repos       []WorkspaceRepo    `json:"repos"`
 	Commands    []WorkspaceCommand `json:"commands"`
 	Recent      []RecentEntry      `json:"recent,omitempty"`
+}
+
+// WorkspaceTool describes a built-in `raid` subcommand the agent can invoke
+// directly (e.g. `raid install`, `raid env`). User-defined commands live in
+// WorkspaceContext.Commands and are not duplicated here.
+type WorkspaceTool struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // WorkspaceRepo describes a single repository in the active profile, as it

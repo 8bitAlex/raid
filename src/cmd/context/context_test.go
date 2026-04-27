@@ -8,6 +8,7 @@ import (
 	"time"
 
 	rctx "github.com/8bitalex/raid/src/raid/context"
+	"github.com/spf13/cobra"
 )
 
 func TestWritePretty_includesAgentHeader(t *testing.T) {
@@ -285,6 +286,69 @@ func TestRelativeTime(t *testing.T) {
 		then, _ := time.Parse(time.RFC3339, tt.then)
 		if got := relativeTime(now, then); got != tt.want {
 			t.Errorf("relativeTime(%s) = %q, want %q", tt.then, got, tt.want)
+		}
+	}
+}
+
+func TestCollectTools_filtersOutHelpCompletionAndUserCommands(t *testing.T) {
+	root := &cobra.Command{Use: "raid"}
+	// Built-in raid subcommands.
+	root.AddCommand(&cobra.Command{Use: "install", Short: "Install the active profile"})
+	root.AddCommand(&cobra.Command{Use: "env", Short: "Execute an environment"})
+	root.AddCommand(&cobra.Command{Use: "doctor", Short: "Check raid config"})
+	// Cobra-internal commands that should be filtered out.
+	root.AddCommand(&cobra.Command{Use: "help"})
+	root.AddCommand(&cobra.Command{Use: "completion"})
+	// User-defined command, mirrored on how registerUserCommands annotates them.
+	root.AddCommand(&cobra.Command{
+		Use:         "deploy",
+		Short:       "Deploy to production",
+		Annotations: map[string]string{cmdSourceAnnotation: cmdSourceUser},
+	})
+
+	tools := collectTools(root)
+
+	gotNames := make([]string, len(tools))
+	for i, tool := range tools {
+		gotNames[i] = tool.Name
+	}
+	wantNames := []string{"doctor", "env", "install"} // sorted alphabetically
+	if len(gotNames) != len(wantNames) {
+		t.Fatalf("collectTools = %v, want %v", gotNames, wantNames)
+	}
+	for i, want := range wantNames {
+		if gotNames[i] != want {
+			t.Errorf("tools[%d] = %q, want %q (full = %v)", i, gotNames[i], want, gotNames)
+		}
+	}
+}
+
+func TestCollectTools_keepsCobraShortAsDescription(t *testing.T) {
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(&cobra.Command{Use: "install", Short: "Install the active profile"})
+	tools := collectTools(root)
+	if len(tools) != 1 || tools[0].Description != "Install the active profile" {
+		t.Errorf("description not propagated: %+v", tools)
+	}
+}
+
+func TestWritePretty_includesToolsSection(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Workspace{
+		Profile: "demo",
+		Repos:   []rctx.Repo{},
+		Tools: []rctx.Tool{
+			{Name: "install", Description: "Install the active profile"},
+			{Name: "env", Description: "Execute an environment"},
+		},
+	}
+	if err := writePretty(&buf, ws); err != nil {
+		t.Fatalf("writePretty: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"Tools (2)", "install", "Install the active profile", "env"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n--- output ---\n%s", want, out)
 		}
 	}
 }

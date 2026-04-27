@@ -12,6 +12,9 @@ type Repo = lib.WorkspaceRepo
 // Command is a profile command, exposed as name + short description only.
 type Command = lib.WorkspaceCommand
 
+// Tool is a built-in `raid` subcommand exposed for agent discovery.
+type Tool = lib.WorkspaceTool
+
 // Recent describes a previously executed `raid <command>` invocation.
 type Recent = lib.RecentEntry
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -28,11 +29,51 @@ var Command = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ws := context.Get()
+		ws.Tools = collectTools(cmd.Root())
 		if jsonOutput {
 			return writeJSON(cmd.OutOrStdout(), ws)
 		}
 		return writePretty(cmd.OutOrStdout(), ws)
 	},
+}
+
+// ignoredToolNames are cobra-builtin subcommands not part of raid's own
+// surface area; an agent should reach for the raid commands instead.
+var ignoredToolNames = map[string]bool{
+	"help":       true,
+	"completion": true,
+}
+
+// These mirror cmd.CommandSourceAnnotation / cmd.CommandSourceUser. The
+// constants are duplicated rather than imported because cmd already imports
+// cmd/context, so pulling cmd back the other way would create a cycle. If you
+// rename the values in cmd/raid.go, update them here too.
+const (
+	cmdSourceAnnotation = "raid:source"
+	cmdSourceUser       = "user"
+)
+
+// collectTools walks root's direct subcommands and returns the raid built-in
+// commands. User-defined commands (annotated by registerUserCommands) and
+// cobra's auto-added help/completion commands are excluded — user commands
+// are already exposed via WorkspaceContext.Commands and shouldn't appear in
+// the built-in tools list.
+func collectTools(root *cobra.Command) []context.Tool {
+	var tools []context.Tool
+	for _, sub := range root.Commands() {
+		if ignoredToolNames[sub.Name()] || sub.Hidden {
+			continue
+		}
+		if sub.Annotations[cmdSourceAnnotation] == cmdSourceUser {
+			continue
+		}
+		tools = append(tools, context.Tool{
+			Name:        sub.Name(),
+			Description: sub.Short,
+		})
+	}
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
+	return tools
 }
 
 func writeJSON(w io.Writer, ws context.Workspace) error {
@@ -54,9 +95,26 @@ func writePretty(w io.Writer, ws context.Workspace) error {
 	}
 
 	writeRepos(w, ws.Repos)
+	writeTools(w, ws.Tools)
 	writeCommands(w, ws.Commands)
 	writeRecent(w, ws.Recent)
 	return nil
+}
+
+func writeTools(w io.Writer, tools []context.Tool) {
+	if len(tools) == 0 {
+		return
+	}
+	nameW := 0
+	for _, t := range tools {
+		if len(t.Name) > nameW {
+			nameW = len(t.Name)
+		}
+	}
+	fmt.Fprintf(w, "\nTools (%d):\n", len(tools))
+	for _, t := range tools {
+		fmt.Fprintf(w, "  %-*s  %s\n", nameW, t.Name, t.Description)
+	}
 }
 
 // writeHeader emits an agent-readable preamble so the snapshot is

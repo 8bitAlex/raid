@@ -166,6 +166,15 @@ func executeRoot(args []string) int {
 	return 0
 }
 
+// CommandSourceAnnotation tags a cobra.Command with how it was registered:
+// CommandSourceUser for profile-defined commands, absent for raid built-ins.
+// `raid context` reads this to keep its built-in tool list separate from the
+// user's commands.
+const (
+	CommandSourceAnnotation = "raid:source"
+	CommandSourceUser       = "user"
+)
+
 // registerUserCommands adds user-defined commands to root.
 // Reserved built-in names are skipped with a warning.
 func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
@@ -176,8 +185,9 @@ func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
 		}
 		name := cmd.Name
 		root.AddCommand(&cobra.Command{
-			Use:   name,
-			Short: cmd.Usage,
+			Use:         name,
+			Short:       cmd.Usage,
+			Annotations: map[string]string{CommandSourceAnnotation: CommandSourceUser},
 			RunE: func(c *cobra.Command, args []string) error {
 				return raid.ExecuteCommand(name, args)
 			},
