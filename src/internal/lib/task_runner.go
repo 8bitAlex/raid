@@ -220,6 +220,7 @@ func execShell(task Task) error {
 	if task.Path != "" {
 		cmd.Dir = sys.ExpandPath(task.Path)
 	}
+	cmd.Env = buildSubprocessEnv()
 	setCmdOutput(cmd)
 
 	runErr := cmd.Run()
@@ -319,6 +320,7 @@ func execScript(task Task) error {
 		cmd = exec.Command(task.Path)
 	}
 
+	cmd.Env = buildSubprocessEnv()
 	setCmdOutput(cmd)
 
 	err := cmd.Run()
@@ -333,6 +335,34 @@ func setCmdOutput(cmd *exec.Cmd) {
 	cmd.Stdout = commandStdout
 	cmd.Stderr = commandStderr
 	cmd.Stdin = os.Stdin
+}
+
+// buildSubprocessEnv returns the OS environment merged with the current
+// commandSession exports and raidVars (Set tasks). Order matters: exec.Cmd
+// uses the LAST occurrence of a duplicate key, so we append in increasing
+// priority — OS env first, session next, raidVars last so they win on
+// collision. Mirrors the lookup order used by expandRaid.
+//
+// Applied to Shell and Script tasks so a `Set FOO bar` task earlier in the
+// sequence is visible to the spawned process (and any children it spawns)
+// as $FOO. Without this, raidVars only resolved via raid's pre-expansion of
+// the cmd string — which couldn't reach into a Script's source or into a
+// child process spawned from inside a Shell command.
+func buildSubprocessEnv() []string {
+	env := os.Environ()
+	if commandSession != nil {
+		commandSession.mu.RLock()
+		for k, v := range commandSession.vars {
+			env = append(env, k+"="+v)
+		}
+		commandSession.mu.RUnlock()
+	}
+	raidVarsMu.RLock()
+	for k, v := range raidVars {
+		env = append(env, k+"="+v)
+	}
+	raidVarsMu.RUnlock()
+	return env
 }
 
 func execHTTP(task Task) error {
