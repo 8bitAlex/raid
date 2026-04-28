@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"sync"
 
 	"github.com/8bitalex/raid/src/raid"
 	rctx "github.com/8bitalex/raid/src/raid/context"
@@ -90,11 +91,9 @@ func raidExecPath() string {
 
 // ServeCmd runs an MCP server over stdio, exposing the active raid workspace
 // as resources and the canonical raid agent toolkit as tools. It's the
-// long-running counterpart to `raid context --json` — same shape, served live.
-//
-// Tool handlers are stubs in this first slice; they return a "not yet
-// implemented" error so a host (Claude Code, Cursor, …) can still discover
-// the surface area while wiring proceeds in follow-up work.
+// long-running counterpart to `raid context --json` — same shape, served
+// live, with mutating tools that drive raid's actual install / env-switch /
+// run-task paths under the cross-process mutation lock.
 // Long is populated at init() via buildServeLong so the help text can embed
 // the running binary's absolute path in copy-paste host configs.
 var ServeCmd = &cobra.Command{
@@ -284,14 +283,40 @@ func agentToolDefs() []agentToolDef {
 // into a buffer instead of leaking onto os.Stdout (which would corrupt the
 // MCP JSON-RPC stream). Returns the captured text and the function's error.
 //
-// The mutationMu mutex must already be held — the writer swap is global and
-// would otherwise race across concurrent handlers.
+// Callers must already be executing under raid.WithMutationLock — the
+// writer swap is process-global and would otherwise race across handlers
+// or other concurrent raid processes. The buffer itself is wrapped in
+// syncBuffer because the captured operations (lib.Install runs unthrottled
+// concurrent clone goroutines; ExecuteTasks supports task.Concurrent) write
+// in parallel from multiple goroutines, which a plain bytes.Buffer can't
+// handle safely.
 func captureCommandOutput(fn func() error) (string, error) {
-	var buf bytes.Buffer
+	var buf syncBuffer
 	restore := raid.SetCommandOutput(&buf, &buf)
 	defer restore()
 	err := fn()
 	return buf.String(), err
+}
+
+// syncBuffer is a goroutine-safe wrapper around bytes.Buffer. Used as the
+// stdout/stderr destination during MCP mutating handlers because lib's
+// concurrent clone and task-execution paths write to the captured writer
+// from multiple goroutines simultaneously.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
 }
 
 func handleInstall(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
