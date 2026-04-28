@@ -18,6 +18,7 @@ commands:
         message: "==> Building raid app"
         color: cyan
       - type: Shell
+        name: Build raid app
         cmd: go build ./...
         path: ~/Developer/raid
       - type: Print

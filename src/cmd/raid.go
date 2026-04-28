@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	contextcmd "github.com/8bitalex/raid/src/cmd/context"
 	"github.com/8bitalex/raid/src/cmd/doctor"
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
@@ -24,6 +25,7 @@ var reservedNames = map[string]bool{
 	"install":    true,
 	"env":        true,
 	"doctor":     true,
+	"context":    true,
 	"help":       true,
 	"version":    true,
 	"completion": true,
@@ -50,6 +52,7 @@ func init() {
 	rootCmd.AddCommand(install.Command)
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(doctor.Command)
+	rootCmd.AddCommand(contextcmd.Command)
 }
 
 // isInfoCommand reports whether the invocation is for a built-in informational
@@ -163,6 +166,15 @@ func executeRoot(args []string) int {
 	return 0
 }
 
+// CommandSourceAnnotation tags a cobra.Command with how it was registered:
+// CommandSourceUser for profile-defined commands, absent for raid built-ins.
+// `raid context` reads this to keep its built-in tool list separate from the
+// user's commands.
+const (
+	CommandSourceAnnotation = "raid:source"
+	CommandSourceUser       = "user"
+)
+
 // registerUserCommands adds user-defined commands to root.
 // Reserved built-in names are skipped with a warning.
 func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
@@ -173,8 +185,9 @@ func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
 		}
 		name := cmd.Name
 		root.AddCommand(&cobra.Command{
-			Use:   name,
-			Short: cmd.Usage,
+			Use:         name,
+			Short:       cmd.Usage,
+			Annotations: map[string]string{CommandSourceAnnotation: CommandSourceUser},
 			RunE: func(c *cobra.Command, args []string) error {
 				return raid.ExecuteCommand(name, args)
 			},

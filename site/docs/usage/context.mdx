@@ -1,0 +1,166 @@
+---
+sidebar_position: 7
+---
+
+# Context
+
+Print a condensed snapshot of the active workspace — the profile, environment, and per-repository git state. Designed to be terse enough to paste into a chat agent or pipe into another tool.
+
+```bash
+raid context           # pretty-printed for humans
+raid context --json    # machine-readable JSON
+```
+
+## What it emits
+
+Every snapshot is **self-describing** so an agent that picks it up out of context can identify the producer:
+
+- **Name** — always `raid`
+- **Title** — the human-readable display name, `Raid`
+- **Version** — the raid binary version, useful for feature/schema detection
+- **Website URL** — canonical GitHub URL the agent can follow for additional documentation, source code search, or issue reporting
+- **Generated at** — UTC timestamp of when the snapshot was produced
+
+Followed by the workspace data:
+
+- **Tools** — name and short description of every built-in `raid` subcommand (`install`, `env`, `doctor`, `profile`, `context`). Lets an agent discover what raid itself can do without having to invoke `raid --help`.
+- **Active profile name**
+- **Active environment** (if one is set)
+- **Repositories** — name, configured path, current git branch, dirty status (uncommitted changes), and whether the repo has been cloned to disk
+- **Commands** — name and short description of every user-defined `raid <cmd>` available in the active profile. Script bodies are intentionally excluded so the snapshot stays token-efficient and free of inlined secrets. If any of a command's tasks have a `name` field set, those names also surface as a `steps` array — letting an agent see the outline of what the command does without exposing the underlying scripts. Built-in subcommands are listed under **Tools** above and are not duplicated here.
+- **Recent runs** — exit status, duration, and relative time of the most recent `raid <cmd>` invocations (capped at 10, persisted in `~/.raid/recent.json`). A run that was killed mid-execution (Ctrl+C, SIGTERM, etc.) is recorded as `interrupted` so you don't lose visibility into terminated commands.
+
+JSON keys use camelCase and the workspace data is grouped under a single `workspace` object. This shape aligns with the [Model Context Protocol](https://modelcontextprotocol.io) so a future `raid context serve` mode (a stdio MCP server) can lift these structures directly into JSON-RPC responses without translation.
+
+Output is intentionally bounded — task script bodies are excluded so the snapshot stays token-efficient for AI agents.
+
+## Pretty output
+
+Default invocation produces a fixed-width table for human reading:
+
+```
+# raid v1.2.3 workspace context (2026-04-27T18:00:00Z)
+# https://github.com/8bitalex/raid
+
+Profile: my-project
+Env:     dev
+
+Repos (3):
+  api       ~/dev/my-project/api       main      clean
+  frontend  ~/dev/my-project/frontend  develop   dirty
+  worker    ~/dev/my-project/worker              not cloned
+
+Tools (5):
+  context  Print a condensed summary of the active workspace
+  doctor   Check the raid configuration and report any issues
+  env      Execute an environment
+  install  Install the active profile
+  profile  Manage raid profiles
+
+Commands (3):
+  deploy    Deploy to production
+            1. Build artifact
+            2. Push to registry
+            3. Apply migrations
+  test      Run tests
+  reset-db  Reset local database
+
+Recent (3):
+  ✓ deploy   ok           12.3s  2m ago
+  ✗ test     failed       4.5s   5m ago
+  ⊘ migrate  interrupted  —      18m ago
+```
+
+Each row shows a status glyph, the command name, a status word, the duration, and a relative timestamp.
+
+| Glyph | Status word | Meaning |
+|---|---|---|
+| `✓` | `ok` | Command completed with exit code 0 |
+| `✗` | `failed` | Command completed with a non-zero exit code |
+| `⊘` | `interrupted` | Command was killed before completing (SIGINT, SIGTERM, etc.). Duration is unknown and shown as `—`. |
+
+Status values:
+
+| Status | Meaning |
+|---|---|
+| `clean` | Repository is cloned and has no uncommitted changes |
+| `dirty` | Repository is cloned and has uncommitted changes (per `git status --porcelain`) |
+| `not cloned` | Path from the profile does not exist on disk, or is not a git repository |
+
+## JSON output
+
+`raid context --json` emits a stable, agent-friendly schema:
+
+```json
+{
+  "name": "raid",
+  "title": "Raid",
+  "version": "1.2.3",
+  "websiteUrl": "https://github.com/8bitalex/raid",
+  "generatedAt": "2026-04-27T18:00:00Z",
+  "tools": [
+    { "name": "context", "description": "Print a condensed summary of the active workspace" },
+    { "name": "doctor",  "description": "Check the raid configuration and report any issues" },
+    { "name": "env",     "description": "Execute an environment" },
+    { "name": "install", "description": "Install the active profile" },
+    { "name": "profile", "description": "Manage raid profiles" }
+  ],
+  "workspace": {
+    "profile": "my-project",
+    "env": "dev",
+    "repos": [
+      {
+        "name": "api",
+        "path": "~/dev/my-project/api",
+        "cloned": true,
+        "branch": "main",
+        "dirty": false
+      },
+      {
+        "name": "worker",
+        "path": "~/dev/my-project/worker",
+        "cloned": false
+      }
+    ],
+    "commands": [
+      {
+        "name": "deploy",
+        "description": "Deploy to production",
+        "steps": [
+          { "name": "Build artifact" },
+          { "name": "Push to registry" },
+          { "name": "Apply migrations" }
+        ]
+      },
+      { "name": "test", "description": "Run tests" }
+    ],
+    "recent": [
+      {
+        "command": "deploy",
+        "status": "completed",
+        "exitCode": 0,
+        "startedAt": "2026-04-27T12:00:00Z",
+        "durationMs": 12300
+      },
+      {
+        "command": "migrate",
+        "status": "interrupted",
+        "exitCode": 0,
+        "startedAt": "2026-04-27T11:42:00Z"
+      }
+    ]
+  }
+}
+```
+
+When a repository is not cloned, `branch` and `dirty` are omitted. The `workspace.recent` array is omitted entirely when no commands have been run yet.
+
+## Common uses
+
+```bash
+# Drop the current workspace state into a chat agent
+raid context | pbcopy
+
+# Feed JSON into another tool
+raid context --json | jq '.workspace.repos[] | select(.dirty)'
+```

@@ -272,12 +272,17 @@ const (
 func setupTestConfig(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.RecentPathOverride = oldRecent
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	// Redirect the recent.json log so user-command tests don't pollute the
+	// developer's real ~/.raid/recent.json.
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupTestConfig: %v", err)
 	}
@@ -680,14 +685,17 @@ func TestExecute_inProcess_nonInfoCommand(t *testing.T) {
 // by registering a user command whose task exits with a non-zero code.
 func TestExecute_exitErrorPropagation(t *testing.T) {
 	oldCfg := lib.CfgPath
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
 		lib.CfgPath = oldCfg
+		lib.RecentPathOverride = oldRecent
 		lib.ResetContext()
 		viper.Reset()
 	})
 
 	dir := t.TempDir()
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	lib.ResetContext()
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("InitConfig: %v", err)
