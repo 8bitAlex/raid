@@ -15,6 +15,7 @@ import (
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/spf13/viper"
 )
 
 // TestMain redirects raid's home-dir state files to a per-run temp dir for
@@ -33,6 +34,40 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+// loadTestProfile gives a test a clean lib context with a freshly registered
+// active profile loaded from the supplied YAML body. It isolates per-test
+// state by redirecting lib.CfgPath into the test's TempDir, so tests can
+// safely run sequentially without contaminating each other.
+func loadTestProfile(t *testing.T, body string) {
+	t.Helper()
+	dir := t.TempDir()
+	oldCfg := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = oldCfg
+		viper.Reset()
+		lib.ResetContext()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("loadTestProfile: init config: %v", err)
+	}
+
+	profilePath := filepath.Join(dir, "test.raid.yaml")
+	if err := os.WriteFile(profilePath, []byte(body), 0644); err != nil {
+		t.Fatalf("loadTestProfile: write profile: %v", err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "test-fixture", Path: profilePath}); err != nil {
+		t.Fatalf("loadTestProfile: add: %v", err)
+	}
+	if err := lib.SetProfile("test-fixture"); err != nil {
+		t.Fatalf("loadTestProfile: set: %v", err)
+	}
+	lib.ResetContext()
+	if err := lib.ForceLoad(); err != nil {
+		t.Fatalf("loadTestProfile: force load: %v", err)
+	}
 }
 
 func TestBuildServer_returnsConfiguredServer(t *testing.T) {
@@ -417,6 +452,214 @@ func TestNotImplementedHandler_returnsToolError(t *testing.T) {
 	}
 	if !strings.Contains(body, "issues/45") {
 		t.Errorf("error body should reference the tracking issue, got: %q", body)
+	}
+}
+
+// --- Success-path coverage with a loaded test profile -------------------
+
+// minimalTestProfile is the YAML body used by the success-path tests below.
+// The fixture covers all the things the handlers introspect: one repo
+// (lookups, list output), one env (env switch), one user command (run task,
+// commands resource).
+const minimalTestProfileBody = `name: test-fixture
+repositories:
+  - name: demo-repo
+    path: ` + "/tmp/raid-cmd-context-test-demo-repo-DOES-NOT-EXIST" + `
+    url: https://example.com/demo.git
+environments:
+  - name: dev
+    variables:
+      - name: NODE_ENV
+        value: development
+commands:
+  - name: hello
+    usage: Say hi
+    tasks:
+      - type: Print
+        message: hi
+`
+
+func TestHandleListProfiles_includesActiveFlag(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	res, err := handleListProfiles(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleListProfiles: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok, got error: %s", toolResultText(res))
+	}
+	var entries []listProfilesEntry
+	if err := json.Unmarshal([]byte(toolResultText(res)), &entries); err != nil {
+		t.Fatalf("body not JSON: %v\n%s", err, toolResultText(res))
+	}
+	var seenActive int
+	for _, e := range entries {
+		if e.Name == "test-fixture" && e.Active {
+			seenActive++
+		}
+	}
+	if seenActive != 1 {
+		t.Errorf("expected exactly one active 'test-fixture' entry, got %d in %+v", seenActive, entries)
+	}
+}
+
+func TestHandleListRepos_returnsConfiguredReposWithURL(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	res, err := handleListRepos(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleListRepos: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok, got error: %s", toolResultText(res))
+	}
+	var entries []listReposEntry
+	if err := json.Unmarshal([]byte(toolResultText(res)), &entries); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 repo, got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Name != "demo-repo" {
+		t.Errorf("repo name = %q, want demo-repo", entries[0].Name)
+	}
+	if entries[0].URL != "https://example.com/demo.git" {
+		t.Errorf("repo URL = %q, want the configured URL", entries[0].URL)
+	}
+}
+
+func TestHandleDescribeRepo_lookupByName(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	// raid.yaml file at the configured path is required for ExtractRepo.
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, "raid.yaml"),
+		[]byte("name: demo-repo\nbranch: main\n"), 0644); err != nil {
+		t.Fatalf("write raid.yaml: %v", err)
+	}
+	// Re-aim the fixture at our temp dir by reloading with a tweaked body.
+	body := strings.Replace(minimalTestProfileBody,
+		"/tmp/raid-cmd-context-test-demo-repo-DOES-NOT-EXIST", repoDir, 1)
+	loadTestProfile(t, body)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"name": "demo-repo"}
+
+	res, err := handleDescribeRepo(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleDescribeRepo: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok, got error: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), `"name": "demo-repo"`) {
+		t.Errorf("expected repo body to include the parsed name, got: %s", toolResultText(res))
+	}
+}
+
+func TestHandleDescribeRepo_lookupByPath(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, "raid.yaml"),
+		[]byte("name: ad-hoc\nbranch: main\n"), 0644); err != nil {
+		t.Fatalf("write raid.yaml: %v", err)
+	}
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"path": repoDir}
+
+	res, err := handleDescribeRepo(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleDescribeRepo: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok, got error: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), `"name": "ad-hoc"`) {
+		t.Errorf("expected parsed body, got: %s", toolResultText(res))
+	}
+}
+
+func TestHandleDescribeRepo_extractFailureSurfaces(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	// Path with no raid.yaml — ExtractRepo should fail and the handler
+	// should surface the error as a tool error.
+	emptyDir := t.TempDir()
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"path": emptyDir}
+
+	res, err := handleDescribeRepo(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleDescribeRepo: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected isError=true for missing raid.yaml, got: %s", toolResultText(res))
+	}
+}
+
+// TestHandleEnvSwitch_succeeds drives the full Set + ForceLoad + Execute
+// sequence under WithMutationLock. The test profile defines a single env
+// "dev" with no tasks, so Execute completes without spawning subprocesses.
+func TestHandleEnvSwitch_succeeds(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"env": "dev"}
+
+	res, err := handleEnvSwitch(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleEnvSwitch: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok, got error: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), `switched to env "dev"`) {
+		t.Errorf("expected confirmation in body, got: %s", toolResultText(res))
+	}
+}
+
+// TestHandleInstall_propagatesError covers the lock-acquire + capture +
+// raid.Install path. The fixture's repo URL is unreachable, so Install
+// should fail with a clone error; we just verify the handler reports an
+// MCP tool error with the captured stderr appended.
+func TestHandleInstall_propagatesError(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	res, err := handleInstall(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleInstall: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected isError=true (clone of fake URL must fail), got: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), "raid_install:") {
+		t.Errorf("error should be tagged with the tool name, got: %q", toolResultText(res))
+	}
+}
+
+// TestReadWorkspaceEnv_returnsTextContent guards the env resource handler
+// directly — it's symmetrical with the profile handler and was the only
+// resource reader without dedicated coverage.
+func TestReadWorkspaceEnv_returnsTextContent(t *testing.T) {
+	got, err := readWorkspaceEnv(stdctx.Background(), mcp.ReadResourceRequest{})
+	if err != nil {
+		t.Fatalf("readWorkspaceEnv: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("contents len = %d, want 1", len(got))
+	}
+	tc, ok := got[0].(mcp.TextResourceContents)
+	if !ok {
+		t.Fatalf("expected TextResourceContents, got %T", got[0])
+	}
+	if tc.URI != uriEnv {
+		t.Errorf("URI = %q, want %q", tc.URI, uriEnv)
+	}
+	if tc.MIMEType != "text/plain" {
+		t.Errorf("MIMEType = %q, want text/plain", tc.MIMEType)
 	}
 }
 

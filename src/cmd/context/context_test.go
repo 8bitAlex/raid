@@ -326,6 +326,34 @@ func TestWritePretty_commandSteps(t *testing.T) {
 	}
 }
 
+func TestRecentMark(t *testing.T) {
+	tests := []struct {
+		name string
+		in   rctx.Recent
+		want string
+	}{
+		{"ok", rctx.Recent{Status: rctx.RecentStatusCompleted, ExitCode: 0}, "✓"},
+		{"failed", rctx.Recent{Status: rctx.RecentStatusCompleted, ExitCode: 7}, "✗"},
+		{"interrupted", rctx.Recent{Status: rctx.RecentStatusInterrupted}, "⊘"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := recentMark(tt.in); got != tt.want {
+				t.Errorf("recentMark = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecentDuration(t *testing.T) {
+	if got := recentDuration(rctx.Recent{Status: rctx.RecentStatusCompleted, DurationMs: 1500}); got != "1.5s" {
+		t.Errorf("completed duration = %q, want 1.5s", got)
+	}
+	if got := recentDuration(rctx.Recent{Status: rctx.RecentStatusInterrupted}); got != "—" {
+		t.Errorf("interrupted duration = %q, want — (em dash)", got)
+	}
+}
+
 func TestRecentStatusText(t *testing.T) {
 	tests := []struct {
 		name string
