@@ -33,16 +33,22 @@ var Command = &cobra.Command{
 		}
 
 		cmd.Println("Setting up environment:", name)
-		if err := env.Set(name); err != nil {
-			cmd.PrintErrln("Failed to switch environment:", err)
-			return
-		}
-		if err := raid.ForceLoad(); err != nil {
-			cmd.PrintErrln("Failed to reload profile:", err)
-			return
-		}
-		if err := env.Execute(env.Get()); err != nil {
-			cmd.PrintErrln("Failed to execute environment:", err)
+		err := raid.WithMutationLock(func() error {
+			if err := env.Set(name); err != nil {
+				cmd.PrintErrln("Failed to switch environment:", err)
+				return err
+			}
+			if err := raid.ForceLoad(); err != nil {
+				cmd.PrintErrln("Failed to reload profile:", err)
+				return err
+			}
+			if err := env.Execute(env.Get()); err != nil {
+				cmd.PrintErrln("Failed to execute environment:", err)
+				return err
+			}
+			return nil
+		})
+		if err != nil {
 			return
 		}
 		cmd.Println("Environment executed successfully.")

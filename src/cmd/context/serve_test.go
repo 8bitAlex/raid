@@ -6,13 +6,34 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// TestMain redirects raid's home-dir state files to a per-run temp dir for
+// the entire cmd/context test package. The mutating handler tests
+// (handleInstall, handleEnvSwitch, handleRunTask) all reach raid.WithMutation
+// Lock; without the redirect they'd write to the developer's real
+// ~/.raid/.lock and ~/.raid/recent.json on every test run.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "raid-cmd-context-test-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "TestMain: tempdir:", err)
+		os.Exit(1)
+	}
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 func TestBuildServer_returnsConfiguredServer(t *testing.T) {
 	s := BuildServer()

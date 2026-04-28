@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/raid"
 	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 )
@@ -75,16 +76,21 @@ func runCreateWizardCore(input *os.File) int {
 		fmt.Printf("Failed to register profile: %v\n", err)
 		return 1
 	}
-	if err := proAddAll(profiles); err != nil {
-		fmt.Printf("Failed to register profile: %v\n", err)
-		return 1
-	}
-	if proGet().IsZero() {
-		if err := proSet(name); err != nil {
-			fmt.Printf("Failed to set active profile: %v\n", err)
-			return 1
+	writeErr := raid.WithMutationLock(func() error {
+		if err := proAddAll(profiles); err != nil {
+			return fmt.Errorf("register: %w", err)
 		}
-		fmt.Printf("Profile '%s' set as active.\n", name)
+		if proGet().IsZero() {
+			if err := proSet(name); err != nil {
+				return fmt.Errorf("set active: %w", err)
+			}
+			fmt.Printf("Profile '%s' set as active.\n", name)
+		}
+		return nil
+	})
+	if writeErr != nil {
+		fmt.Printf("Failed to register profile: %v\n", writeErr)
+		return 1
 	}
 
 	fmt.Printf("\nProfile '%s' created at %s\n", name, savePath)

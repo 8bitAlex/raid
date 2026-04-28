@@ -15,7 +15,8 @@ Non-obvious:
 - WriteProfileFile and CreateRepoConfigs prepend embedded templates (src/resources/profile-template, repo-template) to new files; schema URL constants live in the templates, not in Go code
 - src/cmd/context (Go package literally named `context`) imports stdlib context as `stdctx` and the raid wrapper as `rctx` to avoid the package-vs-import name collision
 - `raid context serve` blocks on stdin (stdio MCP transport); BuildServer() in src/cmd/context/serve.go is exported so tests can introspect the server without driving stdio.
-- Mutating tools (raid_install, raid_env_switch, raid_run_task) serialize behind mutationMu and route command output through raid.SetCommandOutput / lib.commandStdout because os.Stdout is reserved for JSON-RPC framing in the MCP server. Any new lib code that writes user-facing progress should use commandStdout/commandStderr (not fmt.Printf or os.Stdout) so it's captured cleanly.
+- Mutating tools (raid_install, raid_env_switch, raid_run_task) route command output through raid.SetCommandOutput / lib.commandStdout because os.Stdout is reserved for JSON-RPC framing in the MCP server. Any new lib code that writes user-facing progress should use commandStdout/commandStderr (not fmt.Printf or os.Stdout) so it's captured cleanly.
+- Cross-process mutation lock at ~/.raid/.lock via gofrs/flock. raid.WithMutationLock(fn) wraps the lock+release; every mutating cobra entry point and every MCP mutating handler must call it so CLI usage and the MCP server serialize against each other. Read paths don't acquire the lock. Tests must redirect lib.LockPathOverride (alongside RecentPathOverride) in any setup helper that exercises a mutating path; cmd/context tests use a TestMain to do this once for the whole package.
 
 CI: .github/workflows/ — build.yml (build+test), deploy.yml (release), preview.yml (preview releases), codecov.yml (coverage), docs.yml (deploy Pages from site/), docs-build.yml (PR build check for site/)
 

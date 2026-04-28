@@ -189,7 +189,9 @@ func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
 			Short:       cmd.Usage,
 			Annotations: map[string]string{CommandSourceAnnotation: CommandSourceUser},
 			RunE: func(c *cobra.Command, args []string) error {
-				return raid.ExecuteCommand(name, args)
+				return raid.WithMutationLock(func() error {
+					return raid.ExecuteCommand(name, args)
+				})
 			},
 		})
 	}

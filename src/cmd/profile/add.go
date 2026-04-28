@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/raid"
 	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 )
@@ -72,17 +73,21 @@ func runAddProfile(path string) int {
 		return 0
 	}
 
-	if err := proAddAll(newProfiles); err != nil {
-		fmt.Printf("Failed to save profiles: %v\n", err)
-		return 1
-	}
-
-	if proGet().IsZero() {
-		if err := proSet(newProfiles[0].Name); err != nil {
-			fmt.Printf("Failed to set active profile: %v\n", err)
-			return 1
+	writeErr := raid.WithMutationLock(func() error {
+		if err := proAddAll(newProfiles); err != nil {
+			return fmt.Errorf("save: %w", err)
 		}
-		fmt.Printf("Profile '%s' set as active\n", newProfiles[0].Name)
+		if proGet().IsZero() {
+			if err := proSet(newProfiles[0].Name); err != nil {
+				return fmt.Errorf("set active: %w", err)
+			}
+			fmt.Printf("Profile '%s' set as active\n", newProfiles[0].Name)
+		}
+		return nil
+	})
+	if writeErr != nil {
+		fmt.Printf("Failed to save profiles: %v\n", writeErr)
+		return 1
 	}
 
 	if len(newProfiles) == 1 {

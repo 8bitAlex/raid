@@ -16,12 +16,20 @@ func setupConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.toml")
 
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		viper.Reset()
 	})
 	lib.CfgPath = cfgPath
+	// Redirect raid's home-dir state files so this test stays isolated
+	// from any concurrent raid run on the developer's machine.
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupConfig: InitConfig: %v", err)

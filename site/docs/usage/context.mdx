@@ -196,7 +196,7 @@ raid context serve   # blocks; intended to be launched by an MCP host
 | `raid_env_switch` | Switch the active environment, write `.env` files into every repo, and run env tasks |
 | `raid_run_task` | Run a user-defined `raid <command>` from the active profile |
 
-Each tool calls straight into the existing raid library and returns its result as a JSON-structured tool result. Mutating tools (`raid_install`, `raid_env_switch`, `raid_run_task`) are serialised behind a single mutex so concurrent calls are processed in order — running two installs against the same workspace at once is rarely what an agent intends.
+Each tool calls straight into the existing raid library and returns its result as a JSON-structured tool result. Mutating tools (`raid_install`, `raid_env_switch`, `raid_run_task`) are serialised behind a process-wide [flock](https://en.wikipedia.org/wiki/File_locking) at `~/.raid/.lock` — that same lock is acquired by every mutating raid CLI invocation (`raid install`, `raid env <name>`, `raid <command>`, `raid profile add/remove/use`). Concurrent mutations from any combination of CLI usage and the MCP server's tools therefore wait for one another instead of racing on `~/.raid/config.toml` or repository state. The kernel releases the lock automatically if the holding process exits unexpectedly.
 
 `raid_list_repos` accepts an optional `profile` argument; in this release it must match the active profile or the call returns an error explaining the limitation. Multi-profile lookups are tracked separately.
 

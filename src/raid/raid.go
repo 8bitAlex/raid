@@ -75,6 +75,18 @@ func SetCommandOutput(stdout, stderr io.Writer) func() {
 	return lib.SetCommandOutput(stdout, stderr)
 }
 
+// WithMutationLock blocks on a cross-process exclusive lock at
+// ~/.raid/.lock, runs fn, and releases the lock. Wrap every user-visible
+// mutating operation (install, env switch, run task, profile add/remove/
+// switch) so concurrent raid invocations — including any combination of
+// CLI usage and the MCP server's mutating tools — serialize cleanly.
+//
+// Read paths don't need to acquire the lock; stale reads during a mutation
+// are recoverable.
+func WithMutationLock(fn func() error) error {
+	return lib.WithMutationLock(fn)
+}
+
 // Install the active profile
 func Install(maxThreads int) error {
 	return lib.Install(maxThreads)

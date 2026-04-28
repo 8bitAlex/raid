@@ -20,12 +20,20 @@ const (
 func setupConfig(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	// Redirect raid's home-dir state files so concurrent test runs and the
+	// developer's real ~/.raid/ stay isolated.
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupConfig: %v", err)
 	}
@@ -98,13 +106,19 @@ func TestInstallCommand_oneArg_subprocess(t *testing.T) {
 func setupConfigWithProfile(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		lib.ResetContext()
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	lib.ResetContext()
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("InitConfig: %v", err)
