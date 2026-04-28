@@ -141,6 +141,110 @@ func TestAgentToolDefs_haveDescriptions(t *testing.T) {
 	}
 }
 
+// --- Read-only handlers --------------------------------------------------
+
+func TestHandleListProfiles_returnsValidJSON(t *testing.T) {
+	res, err := handleListProfiles(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleListProfiles: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok result, got error: %s", toolResultText(res))
+	}
+	var entries []listProfilesEntry
+	if err := json.Unmarshal([]byte(toolResultText(res)), &entries); err != nil {
+		t.Fatalf("body is not valid JSON: %v\n%s", err, toolResultText(res))
+	}
+	// Sort invariant: alphabetical by name.
+	for i := 1; i < len(entries); i++ {
+		if entries[i-1].Name > entries[i].Name {
+			t.Errorf("entries not sorted: %q before %q", entries[i-1].Name, entries[i].Name)
+		}
+	}
+	// At most one entry should be marked active.
+	active := 0
+	for _, e := range entries {
+		if e.Active {
+			active++
+		}
+	}
+	if active > 1 {
+		t.Errorf("multiple entries marked active (%d)", active)
+	}
+}
+
+func TestHandleListRepos_rejectsForeignProfileArg(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"profile": "definitely-not-the-active-one"}
+
+	res, err := handleListRepos(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleListRepos: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected isError=true for foreign profile arg, got: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), "active profile") {
+		t.Errorf("error should mention the active-profile limitation, got: %q", toolResultText(res))
+	}
+}
+
+func TestHandleListRepos_returnsValidJSONForActiveProfile(t *testing.T) {
+	res, err := handleListRepos(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleListRepos: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok result, got error: %s", toolResultText(res))
+	}
+	var entries []listReposEntry
+	if err := json.Unmarshal([]byte(toolResultText(res)), &entries); err != nil {
+		t.Fatalf("body is not valid JSON: %v\n%s", err, toolResultText(res))
+	}
+}
+
+func TestHandleDescribeRepo_requiresNameOrPath(t *testing.T) {
+	res, err := handleDescribeRepo(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleDescribeRepo: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected isError=true, got: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), "one of") {
+		t.Errorf("error should explain that one of name/path is required, got: %q", toolResultText(res))
+	}
+}
+
+func TestHandleDescribeRepo_rejectsBothNameAndPath(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"name": "some-repo", "path": "/tmp/x"}
+
+	res, err := handleDescribeRepo(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleDescribeRepo: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected isError=true when both args set, got: %s", toolResultText(res))
+	}
+}
+
+func TestHandleDescribeRepo_unknownNameReportsActiveProfile(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"name": "definitely-not-a-real-repo-1234"}
+
+	res, err := handleDescribeRepo(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleDescribeRepo: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("expected isError=true for unknown repo, got: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), "active profile") {
+		t.Errorf("error should reference the active profile so the agent knows where the lookup happened, got: %q", toolResultText(res))
+	}
+}
+
 // TestNotImplementedHandler_returnsToolError confirms the stub handler
 // surfaces as a tool execution error (isError=true) rather than a protocol
 // error. The MCP spec treats these differently: tool errors flow back to the

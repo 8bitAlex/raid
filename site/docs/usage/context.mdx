@@ -187,18 +187,18 @@ raid context serve   # blocks; intended to be launched by an MCP host
 
 **Tools** — the canonical raid agent toolkit defined in [issue #45](https://github.com/8bitalex/raid/issues/45):
 
-| Tool | Purpose |
-|---|---|
-| `raid_list_profiles` | List configured profiles |
-| `raid_list_repos` | List repos in the active or specified profile |
-| `raid_describe_repo` | Return parsed `raid.yaml` as structured JSON |
-| `raid_install` | Clone repositories and run install tasks |
-| `raid_env_switch` | Switch environments |
-| `raid_run_task` | Run a user-defined `raid <command>` |
+| Tool | Status | Purpose |
+|---|---|---|
+| `raid_list_profiles` | ✅ implemented | List configured profiles, with the active one flagged |
+| `raid_list_repos` | ✅ implemented | List repos in the active profile with URL + live git state |
+| `raid_describe_repo` | ✅ implemented | Return the parsed `raid.yaml` for a repo (by name or path) as structured JSON |
+| `raid_install` | 🚧 stub | Clone repositories and run install tasks |
+| `raid_env_switch` | 🚧 stub | Switch environments |
+| `raid_run_task` | 🚧 stub | Run a user-defined `raid <command>` |
 
-:::warning Tool handlers are stubs in this initial release
-Every tool is registered with its full input schema so MCP hosts can discover the surface area, but `tools/call` currently returns an `isError` result of *"not yet implemented"*. The handlers are landing in follow-up work — track [issue #45](https://github.com/8bitalex/raid/issues/45) for progress.
-:::
+The three read-only tools call straight into the existing raid library and return structured JSON results. The mutating tools are still registered with their input schemas (so hosts see the full surface area) but `tools/call` currently returns an `isError` result of *"not yet implemented"*. Track [issue #45](https://github.com/8bitalex/raid/issues/45) for progress.
+
+`raid_list_repos` accepts an optional `profile` argument; in this release it must match the active profile or the call returns an error explaining the limitation. Multi-profile lookups land alongside the mutating tools.
 
 ### Wiring it into an MCP host
 

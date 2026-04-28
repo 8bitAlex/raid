@@ -10,6 +10,14 @@ import (
 type Profile = lib.Profile
 type ProfileDraft = lib.ProfileDraft
 type RepoDraft = lib.RepoDraft
+type Repo = lib.Repo
+
+// Describe parses the raid.yaml at path and returns the resulting Repo
+// (environments, install steps, commands, etc.) without merging it into the
+// active profile. Used by the MCP `raid_describe_repo` tool.
+func Describe(path string) (Repo, error) {
+	return lib.ExtractRepo(path)
+}
 
 // Returns the active profile
 func Get() Profile {
