@@ -18,8 +18,18 @@ func (c Condition) IsZero() bool {
 	return c.Platform == "" && c.Exists == "" && c.Cmd == ""
 }
 
+// TaskProps holds properties shared by every task type. It is embedded into
+// Task so the fields below appear at the top level of a task's YAML/JSON
+// representation, and remain accessible via field promotion (e.g. `task.Name`).
+type TaskProps struct {
+	// Name is an optional human-readable label for the task, surfaced in logs
+	// and agent-facing output. It does not affect execution.
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+}
+
 // Task represents a single unit of work in a task sequence.
 type Task struct {
+	TaskProps  `yaml:",inline"`
 	Type       TaskType   `json:"type"`
 	Concurrent bool       `json:"concurrent,omitempty"`
 	Condition  *Condition `json:"condition,omitempty"`
@@ -65,6 +75,7 @@ func (t Task) IsZero() bool {
 // Expand returns a copy of the task with all string fields passed through environment variable expansion.
 func (t Task) Expand() Task {
 	return Task{
+		TaskProps:  t.TaskProps,
 		Type:       t.Type,
 		Concurrent: t.Concurrent,
 		Condition:  t.Condition,

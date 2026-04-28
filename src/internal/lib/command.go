@@ -64,7 +64,10 @@ func ExecuteCommand(name string, args []string) error {
 	startSession()
 	defer endSession()
 
-	return runCommand(found)
+	startedAt := RecordRecentStart(found.Name)
+	err := runCommand(found)
+	RecordRecentEnd(found.Name, err, startedAt)
+	return err
 }
 
 // clearRaidArgs unsets all RAID_ARG_* environment variables.

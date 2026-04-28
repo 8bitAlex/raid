@@ -92,6 +92,25 @@ For more details, see [Doctor](/docs/usage/doctor).
 
 ---
 
+## raid context
+
+Print a condensed snapshot of the active workspace — profile, environment, and per-repository git state.
+
+```bash
+raid context           # pretty-printed
+raid context --json    # machine-readable JSON
+```
+
+| Flag | Description |
+|---|---|
+| `--json` | Emit machine-readable JSON instead of the human-readable table |
+
+Output is intentionally token-efficient and bounded — useful for piping into a chat agent or another tool.
+
+For more details, see [Context](/docs/usage/context).
+
+---
+
 ## raid \<command\>
 
 Run a custom command defined in the active profile or any of its repositories.
