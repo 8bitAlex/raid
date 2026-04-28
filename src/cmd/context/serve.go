@@ -1,17 +1,29 @@
 package context
 
 import (
+	"bytes"
 	stdctx "context"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 
+	"github.com/8bitalex/raid/src/raid"
 	rctx "github.com/8bitalex/raid/src/raid/context"
+	"github.com/8bitalex/raid/src/raid/env"
 	"github.com/8bitalex/raid/src/raid/profile"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 )
+
+// mutationMu serialises mutating tool calls. Each mutating handler swaps the
+// global commandStdout/commandStderr writers (they're used by lib's clone,
+// task runner, and env-setup paths) into a per-call buffer; that swap is
+// inherently process-global, so concurrent handlers would race. Serialising
+// also gives sane semantics — running two installs in parallel against the
+// same workspace is a footgun even outside MCP.
+var mutationMu sync.Mutex
 
 // Workspace resource URIs. The same URIs are advertised in the static `raid
 // context --json` snapshot's resources catalog (step 2 of the MCP work) so the
@@ -198,27 +210,125 @@ func agentToolDefs() []agentToolDef {
 		},
 		{
 			tool: mcp.NewTool("raid_install",
-				mcp.WithDescription("Clone repositories and run install tasks. Targets the whole active profile by default."),
+				mcp.WithDescription("Clone repositories and run install tasks. Targets the whole active profile by default; pass `repo` to limit to one repo."),
 				mcp.WithString("repo", mcp.Description("Limit installation to this repo by name. Omit to install all repos in the profile.")),
 			),
-			handler: notImplemented("raid_install"),
+			handler: handleInstall,
 		},
 		{
 			tool: mcp.NewTool("raid_env_switch",
 				mcp.WithDescription("Switch the active environment, writing per-repo .env files and running environment tasks."),
-				mcp.WithString("env", mcp.Required(), mcp.Description("Environment name to activate.")),
+				mcp.WithString("env", mcp.Required(), mcp.Description("Environment name to activate. Must exist in the active profile.")),
 			),
-			handler: notImplemented("raid_env_switch"),
+			handler: handleEnvSwitch,
 		},
 		{
 			tool: mcp.NewTool("raid_run_task",
 				mcp.WithDescription("Run a user-defined raid command (`raid <command>`) from the active profile."),
-				mcp.WithString("command", mcp.Required(), mcp.Description("Command name as exposed by `raid context`'s commands list.")),
-				mcp.WithArray("args", mcp.Description("Positional arguments passed to the command.")),
+				mcp.WithString("command", mcp.Required(), mcp.Description("Command name as exposed in `raid context`'s commands list.")),
+				mcp.WithArray("args", mcp.Description("Positional arguments passed to the command. Each element must be a string.")),
 			),
-			handler: notImplemented("raid_run_task"),
+			handler: handleRunTask,
 		},
 	}
+}
+
+// --- Mutating handlers ---------------------------------------------------
+
+// captureCommandOutput runs fn with task / clone / env-setup output captured
+// into a buffer instead of leaking onto os.Stdout (which would corrupt the
+// MCP JSON-RPC stream). Returns the captured text and the function's error.
+//
+// The mutationMu mutex must already be held — the writer swap is global and
+// would otherwise race across concurrent handlers.
+func captureCommandOutput(fn func() error) (string, error) {
+	var buf bytes.Buffer
+	restore := raid.SetCommandOutput(&buf, &buf)
+	defer restore()
+	err := fn()
+	return buf.String(), err
+}
+
+func handleInstall(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mutationMu.Lock()
+	defer mutationMu.Unlock()
+
+	repoName := req.GetString("repo", "")
+	output, err := captureCommandOutput(func() error {
+		if repoName != "" {
+			return raid.InstallRepo(repoName)
+		}
+		return raid.Install(0)
+	})
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("raid_install: %v\n%s", err, output)), nil
+	}
+
+	// Refresh the cached workspace so subsequent reads (and other tool
+	// calls) see the new on-disk state.
+	_ = raid.ForceLoad()
+
+	target := "all repos"
+	if repoName != "" {
+		target = fmt.Sprintf("repo %q", repoName)
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("install complete: %s\n%s", target, output)), nil
+}
+
+func handleEnvSwitch(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name, err := req.RequireString("env")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("raid_env_switch: %v", err)), nil
+	}
+	if !env.Contains(name) {
+		return mcp.NewToolResultError(fmt.Sprintf("raid_env_switch: environment %q not found in active profile", name)), nil
+	}
+
+	mutationMu.Lock()
+	defer mutationMu.Unlock()
+
+	output, runErr := captureCommandOutput(func() error {
+		if err := env.Set(name); err != nil {
+			return fmt.Errorf("set: %w", err)
+		}
+		// SetEnv writes the new active env to the config; ForceLoad
+		// rebuilds the merged context against it before we run the env
+		// tasks. Mirrors the cmd/env path.
+		if err := raid.ForceLoad(); err != nil {
+			return fmt.Errorf("reload: %w", err)
+		}
+		if err := env.Execute(env.Get()); err != nil {
+			return fmt.Errorf("execute: %w", err)
+		}
+		return nil
+	})
+	if runErr != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("raid_env_switch: %v\n%s", runErr, output)), nil
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("switched to env %q\n%s", name, output)), nil
+}
+
+func handleRunTask(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	command, err := req.RequireString("command")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("raid_run_task: %v", err)), nil
+	}
+	args := req.GetStringSlice("args", nil)
+
+	mutationMu.Lock()
+	defer mutationMu.Unlock()
+
+	output, runErr := captureCommandOutput(func() error {
+		return raid.ExecuteCommand(command, args)
+	})
+	if runErr != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("raid_run_task %q: %v\n%s", command, runErr, output)), nil
+	}
+	// ExecuteCommand mutates env vars and the recent.json log. ForceLoad
+	// keeps reads consistent (recent is read fresh anyway, but command
+	// definitions come from the cached profile).
+	_ = raid.ForceLoad()
+	return mcp.NewToolResultText(fmt.Sprintf("ran %q\n%s", command, output)), nil
 }
 
 // --- Read-only handlers --------------------------------------------------

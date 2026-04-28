@@ -14,7 +14,8 @@ Non-obvious:
 - User commands registered at runtime from config via registerUserCommands; not in source
 - WriteProfileFile and CreateRepoConfigs prepend embedded templates (src/resources/profile-template, repo-template) to new files; schema URL constants live in the templates, not in Go code
 - src/cmd/context (Go package literally named `context`) imports stdlib context as `stdctx` and the raid wrapper as `rctx` to avoid the package-vs-import name collision
-- `raid context serve` blocks on stdin (stdio MCP transport); BuildServer() in src/cmd/context/serve.go is exported so tests can introspect the server without driving stdio. Tool handlers are stubs returning isError tool results until issue #45 lands the implementations.
+- `raid context serve` blocks on stdin (stdio MCP transport); BuildServer() in src/cmd/context/serve.go is exported so tests can introspect the server without driving stdio.
+- Mutating tools (raid_install, raid_env_switch, raid_run_task) serialize behind mutationMu and route command output through raid.SetCommandOutput / lib.commandStdout because os.Stdout is reserved for JSON-RPC framing in the MCP server. Any new lib code that writes user-facing progress should use commandStdout/commandStderr (not fmt.Printf or os.Stdout) so it's captured cleanly.
 
 CI: .github/workflows/ — build.yml (build+test), deploy.yml (release), preview.yml (preview releases), codecov.yml (coverage), docs.yml (deploy Pages from site/), docs-build.yml (PR build check for site/)
 

@@ -187,18 +187,22 @@ raid context serve   # blocks; intended to be launched by an MCP host
 
 **Tools** — the canonical raid agent toolkit defined in [issue #45](https://github.com/8bitalex/raid/issues/45):
 
-| Tool | Status | Purpose |
-|---|---|---|
-| `raid_list_profiles` | ✅ implemented | List configured profiles, with the active one flagged |
-| `raid_list_repos` | ✅ implemented | List repos in the active profile with URL + live git state |
-| `raid_describe_repo` | ✅ implemented | Return the parsed `raid.yaml` for a repo (by name or path) as structured JSON |
-| `raid_install` | 🚧 stub | Clone repositories and run install tasks |
-| `raid_env_switch` | 🚧 stub | Switch environments |
-| `raid_run_task` | 🚧 stub | Run a user-defined `raid <command>` |
+| Tool | Purpose |
+|---|---|
+| `raid_list_profiles` | List configured profiles, with the active one flagged |
+| `raid_list_repos` | List repos in the active profile with URL + live git state |
+| `raid_describe_repo` | Return the parsed `raid.yaml` for a repo (by name or path) as structured JSON |
+| `raid_install` | Clone repositories and run install tasks. Optional `repo` argument limits to a single repo |
+| `raid_env_switch` | Switch the active environment, write `.env` files into every repo, and run env tasks |
+| `raid_run_task` | Run a user-defined `raid <command>` from the active profile |
 
-The three read-only tools call straight into the existing raid library and return structured JSON results. The mutating tools are still registered with their input schemas (so hosts see the full surface area) but `tools/call` currently returns an `isError` result of *"not yet implemented"*. Track [issue #45](https://github.com/8bitalex/raid/issues/45) for progress.
+Each tool calls straight into the existing raid library and returns its result as a JSON-structured tool result. Mutating tools (`raid_install`, `raid_env_switch`, `raid_run_task`) are serialised behind a single mutex so concurrent calls are processed in order — running two installs against the same workspace at once is rarely what an agent intends.
 
-`raid_list_repos` accepts an optional `profile` argument; in this release it must match the active profile or the call returns an error explaining the limitation. Multi-profile lookups land alongside the mutating tools.
+`raid_list_repos` accepts an optional `profile` argument; in this release it must match the active profile or the call returns an error explaining the limitation. Multi-profile lookups are tracked separately.
+
+:::note Output capture for mutating tools
+`raid_install`, `raid_env_switch`, and `raid_run_task` route the command output (git clone progress, shell task stdout/stderr, env-setup messages) through an internal buffer instead of letting it leak onto stdout — stdout is reserved for the JSON-RPC framing. The captured text is appended to the tool result so the agent can still inspect what happened.
+:::
 
 ### Wiring it into an MCP host
 

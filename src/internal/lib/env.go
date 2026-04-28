@@ -82,7 +82,7 @@ func ExecuteEnv(name string) error {
 
 func setEnvVariablesForRepos(name string) error {
 	for _, repo := range context.Profile.Repositories {
-		fmt.Printf("Setting up environment for repo: %s\n", repo.Name)
+		fmt.Fprintf(commandStdout, "Setting up environment for repo: %s\n", repo.Name)
 
 		path, err := buildEnvPath(repo.Path)
 		if err != nil {
