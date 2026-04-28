@@ -174,6 +174,60 @@ func TestRecordRecentEnd_interleavedRuns(t *testing.T) {
 	}
 }
 
+// TestRecordRecentEnd_distinguishesSubSecondStarts guards the precision fix:
+// RecordRecentStart returns full-precision timestamps so two starts within
+// the same wall-clock second can still be matched unambiguously by End.
+// Earlier code truncated to whole seconds and would alias.
+func TestRecordRecentEnd_distinguishesSubSecondStarts(t *testing.T) {
+	setupRecentTempPath(t)
+
+	now := time.Date(2026, 4, 27, 12, 0, 5, 100_000_000, time.UTC) // .100s
+	oldNow := recentNowFn
+	t.Cleanup(func() { recentNowFn = oldNow })
+
+	// Drive recentNowFn through a sequence: two Starts in the same second,
+	// then two Ends a moment later.
+	calls := 0
+	timeline := []time.Time{
+		now,                                         // start A
+		now.Add(200 * time.Millisecond),             // start B (same second, different ns)
+		now.Add(time.Second),                        // end A
+		now.Add(time.Second + 100*time.Millisecond), // end B
+	}
+	recentNowFn = func() time.Time {
+		t := timeline[calls]
+		calls++
+		return t
+	}
+
+	startA := RecordRecentStart("alpha")
+	startB := RecordRecentStart("beta")
+
+	// Both starts share a wall-clock second but must remain distinguishable.
+	if startA.Second() != startB.Second() {
+		t.Fatalf("test fixture broken: starts must share a second; got %v / %v", startA, startB)
+	}
+	if startA.Equal(startB) {
+		t.Fatalf("StartedAt timestamps must keep sub-second precision; both = %v", startA)
+	}
+
+	RecordRecentEnd("alpha", nil, startA)
+	RecordRecentEnd("beta", errors.New("boom"), startB)
+
+	entries := ReadRecent()
+	if len(entries) != 2 {
+		t.Fatalf("entries len = %d, want 2", len(entries))
+	}
+	// Most recent first: beta then alpha. Each must be marked completed —
+	// proving End found its own placeholder rather than aliasing the other.
+	if entries[0].Command != "beta" || entries[0].Status != RecentStatusCompleted || entries[0].ExitCode != 1 {
+		t.Errorf("beta entry wrong: %+v", entries[0])
+	}
+	if entries[1].Command != "alpha" || entries[1].Status != RecentStatusCompleted || entries[1].ExitCode != 0 {
+		t.Errorf("alpha entry wrong: %+v", entries[1])
+	}
+}
+
 func TestExitCodeFromError(t *testing.T) {
 	if got := exitCodeFromError(nil); got != 0 {
 		t.Errorf("nil error = %d, want 0", got)

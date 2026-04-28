@@ -98,8 +98,13 @@ func readRecentRaw() []RecentEntry {
 // log and returns the moment recording began. Pass the same value to
 // RecordRecentEnd once the command has finished. Errors writing the log are
 // silenced — recording history must never break command execution.
+//
+// The returned time keeps full nanosecond precision so it can be used as an
+// unambiguous key by RecordRecentEnd: two commands started in the same second
+// would alias if we truncated. Display formatters can re-truncate at render
+// time when a coarser granularity is desired.
 func RecordRecentStart(command string) time.Time {
-	started := recentNowFn().UTC().Truncate(time.Second)
+	started := recentNowFn().UTC()
 	entry := RecentEntry{
 		Command:   command,
 		Status:    recentStatusRunning,
@@ -139,21 +144,58 @@ func RecordRecentEnd(command string, runErr error, startedAt time.Time) {
 	writeRecent(entries)
 }
 
-// writeRecent atomically replaces the recent log file. Caller holds recentMu.
+// writeRecent atomically replaces the recent log file. Caller holds recentMu
+// inside this process; the unique temp file (via os.CreateTemp) plus a
+// remove-then-rename fallback make the swap safe across raid processes and on
+// Windows (where os.Rename will not replace an existing destination).
+//
+// All errors are silenced — recording history must never break command
+// execution. On any failure the temp file is cleaned up.
 func writeRecent(entries []RecentEntry) {
 	path := recentPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return
 	}
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return
 	}
-	_ = os.Rename(tmp, path)
+	tmpPath := tmp.Name()
+	swapped := false
+	defer func() {
+		if !swapped {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		return
+	}
+
+	// POSIX: rename atomically replaces. Windows: rename fails if destination
+	// exists, so fall back to remove+rename. Either way, any failure leaves
+	// the previous file intact.
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(path)
+		if err := os.Rename(tmpPath, path); err != nil {
+			return
+		}
+	}
+	swapped = true
 }
 
 func exitCodeFromError(err error) int {

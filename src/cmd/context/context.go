@@ -97,7 +97,7 @@ func writePretty(w io.Writer, ws context.Snapshot) error {
 	writeRepos(w, ws.Workspace.Repos)
 	writeTools(w, ws.Tools)
 	writeCommands(w, ws.Workspace.Commands)
-	writeRecent(w, ws.Workspace.Recent)
+	writeRecent(w, ws.Workspace.Recent, ws.GeneratedAt)
 	return nil
 }
 
@@ -186,7 +186,11 @@ func writeCommands(w io.Writer, cmds []context.Command) {
 	}
 }
 
-func writeRecent(w io.Writer, entries []context.Recent) {
+// writeRecent renders the recent-runs section. now should be the snapshot's
+// own GeneratedAt timestamp so the "Xm ago" deltas are consistent with the
+// header timestamp and stay deterministic for any consumer that re-renders
+// the same Snapshot.
+func writeRecent(w io.Writer, entries []context.Recent, now time.Time) {
 	if len(entries) == 0 {
 		return
 	}
@@ -207,7 +211,6 @@ func writeRecent(w io.Writer, entries []context.Recent) {
 		}
 	}
 	fmt.Fprintf(w, "\nRecent (%d):\n", len(entries))
-	now := time.Now()
 	for i, e := range entries {
 		fmt.Fprintf(w, "  %s %-*s  %s%s  %s%s  %s\n",
 			recentMark(e),

@@ -412,7 +412,9 @@ install:
       concurrent: true
       cmd: echo hi
 `
-	os.WriteFile(path, []byte(body), 0644)
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("setup: write profile: %v", err)
+	}
 	if err := ValidateProfile(path); err != nil {
 		t.Fatalf("ValidateProfile() unexpected error: %v", err)
 	}
@@ -432,7 +434,9 @@ install:
       cmd: echo hi
       bogusfield: nope
 `
-	os.WriteFile(path, []byte(body), 0644)
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("setup: write profile: %v", err)
+	}
 	if err := ValidateProfile(path); err == nil {
 		t.Fatal("ValidateProfile() expected error for unknown task field")
 	}
