@@ -5,6 +5,7 @@ import (
 	stdctx "context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/8bitalex/raid/src/raid"
@@ -40,6 +41,51 @@ var serveStdioFn = func(s *server.MCPServer) error { return server.ServeStdio(s)
 
 func init() {
 	Command.AddCommand(ServeCmd)
+	// Populate Long at startup with the absolute path of the running
+	// binary, so `raid context serve --help` shows snippets a user can
+	// copy-paste straight into their MCP host config.
+	ServeCmd.Long = buildServeLong()
+}
+
+// buildServeLong assembles the long help text for `raid context serve`,
+// including ready-to-paste config snippets for the most common MCP hosts.
+// The binary path is resolved at startup via os.Executable so the snippets
+// match wherever raid actually lives on this machine (Homebrew, Go install,
+// dev build, etc.).
+func buildServeLong() string {
+	bin := raidExecPath()
+	return fmt.Sprintf(`Start a Model Context Protocol server (stdio transport) that exposes the active raid workspace as resources and the raid agent toolkit as tools. Designed to be wired into MCP-aware clients such as Claude Code or Cursor.
+
+The server speaks JSON-RPC 2.0 (newline-delimited) over stdin/stdout. Stderr is reserved for diagnostics.
+
+Wire it into your MCP host using the snippets below:
+
+Claude Code:
+
+  claude mcp add raid -- %s context serve
+
+Cursor (.cursor/mcp.json or ~/.cursor/mcp.json):
+
+  {
+    "mcpServers": {
+      "raid": {
+        "command": %q,
+        "args": ["context", "serve"]
+      }
+    }
+  }
+`, bin, bin)
+}
+
+// raidExecPath returns the absolute path to the running raid binary, or
+// "raid" if the OS won't tell us (extremely unusual; mostly covers running
+// inside `go test` where os.Executable points at the test binary).
+func raidExecPath() string {
+	p, err := os.Executable()
+	if err != nil || p == "" {
+		return "raid"
+	}
+	return p
 }
 
 // ServeCmd runs an MCP server over stdio, exposing the active raid workspace
@@ -49,10 +95,11 @@ func init() {
 // Tool handlers are stubs in this first slice; they return a "not yet
 // implemented" error so a host (Claude Code, Cursor, …) can still discover
 // the surface area while wiring proceeds in follow-up work.
+// Long is populated at init() via buildServeLong so the help text can embed
+// the running binary's absolute path in copy-paste host configs.
 var ServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Run an MCP server exposing the active workspace over stdio",
-	Long:  "Start a Model Context Protocol server (stdio transport) that exposes the active raid workspace as resources and the raid agent toolkit as tools. Designed to be wired into MCP-aware clients such as Claude Code or Cursor.",
 	Args:  cobra.NoArgs,
 	RunE: func(_ *cobra.Command, _ []string) error {
 		return serveStdioFn(BuildServer())
