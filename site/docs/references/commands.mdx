@@ -107,7 +107,15 @@ raid context --json    # machine-readable JSON
 
 Output is intentionally token-efficient and bounded — useful for piping into a chat agent or another tool.
 
-For more details, see [Context](/docs/usage/context).
+### raid context serve
+
+Run a Model Context Protocol server (stdio transport) that exposes the active workspace as resources and the raid agent toolkit as tools. Intended to be launched by an MCP host such as Claude Code or Cursor; the process blocks on stdin until the host disconnects.
+
+```bash
+raid context serve
+```
+
+For more details on either subcommand, see [Context](/docs/usage/context).
 
 ---
 

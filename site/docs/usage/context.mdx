@@ -164,3 +164,61 @@ raid context | pbcopy
 # Feed JSON into another tool
 raid context --json | jq '.workspace.repos[] | select(.dirty)'
 ```
+
+## MCP server (`raid context serve`)
+
+The same data the snapshot exposes statically is also available as a live [Model Context Protocol](https://modelcontextprotocol.io) server, suitable for wiring into Claude Code, Cursor, Claude.ai, Cline, or any MCP-compatible host. The server speaks JSON-RPC 2.0 over stdio.
+
+```bash
+raid context serve   # blocks; intended to be launched by an MCP host
+```
+
+### What's exposed
+
+**Resources** — five `raid://workspace/*` URIs that mirror the static snapshot's `workspace` object. Each is fetched live on demand:
+
+| URI | MIME | Contents |
+|---|---|---|
+| `raid://workspace/profile` | `text/plain` | Active profile name |
+| `raid://workspace/env` | `text/plain` | Active environment name |
+| `raid://workspace/repos` | `application/json` | Repositories with current git state |
+| `raid://workspace/commands` | `application/json` | User-defined raid commands |
+| `raid://workspace/recent` | `application/json` | Recent command invocations |
+
+**Tools** — the canonical raid agent toolkit defined in [issue #45](https://github.com/8bitalex/raid/issues/45):
+
+| Tool | Purpose |
+|---|---|
+| `raid_list_profiles` | List configured profiles |
+| `raid_list_repos` | List repos in the active or specified profile |
+| `raid_describe_repo` | Return parsed `raid.yaml` as structured JSON |
+| `raid_install` | Clone repositories and run install tasks |
+| `raid_env_switch` | Switch environments |
+| `raid_run_task` | Run a user-defined `raid <command>` |
+
+:::warning Tool handlers are stubs in this initial release
+Every tool is registered with its full input schema so MCP hosts can discover the surface area, but `tools/call` currently returns an `isError` result of *"not yet implemented"*. The handlers are landing in follow-up work — track [issue #45](https://github.com/8bitalex/raid/issues/45) for progress.
+:::
+
+### Wiring it into an MCP host
+
+**Claude Code** ([docs](https://docs.claude.com/en/docs/claude-code/mcp)):
+
+```bash
+claude mcp add raid -- raid context serve
+```
+
+**Cursor** — add to your project's or user-level `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "raid": {
+      "command": "raid",
+      "args": ["context", "serve"]
+    }
+  }
+}
+```
+
+Once wired, the host's `initialize` handshake reports raid's name and version, `resources/list` returns the five URIs above, and `tools/list` returns the six-tool catalog.
