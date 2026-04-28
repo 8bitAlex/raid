@@ -25,26 +25,39 @@ commands:
         message: "==> Testing raid app"
         color: cyan
       - type: Shell
+        name: Test raid app
         cmd: go test ./...
         path: ~/Developer/raid
       - type: Print
         message: "==> Building docsite"
         color: cyan
       - type: Shell
+        name: Build docsite
         cmd: npm install && npm run build
         path: ~/Developer/raid/site
       - type: Print
         message: "==> Testing docsite"
         color: cyan
       - type: Shell
+        name: Test docsite
         cmd: npm test
         path: ~/Developer/raid/site
       - type: Print
         message: "==> Type-checking docsite"
         color: cyan
       - type: Shell
+        name: Type-check docsite
         cmd: npm run typecheck
         path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Coverage report"
+        color: cyan
+      - type: Shell
+        name: Test coverage report
+        literal: true
+        cmd: |-
+          go test -coverpkg=./src/... -coverprofile=/tmp/raid-coverage.out ./... > /dev/null && go tool cover -func=/tmp/raid-coverage.out | awk 'END {print "Total coverage: " $NF}'
+        path: ~/Developer/raid
       - type: Print
         message: "==> Tests completed"
         color: green

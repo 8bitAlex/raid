@@ -164,3 +164,65 @@ raid context | pbcopy
 # Feed JSON into another tool
 raid context --json | jq '.workspace.repos[] | select(.dirty)'
 ```
+
+## MCP server (`raid context serve`)
+
+The same data the snapshot exposes statically is also available as a live [Model Context Protocol](https://modelcontextprotocol.io) server, suitable for wiring into Claude Code, Cursor, Claude.ai, Cline, or any MCP-compatible host. The server speaks JSON-RPC 2.0 over stdio.
+
+```bash
+raid context serve   # blocks; intended to be launched by an MCP host
+```
+
+### What's exposed
+
+**Resources** — five `raid://workspace/*` URIs that mirror the static snapshot's `workspace` object. Each is fetched live on demand:
+
+| URI | MIME | Contents |
+|---|---|---|
+| `raid://workspace/profile` | `text/plain` | Active profile name |
+| `raid://workspace/env` | `text/plain` | Active environment name |
+| `raid://workspace/repos` | `application/json` | Repositories with current git state |
+| `raid://workspace/commands` | `application/json` | User-defined raid commands |
+| `raid://workspace/recent` | `application/json` | Recent command invocations |
+
+**Tools** — the canonical raid agent toolkit defined in [issue #45](https://github.com/8bitalex/raid/issues/45):
+
+| Tool | Purpose |
+|---|---|
+| `raid_list_profiles` | List configured profiles, with the active one flagged |
+| `raid_list_repos` | List repos in the active profile with URL + live git state |
+| `raid_describe_repo` | Return the parsed `raid.yaml` for a repo (by name or path) as structured JSON |
+| `raid_install` | Clone repositories and run install tasks. Optional `repo` argument limits to a single repo |
+| `raid_env_switch` | Switch the active environment, write `.env` files into every repo, and run env tasks |
+| `raid_run_task` | Run a user-defined `raid <command>` from the active profile |
+
+Each tool calls straight into the existing raid library and returns its result as a JSON-structured tool result. Mutating tools (`raid_install`, `raid_env_switch`, `raid_run_task`) are serialised behind a process-wide [flock](https://en.wikipedia.org/wiki/File_locking) at `~/.raid/.lock` — that same lock is acquired by every mutating raid CLI invocation (`raid install`, `raid env <name>`, `raid <command>`, `raid profile add/remove/use`). Concurrent mutations from any combination of CLI usage and the MCP server's tools therefore wait for one another instead of racing on `~/.raid/config.toml` or repository state. The kernel releases the lock automatically if the holding process exits unexpectedly.
+
+`raid_list_repos` accepts an optional `profile` argument; in this release it must match the active profile or the call returns an error explaining the limitation. Multi-profile lookups are tracked separately.
+
+:::note Output capture for mutating tools
+`raid_install`, `raid_env_switch`, and `raid_run_task` route the command output (git clone progress, shell task stdout/stderr, env-setup messages) through an internal buffer instead of letting it leak onto stdout — stdout is reserved for the JSON-RPC framing. The captured text is appended to the tool result so the agent can still inspect what happened.
+:::
+
+### Wiring it into an MCP host
+
+**Claude Code** ([docs](https://docs.claude.com/en/docs/claude-code/mcp)):
+
+```bash
+claude mcp add raid -- raid context serve
+```
+
+**Cursor** — add to your project's or user-level `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "raid": {
+      "command": "raid",
+      "args": ["context", "serve"]
+    }
+  }
+}
+```
+
+Once wired, the host's `initialize` handshake reports raid's name and version, `resources/list` returns the five URIs above, and `tools/list` returns the six-tool catalog.

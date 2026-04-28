@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/8bitalex/raid/src/raid"
 	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,10 @@ var Command = &cobra.Command{
 			}
 		} else if len(args) == 1 {
 			name := args[0]
-			if err := pro.Set(name); err != nil {
+			err := raid.WithMutationLock(func() error {
+				return pro.Set(name)
+			})
+			if err != nil {
 				fmt.Printf("Profile '%s' not found. Use 'raid profile list' to see available profiles.\n", name)
 				os.Exit(1)
 			}

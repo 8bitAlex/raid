@@ -68,7 +68,7 @@ func CloneRepository(repo Repo) error {
 	path := sys.ExpandPath(repo.Path)
 
 	if sys.FileExists(path) && isGitRepository(path) {
-		fmt.Printf("Repository '%s' already exists at %s, skipping\n", repo.Name, path)
+		fmt.Fprintf(commandStdout, "Repository '%s' already exists at %s, skipping\n", repo.Name, path)
 		return nil
 	}
 
@@ -104,8 +104,8 @@ func clone(path string, url string, branch string) error {
 	}
 	args = append(args, url, path)
 	cmd := exec.Command("git", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout
+	cmd.Stderr = commandStderr
 	return cmd.Run()
 }
 

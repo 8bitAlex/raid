@@ -274,15 +274,20 @@ func setupTestConfig(t *testing.T) {
 	dir := t.TempDir()
 	oldCfg := lib.CfgPath
 	oldRecent := lib.RecentPathOverride
+	oldLock := lib.LockPathOverride
 	t.Cleanup(func() {
 		lib.CfgPath = oldCfg
 		lib.RecentPathOverride = oldRecent
+		lib.LockPathOverride = oldLock
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
 	// Redirect the recent.json log so user-command tests don't pollute the
 	// developer's real ~/.raid/recent.json.
 	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
+	// Redirect the mutation lock so tests don't contend with a real raid
+	// invocation in another terminal.
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupTestConfig: %v", err)
 	}
@@ -686,9 +691,11 @@ func TestExecute_inProcess_nonInfoCommand(t *testing.T) {
 func TestExecute_exitErrorPropagation(t *testing.T) {
 	oldCfg := lib.CfgPath
 	oldRecent := lib.RecentPathOverride
+	oldLock := lib.LockPathOverride
 	t.Cleanup(func() {
 		lib.CfgPath = oldCfg
 		lib.RecentPathOverride = oldRecent
+		lib.LockPathOverride = oldLock
 		lib.ResetContext()
 		viper.Reset()
 	})
@@ -696,6 +703,7 @@ func TestExecute_exitErrorPropagation(t *testing.T) {
 	dir := t.TempDir()
 	lib.CfgPath = filepath.Join(dir, "config.toml")
 	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
 	lib.ResetContext()
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("InitConfig: %v", err)

@@ -12,15 +12,50 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TestDescribe_parsesRepoYAML covers the thin Describe wrapper around
+// lib.ExtractRepo. It writes a minimal raid.yaml to a temp directory and
+// asserts the parsed Repo carries the expected name + branch.
+func TestDescribe_parsesRepoYAML(t *testing.T) {
+	dir := t.TempDir()
+	body := "name: parsed\nbranch: trunk\n"
+	if err := os.WriteFile(filepath.Join(dir, "raid.yaml"), []byte(body), 0644); err != nil {
+		t.Fatalf("write raid.yaml: %v", err)
+	}
+	repo, err := Describe(dir)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if repo.Name != "parsed" {
+		t.Errorf("Name = %q, want %q", repo.Name, "parsed")
+	}
+	if repo.Branch != "trunk" {
+		t.Errorf("Branch = %q, want %q", repo.Branch, "trunk")
+	}
+}
+
+func TestDescribe_propagatesErrorWhenMissing(t *testing.T) {
+	if _, err := Describe(t.TempDir()); err == nil {
+		t.Fatal("expected error when raid.yaml is missing")
+	}
+}
+
 func setupConfig(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	// Redirect raid's home-dir state files so concurrent test runs and the
+	// developer's real ~/.raid/ stay isolated.
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupConfig: %v", err)
 	}

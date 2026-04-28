@@ -18,12 +18,29 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// commandStdout and commandStderr are the output writers used by task execution.
-// ExecuteCommand replaces these temporarily when a command's Out field is set.
+// commandStdout and commandStderr are the output writers used by task
+// execution and operations that surface user-facing progress (clone, env
+// setup). ExecuteCommand replaces these temporarily when a command's Out
+// field is set; SetCommandOutput is the exported entry point for callers
+// that need to redirect them long-term (notably the MCP server, where
+// os.Stdout is owned by JSON-RPC framing).
 var (
 	commandStdout io.Writer = os.Stdout
 	commandStderr io.Writer = os.Stderr
 )
+
+// SetCommandOutput swaps the writers used by task execution, repository
+// cloning, and environment setup. The returned function restores the
+// previous writers — call via defer to keep state clean even if the caller
+// panics. Not safe for concurrent calls; serialise at the call site if
+// multiple goroutines may run mutating operations.
+func SetCommandOutput(stdout, stderr io.Writer) func() {
+	prevOut, prevErr := commandStdout, commandStderr
+	commandStdout, commandStderr = stdout, stderr
+	return func() {
+		commandStdout, commandStderr = prevOut, prevErr
+	}
+}
 
 // stdinMu serializes all stdin reads so that concurrent Prompt and Confirm
 // tasks do not interleave reads or compete for input.

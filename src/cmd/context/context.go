@@ -21,10 +21,11 @@ func init() {
 
 // Command is the `raid context` subcommand. It prints a condensed snapshot of
 // the active workspace — profile, environment, and per-repo branch / dirty
-// state — for human or agent consumption.
+// state — for human or agent consumption, and hosts the `serve` subcommand
+// that runs the same data live as an MCP server over stdio.
 var Command = &cobra.Command{
 	Use:   "context",
-	Short: "Print a condensed summary of the active workspace",
+	Short: "Print a condensed summary of the active workspace, or run as an MCP server",
 	Long:  "Print a condensed, token-efficient snapshot of the active workspace: profile, environment, and per-repository git state. Use --json for machine-readable output.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {

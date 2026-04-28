@@ -19,10 +19,12 @@ func setupTestConfig(t *testing.T) {
 	oldCfgPath := CfgPath
 	oldContext := context
 	oldRecent := RecentPathOverride
+	oldLock := LockPathOverride
 	t.Cleanup(func() {
 		CfgPath = oldCfgPath
 		context = oldContext
 		RecentPathOverride = oldRecent
+		LockPathOverride = oldLock
 		viper.Reset()
 	})
 
@@ -31,6 +33,10 @@ func setupTestConfig(t *testing.T) {
 	// Redirect recent.json so tests that exercise ExecuteCommand don't
 	// pollute the developer's real ~/.raid/recent.json.
 	RecentPathOverride = filepath.Join(dir, "recent.json")
+	// Redirect the mutation lock too, so tests that exercise mutating
+	// paths under WithMutationLock don't contend with a real raid
+	// invocation running in another terminal.
+	LockPathOverride = filepath.Join(dir, ".lock")
 
 	if err := InitConfig(); err != nil {
 		t.Fatalf("setupTestConfig: InitConfig() error: %v", err)

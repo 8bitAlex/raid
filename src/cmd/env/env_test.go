@@ -18,12 +18,20 @@ import (
 func setupConfig(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	// Redirect raid's home-dir state files so concurrent test runs and the
+	// developer's real ~/.raid/ stay isolated.
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupConfig: %v", err)
 	}
@@ -126,13 +134,19 @@ func setupConfigWithEnv(t *testing.T, profileName, envName string) {
 	repoRoot := repoRootForEnv(t)
 
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		lib.ResetContext()
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	lib.ResetContext()
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("setupConfigWithEnv: InitConfig: %v", err)
@@ -269,13 +283,19 @@ func TestCommand_envFound_executeError(t *testing.T) {
 	repoRoot := repoRootForEnv(t)
 
 	dir := t.TempDir()
-	old := lib.CfgPath
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
 	t.Cleanup(func() {
-		lib.CfgPath = old
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
 		lib.ResetContext()
 		viper.Reset()
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
 	lib.ResetContext()
 	if err := lib.InitConfig(); err != nil {
 		t.Fatalf("InitConfig: %v", err)
