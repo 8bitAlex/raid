@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1276,4 +1277,135 @@ func writeTempScript(t *testing.T, content string) string {
 		t.Fatalf("failed to write temp script: %v", err)
 	}
 	return path
+}
+
+// withRaidVar sets a raid variable for the duration of the test, restoring
+// the previous raidVars map on cleanup.
+func withRaidVar(t *testing.T, key, value string) {
+	t.Helper()
+	raidVarsMu.Lock()
+	prev := raidVars
+	raidVars = make(map[string]string, len(prev)+1)
+	for k, v := range prev {
+		raidVars[k] = v
+	}
+	raidVars[key] = value
+	raidVarsMu.Unlock()
+	t.Cleanup(func() {
+		raidVarsMu.Lock()
+		raidVars = prev
+		raidVarsMu.Unlock()
+	})
+}
+
+// captureCommandStdout swaps commandStdout for a buffer, returning a getter
+// that returns the captured text and restores the previous writer on
+// cleanup.
+func captureCommandStdout(t *testing.T) func() string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := commandStdout
+	commandStdout = &buf
+	t.Cleanup(func() { commandStdout = prev })
+	return func() string { return buf.String() }
+}
+
+// --- Issue #20: Set variables reach Script + Shell subprocess env ---------
+
+// TestExecScript_inheritsRaidVar guards the issue-#20 fix: a Set task's
+// variable must be visible in the env of a subsequent Script task's
+// subprocess.
+func TestExecScript_inheritsRaidVar(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
+	withRaidVar(t, "ISSUE20_FOO", "from-raid-var")
+	getOut := captureCommandStdout(t)
+
+	scriptPath := writeTempScript(t, "#!/bin/sh\nprintf 'got=%s' \"$ISSUE20_FOO\"\n")
+
+	if err := execScript(Task{Type: Script, Path: scriptPath}); err != nil {
+		t.Fatalf("execScript: %v", err)
+	}
+	if got := strings.TrimSpace(getOut()); got != "got=from-raid-var" {
+		t.Errorf("script saw $ISSUE20_FOO = %q, want %q", got, "got=from-raid-var")
+	}
+}
+
+// TestExecScript_raidVarOverridesOSEnv confirms the precedence promised by
+// expandRaid: raidVars beat OS env when names collide. The fix appends
+// raidVars last in cmd.Env so exec's last-occurrence-wins rule honors that.
+func TestExecScript_raidVarOverridesOSEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
+	const key = "ISSUE20_OVERRIDE"
+	t.Setenv(key, "from-os")
+	withRaidVar(t, key, "from-raid")
+	getOut := captureCommandStdout(t)
+
+	scriptPath := writeTempScript(t, "#!/bin/sh\nprintf 'got=%s' \"$ISSUE20_OVERRIDE\"\n")
+
+	if err := execScript(Task{Type: Script, Path: scriptPath}); err != nil {
+		t.Fatalf("execScript: %v", err)
+	}
+	if got := strings.TrimSpace(getOut()); got != "got=from-raid" {
+		t.Errorf("script saw collision = %q, want raidVar to win (got=from-raid)", got)
+	}
+}
+
+// TestExecShell_passesRaidVarToChildScript ensures the same fix applies to
+// Shell tasks: a child process spawned by the shell (e.g. another script)
+// sees the raidVar even though the shell itself didn't pre-expand it.
+// `literal: true` skips raid's pre-expansion so resolution happens at the
+// child level instead.
+func TestExecShell_passesRaidVarToChildScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
+	withRaidVar(t, "ISSUE20_BAR", "from-raid-bar")
+	getOut := captureCommandStdout(t)
+
+	dir := t.TempDir()
+	childPath := filepath.Join(dir, "child.sh")
+	if err := os.WriteFile(childPath, []byte("#!/bin/sh\nprintf 'child=%s' \"$ISSUE20_BAR\"\n"), 0755); err != nil {
+		t.Fatalf("write child: %v", err)
+	}
+
+	task := Task{Type: Shell, Cmd: childPath, Literal: true}
+	if err := execShell(task); err != nil {
+		t.Fatalf("execShell: %v", err)
+	}
+	if got := strings.TrimSpace(getOut()); got != "child=from-raid-bar" {
+		t.Errorf("child saw $ISSUE20_BAR = %q, want %q", got, "child=from-raid-bar")
+	}
+}
+
+// TestBuildSubprocessEnv_orderRaidVarsLast directly exercises the helper to
+// guard the precedence wiring (raidVars must appear AFTER OS env so exec's
+// duplicate-key resolution gives them priority).
+func TestBuildSubprocessEnv_orderRaidVarsLast(t *testing.T) {
+	const key = "ISSUE20_BUILD_ENV"
+	t.Setenv(key, "os-value")
+	withRaidVar(t, key, "raid-value")
+
+	env := buildSubprocessEnv()
+	osIdx, raidIdx := -1, -1
+	for i, kv := range env {
+		switch kv {
+		case key + "=os-value":
+			osIdx = i
+		case key + "=raid-value":
+			raidIdx = i
+		}
+	}
+	if osIdx < 0 {
+		t.Fatalf("buildSubprocessEnv missing OS-set %q", key)
+	}
+	if raidIdx < 0 {
+		t.Fatalf("buildSubprocessEnv missing raid-set %q", key)
+	}
+	if raidIdx < osIdx {
+		t.Errorf("raid-set entry at %d came before OS entry at %d; exec uses last-occurrence so raidVar must come last", raidIdx, osIdx)
+	}
 }
