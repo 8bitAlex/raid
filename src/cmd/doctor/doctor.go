@@ -87,7 +87,10 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(out)
+		if err := enc.Encode(out); err != nil {
+			fmt.Fprintln(os.Stderr, "raid:", err)
+			os.Exit(1)
+		}
 		if errors > 0 {
 			os.Exit(1)
 		}

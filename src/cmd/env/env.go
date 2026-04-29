@@ -2,6 +2,7 @@ package env
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/8bitalex/raid/src/raid/env"
@@ -20,27 +21,29 @@ var Command = &cobra.Command{
 	Short: "Execute an environment",
 	Long:  "Execute an environment by name. The environment will be searched for in the active profile and all repository configurations. Tasks are executed concurrently and environment variables are set globally.",
 	Args:  cobra.RangeArgs(0, 1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if showJSON && len(args) > 0 {
+			return fmt.Errorf("--json is only valid without an environment argument")
+		}
 		if len(args) == 0 {
 			active := env.Get()
 			if showJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				_ = enc.Encode(envEntry{Name: active, Active: active != ""})
-				return
+				return enc.Encode(envEntry{Name: active, Active: active != ""})
 			}
 			if active == "" {
 				cmd.PrintErrln("No active environment set.")
 			} else {
 				cmd.Println("Active environment:", active)
 			}
-			return
+			return nil
 		}
 
 		name := args[0]
 		if !env.Contains(name) {
 			cmd.PrintErrln("Environment not found:", name)
-			return
+			return nil
 		}
 
 		cmd.Println("Setting up environment:", name)
@@ -60,8 +63,9 @@ var Command = &cobra.Command{
 			return nil
 		})
 		if err != nil {
-			return
+			return nil
 		}
 		cmd.Println("Environment executed successfully.")
+		return nil
 	},
 }

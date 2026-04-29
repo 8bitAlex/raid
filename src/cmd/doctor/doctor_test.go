@@ -16,6 +16,7 @@ import (
 )
 
 const subprocEnv = "RAID_TEST_DOCTOR_SUBPROCESS"
+const subprocJSONEnv = "RAID_TEST_DOCTOR_JSON_SUBPROCESS"
 
 func setupConfig(t *testing.T) {
 	t.Helper()
@@ -63,6 +64,75 @@ func TestRunDoctor_subprocess(t *testing.T) {
 	}
 	if exitErr.ExitCode() != 1 {
 		t.Errorf("runDoctor exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+const subprocEncodeErrEnv = "RAID_TEST_DOCTOR_ENCODE_ERR"
+
+// failingWriter implements io.Writer and always returns an error, used to
+// force enc.Encode to fail and exercise the broken-pipe branch.
+type failingWriter struct{}
+
+func (failingWriter) Write(p []byte) (int, error) { return 0, fmt.Errorf("simulated write failure") }
+
+// TestRunDoctor_jsonEncodeError exercises the os.Exit(1) branch when the
+// JSON encoder fails to write (e.g. broken pipe). Runs in a subprocess so
+// os.Exit doesn't terminate the test runner.
+func TestRunDoctor_jsonEncodeError(t *testing.T) {
+	if os.Getenv(subprocEncodeErrEnv) == "1" {
+		setupConfig(t)
+		jsonOutput = true
+		cmd := &cobra.Command{}
+		cmd.SetOut(failingWriter{})
+		cmd.SetErr(os.Stderr)
+		runDoctor(cmd, nil)
+		return
+	}
+
+	proc := exec.Command(os.Args[0], "-test.run=TestRunDoctor_jsonEncodeError", "-test.v")
+	proc.Env = append(os.Environ(), subprocEncodeErrEnv+"=1")
+	out, err := proc.CombinedOutput()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got: %T %v\noutput: %s", err, err, out)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("runDoctor encode-error exit code = %d, want 1", exitErr.ExitCode())
+	}
+	if !strings.Contains(string(out), "simulated write failure") {
+		t.Errorf("subprocess stderr missing simulated failure message; got: %s", out)
+	}
+}
+
+// TestRunDoctor_jsonSubprocess exercises the os.Exit(1) branch in --json mode
+// when error findings are present. Runs in a subprocess so os.Exit doesn't
+// terminate the test runner.
+func TestRunDoctor_jsonSubprocess(t *testing.T) {
+	if os.Getenv(subprocJSONEnv) == "1" {
+		setupConfig(t)
+		jsonOutput = true
+		cmd := &cobra.Command{}
+		cmd.SetOut(os.Stdout)
+		cmd.SetErr(os.Stderr)
+		runDoctor(cmd, nil)
+		return
+	}
+
+	proc := exec.Command(os.Args[0], "-test.run=TestRunDoctor_jsonSubprocess", "-test.v")
+	proc.Env = append(os.Environ(), subprocJSONEnv+"=1")
+	out, err := proc.CombinedOutput()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got: %T %v\noutput: %s", err, err, out)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("runDoctor --json exit code = %d, want 1", exitErr.ExitCode())
+	}
+	// Subprocess output is test runner noise + the JSON object; just confirm
+	// we got the JSON shape with a non-zero error count (proving the JSON
+	// branch was taken before os.Exit).
+	if !strings.Contains(string(out), "\"errors\"") {
+		t.Errorf("subprocess output missing JSON 'errors' field; got: %s", out)
 	}
 }
 
