@@ -121,6 +121,27 @@ environments:
         value: "http://localhost:$API_PORT"
 ```
 
+### Inside Script and Shell subprocesses
+
+Raid variables are also exported as environment variables to the subprocesses that Shell and Script tasks spawn. A `Set` task earlier in the sequence is visible inside the script's source as `$VAR`:
+
+```yaml
+tasks:
+  - type: Set
+    var: "DEPLOY_ENV"
+    value: "staging"
+  - type: Script
+    path: "./scripts/deploy.sh"   # can reference $DEPLOY_ENV directly
+```
+
+```sh
+# scripts/deploy.sh
+echo "deploying to $DEPLOY_ENV"
+kubectl apply -f "manifests/$DEPLOY_ENV/"
+```
+
+The same applies to a child process spawned from a Shell task — the child inherits the shell's env, which includes raid variables. When a raid variable name collides with one already in the OS environment, the raid value wins (matching the precedence used by raid's own field-level expansion).
+
 ## Shell pass-through
 
 When raid expands variables for a Shell task, unknown variables are passed through to the shell intact. This means shell-local variables and parameter expansions work as expected:
