@@ -52,3 +52,5 @@ brews:
       bin.install "raid"
     test: |
       system "#{bin}/raid", "--version"
+    caveats: |
+      Release notes and changelog: https://github.com/8bitalex/raid/releases
