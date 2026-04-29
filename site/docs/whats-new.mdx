@@ -15,6 +15,8 @@ User-visible changes per release, latest first. For full commit history see the 
 
 **Set variables reach subprocesses.** Variables defined by a `Set` task are now exported as environment variables to Script and Shell task subprocesses, so a script's source can reference `$VAR` directly without raid pre-expanding the script body. Raid values take precedence over OS-environment variables of the same name.
 
+**Repo metadata as variables.** Every repository in the active profile is now auto-exposed as `RAID_REPO_<NAME>_URL`, `RAID_REPO_<NAME>_PATH`, and `RAID_REPO_<NAME>_BRANCH`, so tasks can reference repo URLs, paths, and branches without hardcoding them. Names are uppercased with non-alphanumerics replaced by `_` (so `my-api` becomes `RAID_REPO_MY_API_URL`).
+
 **Cross-process mutation lock.** A `flock`-backed lock at `~/.raid/.lock` serializes mutating operations across any combination of CLI usage and MCP-driven tool calls — concurrent installs or env switches from two raid processes now wait for one another instead of racing on `~/.raid/config.toml` or repository state. Read paths are unaffected.
 
 ## 0.6.0 — upcoming

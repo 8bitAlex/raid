@@ -223,11 +223,73 @@ func ForceLoad() error {
 		profile.Commands = mergeCommands(profile.Commands, repo.Commands)
 	}
 
+	setRepoVars(profile.Repositories)
+
 	context = &Context{
 		Profile: profile,
 		Env:     GetEnv(),
 	}
 	return nil
+}
+
+// setRepoVars seeds raidVars with RAID_REPO_<NAME>_{URL,PATH,BRANCH} entries
+// for every repo in the active profile, so tasks and subprocesses can
+// reference them as $RAID_REPO_API_URL, etc. PATH is the expanded absolute
+// path. Repos with empty fields contribute empty values; URL/BRANCH entries
+// are still defined so unset references don't fall through to the OS env.
+// Profile values overwrite anything from the persisted vars file — the
+// profile is canonical, so any stale RAID_REPO_* keys (from a removed or
+// renamed repo persisted to ~/.raid/vars) are pruned first. Sanitized-name
+// collisions between repos (e.g. "my-api" and "my_api" both → MY_API) are
+// reported to stderr; the last repo wins so behavior is deterministic.
+func setRepoVars(repos []Repo) {
+	raidVarsMu.Lock()
+	defer raidVarsMu.Unlock()
+	for k := range raidVars {
+		if strings.HasPrefix(k, "RAID_REPO_") {
+			delete(raidVars, k)
+		}
+	}
+	seen := make(map[string]string, len(repos))
+	for _, repo := range repos {
+		key := sanitizeRepoVarName(repo.Name)
+		if key == "" {
+			continue
+		}
+		if prev, ok := seen[key]; ok && prev != repo.Name {
+			fmt.Fprintf(os.Stderr,
+				"raid: warning: repos %q and %q both map to RAID_REPO_%s_*; %q wins\n",
+				prev, repo.Name, key, repo.Name)
+		}
+		seen[key] = repo.Name
+		raidVars["RAID_REPO_"+key+"_URL"] = repo.URL
+		raidVars["RAID_REPO_"+key+"_PATH"] = sys.ExpandPath(repo.Path)
+		raidVars["RAID_REPO_"+key+"_BRANCH"] = repo.Branch
+	}
+}
+
+// sanitizeRepoVarName converts a repo name into the uppercase identifier
+// fragment used in RAID_REPO_<NAME>_* var names. Non-alphanumerics become
+// underscores so names like "my-api" or "frontend.web" produce valid env
+// var keys. Returns "" if the name has no usable characters.
+func sanitizeRepoVarName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	out := b.String()
+	if strings.Trim(out, "_") == "" {
+		return ""
+	}
+	return out
 }
 
 // installRepo clones a single repository and runs its install tasks.

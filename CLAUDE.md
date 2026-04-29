@@ -22,5 +22,5 @@ CI: .github/workflows/ — build.yml (build+test), deploy.yml (release), preview
 
 Every change must:
 1. Include full-coverage tests — unit tests for new/changed functions, edge cases, and error paths. Run `go test ./...` and confirm all pass before finishing.
-2. Update documentation — if the change affects user-facing behavior, update the relevant docsite pages under site/docs/ (features, usage, references, examples) and the README if applicable. Run `npm run build` in site/ to verify no broken links.
+2. Update documentation — if the change affects user-facing behavior, update the relevant docsite pages under site/docs/ (features, usage, references, examples), the README, and site/docs/whats-new.mdx (under the upcoming version section). Run `npm run build` in site/ to verify no broken links.
 3. Keep the docsite build green — never leave broken cross-references or missing pages.

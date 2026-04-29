@@ -209,6 +209,30 @@ commands:
         message: "Deploying to $RAID_ARG_1 in $RAID_ARG_2"
 ```
 
+### Repo metadata
+
+Each repository in the active profile is exposed as three auto-populated variables: `RAID_REPO_<NAME>_URL`, `RAID_REPO_<NAME>_PATH`, and `RAID_REPO_<NAME>_BRANCH`. The name is uppercased and any non-alphanumeric characters become underscores (so `my-api` → `MY_API`). `PATH` is the expanded absolute path.
+
+```yaml
+# profile.raid.yml
+repositories:
+  - name: my-api
+    path: ~/dev/api
+    url: https://github.com/example/api.git
+    branch: main
+```
+
+```yaml
+commands:
+  - name: "open-api-pr"
+    tasks:
+      - type: Shell
+        cmd: "gh pr create --repo $RAID_REPO_MY_API_URL --base $RAID_REPO_MY_API_BRANCH"
+        path: "$RAID_REPO_MY_API_PATH"
+```
+
+These are seeded when the profile loads, so `Set` tasks with the same name override them for the rest of the command session.
+
 ## Case sensitivity
 
 Variable names set via `Set` tasks are resolved case-insensitively. `$MY_VAR`, `$my_var`, and `$My_Var` all resolve to the same value. Shell exports and OS environment variables follow the platform's native case rules (case-sensitive on macOS/Linux).
