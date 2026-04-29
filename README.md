@@ -199,6 +199,17 @@ raid deploy staging v1.2.3   # $RAID_ARG_1=staging, $RAID_ARG_2=v1.2.3
 
 Custom commands appear alongside built-in commands in `raid --help`. Commands defined in a profile take priority over same-named commands from repositories.
 
+### `raid <repo> <command>`
+
+Run a command defined in a specific repository's `raid.yaml`. This is useful when a repo defines a command with the same name as a profile-level command — `raid <repo> <command>` always targets the repo's version.
+
+```bash
+raid backend test     # run the "test" command from the backend repo
+raid frontend build   # run the "build" command from the frontend repo
+```
+
+Each repository that defines commands appears as a subcommand in `raid --help`. Run `raid <repo> --help` to see available commands for that repo.
+
 ---
 
 ## Configuration

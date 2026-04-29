@@ -150,6 +150,7 @@ func executeRoot(args []string) int {
 	rootCmd.SilenceErrors = true
 	rootCmd.SilenceUsage = true
 	registerUserCommands(rootCmd, cmds)
+	registerRepoCommands(rootCmd, raid.GetRepos())
 
 	// Reset args so cobra parses from our slice rather than os.Args when the
 	// caller is providing a different args list (e.g. during tests).
@@ -195,6 +196,53 @@ func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
 			},
 		})
 	}
+}
+
+// registerRepoCommands adds one subcommand per repository that has commands.
+// Each repo subcommand exposes the repo's own commands as sub-subcommands,
+// letting users run `raid <repo> <command>` to target a specific repo even
+// when a profile-level command has the same name.
+func registerRepoCommands(root *cobra.Command, repos []lib.Repo) {
+	for _, repo := range repos {
+		if len(repo.Commands) == 0 {
+			continue
+		}
+		if reservedNames[repo.Name] {
+			fmt.Fprintf(os.Stderr, "warning: repository '%s' conflicts with a built-in subcommand and will not be available as a command namespace\n", repo.Name)
+			continue
+		}
+		if hasCommand(root, repo.Name) {
+			fmt.Fprintf(os.Stderr, "warning: repository '%s' conflicts with a user command and will not be available as a command namespace\n", repo.Name)
+			continue
+		}
+		repoName := repo.Name
+		repoCmd := &cobra.Command{
+			Use:   repoName,
+			Short: fmt.Sprintf("Commands for the %s repository", repoName),
+		}
+		for _, cmd := range repo.Commands {
+			cmdName := cmd.Name
+			repoCmd.AddCommand(&cobra.Command{
+				Use:   cmdName,
+				Short: cmd.Usage,
+				RunE: func(c *cobra.Command, args []string) error {
+					return raid.WithMutationLock(func() error {
+						return raid.ExecuteRepoCommand(repoName, cmdName, args)
+					})
+				},
+			})
+		}
+		root.AddCommand(repoCmd)
+	}
+}
+
+func hasCommand(root *cobra.Command, name string) bool {
+	for _, c := range root.Commands() {
+		if c.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 // baseVersion strips "-preview" and anything following it from a version string

@@ -372,3 +372,157 @@ func TestMergeCommands(t *testing.T) {
 		})
 	}
 }
+
+// --- GetRepos ---
+
+func TestGetRepos_nilContext(t *testing.T) {
+	old := context
+	context = nil
+	defer func() { context = old }()
+
+	if got := GetRepos(); got != nil {
+		t.Errorf("GetRepos() = %v, want nil when context is nil", got)
+	}
+}
+
+func TestGetRepos_withRepos(t *testing.T) {
+	context = &Context{
+		Profile: Profile{
+			Repositories: []Repo{
+				{Name: "backend"},
+				{Name: "frontend"},
+			},
+		},
+	}
+	defer func() { context = nil }()
+
+	got := GetRepos()
+	if len(got) != 2 {
+		t.Fatalf("GetRepos() = %d repos, want 2", len(got))
+	}
+	if got[0].Name != "backend" || got[1].Name != "frontend" {
+		t.Errorf("GetRepos() names = %v/%v, want backend/frontend", got[0].Name, got[1].Name)
+	}
+}
+
+// --- ExecuteRepoCommand ---
+
+func TestExecuteRepoCommand_repoNotFound(t *testing.T) {
+	setupTestConfig(t)
+	context = &Context{
+		Profile: Profile{
+			Repositories: []Repo{{Name: "backend"}},
+		},
+	}
+
+	err := ExecuteRepoCommand("nonexistent", "test", nil)
+	if err == nil {
+		t.Fatal("expected error for unknown repo, got nil")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") {
+		t.Errorf("error %q should mention the repo name", err.Error())
+	}
+}
+
+func TestExecuteRepoCommand_cmdNotFound(t *testing.T) {
+	setupTestConfig(t)
+	context = &Context{
+		Profile: Profile{
+			Repositories: []Repo{{
+				Name:     "backend",
+				Commands: []Command{{Name: "build", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+			}},
+		},
+	}
+
+	err := ExecuteRepoCommand("backend", "nonexistent", nil)
+	if err == nil {
+		t.Fatal("expected error for unknown command, got nil")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") || !strings.Contains(err.Error(), "backend") {
+		t.Errorf("error %q should mention both repo and command", err.Error())
+	}
+}
+
+func TestExecuteRepoCommand_success(t *testing.T) {
+	setupTestConfig(t)
+	origOut := commandStdout
+	commandStdout = io.Discard
+	t.Cleanup(func() { commandStdout = origOut })
+
+	context = &Context{
+		Profile: Profile{
+			Repositories: []Repo{{
+				Name:     "backend",
+				Commands: []Command{{Name: "noop", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+			}},
+		},
+	}
+
+	if err := ExecuteRepoCommand("backend", "noop", nil); err != nil {
+		t.Errorf("ExecuteRepoCommand() error: %v", err)
+	}
+}
+
+func TestExecuteRepoCommand_taskFailure(t *testing.T) {
+	setupTestConfig(t)
+	context = &Context{
+		Profile: Profile{
+			Repositories: []Repo{{
+				Name:     "backend",
+				Commands: []Command{{Name: "fail", Tasks: []Task{{Type: Shell, Cmd: "exit 1"}}}},
+			}},
+		},
+	}
+
+	if err := ExecuteRepoCommand("backend", "fail", nil); err == nil {
+		t.Fatal("expected error from failing task, got nil")
+	}
+}
+
+func TestExecuteRepoCommand_setsArgs(t *testing.T) {
+	setupTestConfig(t)
+	origOut := commandStdout
+	commandStdout = io.Discard
+	t.Cleanup(func() { commandStdout = origOut })
+
+	dir := t.TempDir()
+	srcFile := filepath.Join(dir, "args.tmpl")
+	outFile := filepath.Join(dir, "args.txt")
+	if err := os.WriteFile(srcFile, []byte("$RAID_ARG_1\n$RAID_ARG_2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	context = &Context{
+		Profile: Profile{
+			Repositories: []Repo{{
+				Name: "backend",
+				Commands: []Command{{
+					Name: "tmpl",
+					Tasks: []Task{{Type: Template, Src: srcFile, Dest: outFile}},
+				}},
+			}},
+		},
+	}
+
+	if err := ExecuteRepoCommand("backend", "tmpl", []string{"hello", "world"}); err != nil {
+		t.Fatalf("ExecuteRepoCommand() error: %v", err)
+	}
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if got := string(data); got != "hello\nworld" {
+		t.Errorf("template output = %q, want %q", got, "hello\nworld")
+	}
+}
+
+func TestExecuteRepoCommand_nilContext(t *testing.T) {
+	old := context
+	context = nil
+	defer func() { context = old }()
+
+	if err := ExecuteRepoCommand("any", "any", nil); err == nil {
+		t.Fatal("expected error with nil context, got nil")
+	}
+}

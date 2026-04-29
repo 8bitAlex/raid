@@ -89,7 +89,14 @@ commands:
         cmd: "go test ./..."
 ```
 
-Command names must be unique across the profile and all repos. They cannot shadow built-in names: `profile`, `install`, `env`, `doctor`.
+When a profile-level command has the same name as a repo command, the profile version wins for `raid <name>`. To explicitly run the repo's version, use `raid <repo-name> <command>`:
+
+```bash
+raid api api-test          # explicitly run the api repo's "api-test" command
+raid api api-dev           # explicitly run the api repo's "api-dev" command
+```
+
+Command names cannot shadow built-in names: `profile`, `install`, `env`, `doctor`, `context`.
 
 ## Environments
 

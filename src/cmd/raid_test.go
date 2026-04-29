@@ -787,3 +787,134 @@ func TestExecute_nonInfoUpdateNotice(t *testing.T) {
 	// but this exercises both select branches across multiple runs.
 	_ = executeRoot([]string{"raid", "env", "list"})
 }
+
+// --- registerRepoCommands ---
+
+func TestRegisterRepoCommands_emptyRepos(t *testing.T) {
+	root := newTestRoot()
+	registerRepoCommands(root, nil)
+	if len(root.Commands()) != 0 {
+		t.Errorf("expected no subcommands, got %d", len(root.Commands()))
+	}
+}
+
+func TestRegisterRepoCommands_noCommandsSkipped(t *testing.T) {
+	root := newTestRoot()
+	registerRepoCommands(root, []lib.Repo{{Name: "empty"}})
+	if len(root.Commands()) != 0 {
+		t.Errorf("expected no subcommands for repo with no commands, got %d", len(root.Commands()))
+	}
+}
+
+func TestRegisterRepoCommands_appearsInHelp(t *testing.T) {
+	root := newTestRoot()
+	registerRepoCommands(root, []lib.Repo{{
+		Name:     "backend",
+		Commands: []lib.Command{{Name: "test", Usage: "Run backend tests"}},
+	}})
+
+	out := helpOutput(root)
+	if !strings.Contains(out, "backend") {
+		t.Errorf("help output missing repo name 'backend'\n\nfull output:\n%s", out)
+	}
+}
+
+func TestRegisterRepoCommands_repoSubcommands(t *testing.T) {
+	root := newTestRoot()
+	registerRepoCommands(root, []lib.Repo{{
+		Name: "api",
+		Commands: []lib.Command{
+			{Name: "test", Usage: "Run API tests"},
+			{Name: "migrate", Usage: "Run migrations"},
+		},
+	}})
+
+	var repoCmd *cobra.Command
+	for _, c := range root.Commands() {
+		if c.Name() == "api" {
+			repoCmd = c
+			break
+		}
+	}
+	if repoCmd == nil {
+		t.Fatal("expected 'api' subcommand on root")
+	}
+
+	var buf bytes.Buffer
+	repoCmd.SetOut(&buf)
+	repoCmd.SetErr(&buf)
+	_ = repoCmd.Help()
+	out := buf.String()
+	for _, want := range []string{"test", "Run API tests", "migrate", "Run migrations"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("repo help missing %q\n\nfull output:\n%s", want, out)
+		}
+	}
+}
+
+func TestRegisterRepoCommands_reservedNameSkipped(t *testing.T) {
+	root := newTestRoot()
+	var buf bytes.Buffer
+	root.SetErr(&buf)
+	registerRepoCommands(root, []lib.Repo{{
+		Name:     "install",
+		Commands: []lib.Command{{Name: "test"}},
+	}})
+
+	if len(root.Commands()) != 0 {
+		t.Error("repo with reserved name should not be registered")
+	}
+}
+
+func TestRegisterRepoCommands_conflictWithUserCommand(t *testing.T) {
+	root := newTestRoot()
+	registerUserCommands(root, []lib.Command{{Name: "deploy", Usage: "Deploy all"}})
+	registerRepoCommands(root, []lib.Repo{{
+		Name:     "deploy",
+		Commands: []lib.Command{{Name: "test"}},
+	}})
+
+	count := 0
+	for _, c := range root.Commands() {
+		if c.Name() == "deploy" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 'deploy' command (user cmd), got %d", count)
+	}
+}
+
+func TestRegisterRepoCommands_multipleRepos(t *testing.T) {
+	root := newTestRoot()
+	registerRepoCommands(root, []lib.Repo{
+		{Name: "backend", Commands: []lib.Command{{Name: "test"}}},
+		{Name: "frontend", Commands: []lib.Command{{Name: "build"}}},
+	})
+
+	names := map[string]bool{}
+	for _, c := range root.Commands() {
+		names[c.Name()] = true
+	}
+	if !names["backend"] || !names["frontend"] {
+		t.Errorf("expected both 'backend' and 'frontend', got %v", names)
+	}
+}
+
+func TestRegisterRepoCommands_runE(t *testing.T) {
+	setupTestConfig(t)
+	root := newTestRoot()
+	registerRepoCommands(root, []lib.Repo{{
+		Name:     "myrepo",
+		Commands: []lib.Command{{Name: "testcmd", Usage: "A test command"}},
+	}})
+
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"myrepo", "testcmd"})
+	err := root.Execute()
+	if err == nil {
+		t.Error("expected error with no context, got nil")
+	}
+}

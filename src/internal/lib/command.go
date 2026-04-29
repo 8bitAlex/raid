@@ -40,6 +40,14 @@ func GetCommands() []Command {
 	return context.Profile.Commands
 }
 
+// GetRepos returns the repositories in the active profile.
+func GetRepos() []Repo {
+	if context == nil {
+		return nil
+	}
+	return context.Profile.Repositories
+}
+
 // ExecuteCommand runs the tasks for the named command, applying any output configuration.
 // Args are exposed as RAID_ARG_1, RAID_ARG_2, ... environment variables for the duration
 // of the command and are unset afterwards.
@@ -53,6 +61,46 @@ func ExecuteCommand(name string, args []string) error {
 	}
 	if found.IsZero() {
 		return fmt.Errorf("command '%s' not found", name)
+	}
+
+	clearRaidArgs()
+	defer clearRaidArgs()
+	for i, arg := range args {
+		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
+	}
+
+	startSession()
+	defer endSession()
+
+	startedAt := RecordRecentStart(found.Name)
+	err := runCommand(found)
+	RecordRecentEnd(found.Name, err, startedAt)
+	return err
+}
+
+// ExecuteRepoCommand runs a command defined in a specific repository's raid.yaml.
+func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
+	repos := GetRepos()
+	var repo *Repo
+	for i := range repos {
+		if repos[i].Name == repoName {
+			repo = &repos[i]
+			break
+		}
+	}
+	if repo == nil {
+		return fmt.Errorf("repository '%s' not found", repoName)
+	}
+
+	var found Command
+	for _, cmd := range repo.Commands {
+		if cmd.Name == cmdName {
+			found = cmd
+			break
+		}
+	}
+	if found.IsZero() {
+		return fmt.Errorf("command '%s' not found in repository '%s'", cmdName, repoName)
 	}
 
 	clearRaidArgs()
