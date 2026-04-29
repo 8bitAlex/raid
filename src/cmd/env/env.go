@@ -1,13 +1,18 @@
 package env
 
 import (
+	"encoding/json"
+
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/8bitalex/raid/src/raid/env"
 	"github.com/spf13/cobra"
 )
 
+var showJSON bool
+
 func init() {
 	Command.AddCommand(ListEnvCmd)
+	Command.Flags().BoolVar(&showJSON, "json", false, "Emit machine-readable JSON output (only valid without an environment argument)")
 }
 
 var Command = &cobra.Command{
@@ -18,6 +23,12 @@ var Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			active := env.Get()
+			if showJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				_ = enc.Encode(envEntry{Name: active, Active: active != ""})
+				return
+			}
 			if active == "" {
 				cmd.PrintErrln("No active environment set.")
 			} else {

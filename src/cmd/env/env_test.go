@@ -2,6 +2,7 @@ package env
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -88,6 +89,70 @@ func TestCommand_noArgs_noActiveEnv(t *testing.T) {
 	got := buf.String()
 	if !strings.Contains(got, "No active environment set") {
 		t.Errorf("Command with no args: got %q, want 'No active environment set.'", got)
+	}
+}
+
+func TestCommand_noArgs_jsonNoActive(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { showJSON = false })
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(Command)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"env", "--json"})
+	_ = root.Execute()
+
+	var got envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if got.Name != "" || got.Active {
+		t.Errorf("got = %+v, want zero envEntry when no env set", got)
+	}
+}
+
+func TestCommand_noArgs_jsonWithActive(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { showJSON = false })
+	viper.Set("env", "staging")
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(Command)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"env", "--json"})
+	_ = root.Execute()
+
+	var got envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if got.Name != "staging" || !got.Active {
+		t.Errorf("got = %+v, want {Name:staging Active:true}", got)
+	}
+}
+
+func TestListEnvCmd_jsonEmpty(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { listJSON = false })
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(ListEnvCmd)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"list", "--json"})
+	_ = root.Execute()
+
+	var got []envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len(got) = %d, want 0", len(got))
 	}
 }
 

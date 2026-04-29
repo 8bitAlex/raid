@@ -42,3 +42,23 @@ raid doctor
 ```
 
 If everything is configured correctly you'll see all `OK` entries. Any `ERROR` entries need to be resolved before the affected features will work.
+
+## JSON output
+
+Pass `--json` to get a structured report — useful in CI checks or agent workflows. The exit code is unchanged: `1` when any finding has severity `error`, `0` otherwise.
+
+```bash
+raid doctor --json
+```
+
+```json
+{
+  "findings": [
+    { "severity": "ok", "check": "git", "message": "installed" },
+    { "severity": "warn", "check": "repo/api", "message": "not cloned at ~/dev/api", "suggestion": "Run `raid install api`" }
+  ],
+  "summary": { "ok": 1, "warnings": 1, "errors": 0 }
+}
+```
+
+Severity is one of `ok`, `warn`, or `error`. The `suggestion` field is omitted when empty.
