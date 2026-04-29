@@ -348,21 +348,47 @@ func setCmdOutput(cmd *exec.Cmd) {
 // as $FOO. Without this, raidVars only resolved via raid's pre-expansion of
 // the cmd string — which couldn't reach into a Script's source or into a
 // child process spawned from inside a Shell command.
+//
+// Entries with empty keys or with NUL / "=" bytes in the key (or NUL bytes
+// in the value) are silently dropped — those would either be re-parsed as
+// a different key at exec time or get rejected outright by the OS.
+// Defensive guard since Set / Prompt task input isn't yet schema-constrained.
 func buildSubprocessEnv() []string {
 	env := os.Environ()
 	if commandSession != nil {
 		commandSession.mu.RLock()
 		for k, v := range commandSession.vars {
-			env = append(env, k+"="+v)
+			if validEnvPair(k, v) {
+				env = append(env, k+"="+v)
+			}
 		}
 		commandSession.mu.RUnlock()
 	}
 	raidVarsMu.RLock()
 	for k, v := range raidVars {
-		env = append(env, k+"="+v)
+		if validEnvPair(k, v) {
+			env = append(env, k+"="+v)
+		}
 	}
 	raidVarsMu.RUnlock()
 	return env
+}
+
+// validEnvPair reports whether (key, value) is safe to inject into a
+// subprocess environment. NUL bytes terminate C strings and would corrupt
+// the entry; "=" in the key would be re-split into a different key by
+// exec at process-start time.
+func validEnvPair(key, value string) bool {
+	if key == "" {
+		return false
+	}
+	if strings.ContainsAny(key, "=\x00") {
+		return false
+	}
+	if strings.ContainsRune(value, '\x00') {
+		return false
+	}
+	return true
 }
 
 func execHTTP(task Task) error {

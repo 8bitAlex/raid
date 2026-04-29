@@ -1316,6 +1316,9 @@ func captureCommandStdout(t *testing.T) func() string {
 // variable must be visible in the env of a subsequent Script task's
 // subprocess.
 func TestExecScript_inheritsRaidVar(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
 	withRaidVar(t, "ISSUE20_FOO", "from-raid-var")
 	getOut := captureCommandStdout(t)
 
@@ -1333,6 +1336,9 @@ func TestExecScript_inheritsRaidVar(t *testing.T) {
 // expandRaid: raidVars beat OS env when names collide. The fix appends
 // raidVars last in cmd.Env so exec's last-occurrence-wins rule honors that.
 func TestExecScript_raidVarOverridesOSEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
 	const key = "ISSUE20_OVERRIDE"
 	t.Setenv(key, "from-os")
 	withRaidVar(t, key, "from-raid")
@@ -1354,6 +1360,9 @@ func TestExecScript_raidVarOverridesOSEnv(t *testing.T) {
 // `literal: true` skips raid's pre-expansion so resolution happens at the
 // child level instead.
 func TestExecShell_passesRaidVarToChildScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("direct .sh execution not supported on Windows")
+	}
 	withRaidVar(t, "ISSUE20_BAR", "from-raid-bar")
 	getOut := captureCommandStdout(t)
 
