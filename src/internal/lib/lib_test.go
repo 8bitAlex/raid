@@ -1060,6 +1060,70 @@ func TestSetRepoVars_skipsEmptyOrInvalidName(t *testing.T) {
 	}
 }
 
+func TestSetRepoVars_prunesStaleRepoEntries(t *testing.T) {
+	// Stale RAID_REPO_* keys (loaded from the persisted vars file or left
+	// over from a renamed/removed repo) must be pruned so they don't leak
+	// into tasks after the profile changes. Non-RAID_REPO entries stay.
+	withCleanRaidVars(t)
+	raidVarsMu.Lock()
+	raidVars["RAID_REPO_OLD_URL"] = "stale"
+	raidVars["RAID_REPO_OLD_PATH"] = "/old"
+	raidVars["RAID_REPO_OLD_BRANCH"] = "old-branch"
+	raidVars["MY_USER_VAR"] = "keep"
+	raidVarsMu.Unlock()
+
+	setRepoVars([]Repo{{Name: "api", Path: "/tmp/api", URL: "u"}})
+
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	for _, k := range []string{"RAID_REPO_OLD_URL", "RAID_REPO_OLD_PATH", "RAID_REPO_OLD_BRANCH"} {
+		if _, ok := raidVars[k]; ok {
+			t.Errorf("stale %q not pruned by setRepoVars", k)
+		}
+	}
+	if got, ok := raidVars["MY_USER_VAR"]; !ok || got != "keep" {
+		t.Errorf("non-RAID_REPO_ entry MY_USER_VAR = %q (ok=%v), want kept", got, ok)
+	}
+	if _, ok := raidVars["RAID_REPO_API_URL"]; !ok {
+		t.Error("new RAID_REPO_API_URL missing after prune+seed")
+	}
+}
+
+func TestSetRepoVars_warnsOnSanitizedNameCollision(t *testing.T) {
+	withCleanRaidVars(t)
+
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = origStderr })
+
+	setRepoVars([]Repo{
+		{Name: "my-api", Path: "/a", URL: "first"},
+		{Name: "my_api", Path: "/b", URL: "second"},
+	})
+	w.Close()
+
+	buf := make([]byte, 4096)
+	n, _ := r.Read(buf)
+	out := string(buf[:n])
+	for _, want := range []string{"my-api", "my_api", "MY_API"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("collision warning %q missing %q", out, want)
+		}
+	}
+
+	// Last repo in the list wins so behavior is deterministic.
+	raidVarsMu.RLock()
+	got := raidVars["RAID_REPO_MY_API_URL"]
+	raidVarsMu.RUnlock()
+	if got != "second" {
+		t.Errorf("RAID_REPO_MY_API_URL = %q, want last-wins value %q", got, "second")
+	}
+}
+
 func TestSetRepoVars_overwritesPriorEntries(t *testing.T) {
 	// Profile values are canonical: a stale RAID_REPO_API_URL from the
 	// persisted vars file must be replaced when the profile is loaded.

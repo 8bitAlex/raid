@@ -238,15 +238,30 @@ func ForceLoad() error {
 // path. Repos with empty fields contribute empty values; URL/BRANCH entries
 // are still defined so unset references don't fall through to the OS env.
 // Profile values overwrite anything from the persisted vars file — the
-// profile is canonical.
+// profile is canonical, so any stale RAID_REPO_* keys (from a removed or
+// renamed repo persisted to ~/.raid/vars) are pruned first. Sanitized-name
+// collisions between repos (e.g. "my-api" and "my_api" both → MY_API) are
+// reported to stderr; the last repo wins so behavior is deterministic.
 func setRepoVars(repos []Repo) {
 	raidVarsMu.Lock()
 	defer raidVarsMu.Unlock()
+	for k := range raidVars {
+		if strings.HasPrefix(k, "RAID_REPO_") {
+			delete(raidVars, k)
+		}
+	}
+	seen := make(map[string]string, len(repos))
 	for _, repo := range repos {
 		key := sanitizeRepoVarName(repo.Name)
 		if key == "" {
 			continue
 		}
+		if prev, ok := seen[key]; ok && prev != repo.Name {
+			fmt.Fprintf(os.Stderr,
+				"raid: warning: repos %q and %q both map to RAID_REPO_%s_*; %q wins\n",
+				prev, repo.Name, key, repo.Name)
+		}
+		seen[key] = repo.Name
 		raidVars["RAID_REPO_"+key+"_URL"] = repo.URL
 		raidVars["RAID_REPO_"+key+"_PATH"] = sys.ExpandPath(repo.Path)
 		raidVars["RAID_REPO_"+key+"_BRANCH"] = repo.Branch
