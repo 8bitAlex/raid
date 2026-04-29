@@ -100,7 +100,7 @@ const config: Config = {
               to: '/docs/overview',
             },
             {
-              label: "What's New",
+              label: 'What\'s New',
               to: '/docs/whats-new',
             },
             {
