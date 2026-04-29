@@ -57,6 +57,7 @@ When a developer runs any raid command, it executes against the right repo, in t
 - **Consistent environments** — define local, staging, and production environments once. `raid env staging` applies the right variables and tasks across every repo in a single command.
 - **Full system orchestration** — manage any number of repos as a single unit. Clone, configure, and run them together or individually.
 - **Rich task runner** — 11 built-in task types: shell commands, scripts, HTTP downloads, git operations, health checks, template rendering, prompts, confirmations, and more.
+- **AI-ready context** — `raid context` emits an MCP-shaped snapshot of the workspace, and `raid context serve` runs raid as an MCP server so AI agents can read repo state and invoke commands directly.
 - **Portable** — config is just YAML in the repo. Works on macOS, Linux, and Windows.
 
 ---
@@ -163,6 +164,14 @@ Clones run concurrently. Use `-t` to cap the number of concurrent clone threads.
 - `raid env <name>` — apply a named environment: writes `.env` files into each repo and runs environment tasks
 - `raid env` — show the currently active environment
 - `raid env list` — list available environments
+
+### `raid context`
+
+Print a condensed snapshot of the active workspace — profile, environment, repos with live git state, custom commands, and recent command-run history.
+
+- `raid context` — human-readable summary
+- `raid context --json` — MCP-shaped JSON for AI agents
+- `raid context serve` — run raid as a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, exposing workspace state as resources and raid actions (`raid_install`, `raid_env_switch`, `raid_run_task`, …) as tools
 
 ### `raid doctor`
 
@@ -529,6 +538,14 @@ commands:
 ```
 ```bash
 raid deploy staging v1.2.3   # $RAID_ARG_1=staging, $RAID_ARG_2=v1.2.3
+```
+
+**Repo metadata** — every repository in the active profile is auto-exposed as `RAID_REPO_<NAME>_URL`, `RAID_REPO_<NAME>_PATH`, and `RAID_REPO_<NAME>_BRANCH`. The name is uppercased with non-alphanumerics replaced by `_` (so `my-api` becomes `RAID_REPO_MY_API_URL`).
+
+```yaml
+- type: Shell
+  cmd: gh pr create --repo $RAID_REPO_MY_API_URL --base $RAID_REPO_MY_API_BRANCH
+  path: $RAID_REPO_MY_API_PATH
 ```
 
 ---
