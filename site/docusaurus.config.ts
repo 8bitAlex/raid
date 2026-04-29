@@ -74,6 +74,12 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          type: 'doc',
+          docId: 'whats-new',
+          position: 'left',
+          label: 'What\'s New',
+        },
+        {
           type: 'search',
           position: 'right',
         },

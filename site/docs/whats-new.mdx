@@ -1,0 +1,50 @@
+---
+title: What's New
+sidebar_position: 50
+slug: /whats-new
+description: Feature-by-feature release notes for Raid.
+---
+
+# What's New
+
+User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
+
+## 0.7.0 — upcoming
+
+**MCP server.** `raid context serve` runs raid as a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so MCP-aware hosts (Claude Code, Cursor, Cline) can read the active workspace as resources and invoke raid tools (`raid_install`, `raid_env_switch`, `raid_run_task`, `raid_list_profiles`, `raid_list_repos`, `raid_describe_repo`) directly. Output from mutating tools is captured into the tool result so it doesn't corrupt JSON-RPC framing on stdout. See [Context → MCP server](/docs/usage/context).
+
+**Set variables reach subprocesses.** Variables defined by a `Set` task are now exported as environment variables to Script and Shell task subprocesses, so a script's source can reference `$VAR` directly without raid pre-expanding the script body. Raid values take precedence over OS-environment variables of the same name.
+
+**Cross-process mutation lock.** A `flock`-backed lock at `~/.raid/.lock` serializes mutating operations across any combination of CLI usage and MCP-driven tool calls — concurrent installs or env switches from two raid processes now wait for one another instead of racing on `~/.raid/config.toml` or repository state. Read paths are unaffected.
+
+## 0.6.0 — upcoming
+
+**`raid context` command.** A condensed, token-efficient snapshot of the active workspace — profile, environment, repositories with live git state, user-defined commands, and recent command-run history. Use `raid context` for human-readable output or `raid context --json` for an MCP-shaped JSON document agents can paste into a chat.
+
+**Recent command-run log.** `raid <command>` invocations are recorded to `~/.raid/recent.json` (capped at 10 entries) with status, exit code, duration, and timestamp. Surfaced both in `raid context` output and as the `raid://workspace/recent` MCP resource. Commands killed mid-execution are reported as `interrupted` instead of vanishing.
+
+**Named task steps.** Tasks gained an optional `name` field. When set, those names appear as a `steps` outline under the parent command in `raid context` — letting agents see *what* a command does without exposing the underlying scripts. Schema also refactored to a shared `taskCommon` `$ref` so future shared task properties can be added in a single place.
+
+## 0.5.0 – 0.5.3 — April 2026
+
+- Shared stdin reader across `Prompt` and `Confirm` tasks so consecutive prompts read cleanly without buffer interleaving ([#39](https://github.com/8bitalex/raid/pull/39))
+- Mobile-friendly docsite refresh and consolidated build process ([#36](https://github.com/8bitalex/raid/pull/36))
+- SEO + LLM-friendly README, `llms.txt`, page metadata, and social card ([#35](https://github.com/8bitalex/raid/pull/35))
+- Path resolution consistency improvements ([#37](https://github.com/8bitalex/raid/pull/37))
+
+## 0.4.0 – 0.4.1 — March 2026
+
+**`Set` task type.** A dedicated task for defining a variable that persists for the duration of the command session, with the highest precedence in raid's lookup order ([#17](https://github.com/8bitalex/raid/pull/17)).
+
+**Single-repo install.** `raid install <repo>` clones and installs just the named repo from the active profile, instead of all of them ([#19](https://github.com/8bitalex/raid/pull/19)).
+
+**Command session management.** Variables exported by a `Shell` task (`export FOO=bar`) survive into subsequent tasks in the same `raid <command>` invocation. Resets cleanly between separate command runs ([#18](https://github.com/8bitalex/raid/pull/18)).
+
+## 0.3.0 – 0.3.8 — March 2026
+
+- User commands accept positional arguments via `RAID_ARG_1`, `RAID_ARG_2`, … ([#15](https://github.com/8bitalex/raid/pull/15))
+- User-defined commands now appear in `raid --help` output ([#16](https://github.com/8bitalex/raid/pull/16))
+
+## 0.1.0 – 0.2.x — March 2026
+
+Initial public beta. Cross-platform Go CLI with declarative YAML profiles, per-repo `raid.yaml` configs, install / env / custom-command flows, eleven task types (Shell, Script, Set, Git, HTTP, Wait, Prompt, Confirm, Print, Template, Group), JSON Schema validation, and stable + preview release channels.
