@@ -977,3 +977,153 @@ func TestInstallRepo_installTaskError(t *testing.T) {
 		t.Errorf("error %q should mention install task failure", err.Error())
 	}
 }
+
+func TestSanitizeRepoVarName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"api", "API"},
+		{"my-api", "MY_API"},
+		{"frontend.web", "FRONTEND_WEB"},
+		{"Foo Bar", "FOO_BAR"},
+		{"svc1", "SVC1"},
+		{"_leading", "_LEADING"},
+		{"", ""},
+		{"---", ""},
+	}
+	for _, c := range cases {
+		if got := sanitizeRepoVarName(c.in); got != c.want {
+			t.Errorf("sanitizeRepoVarName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// withCleanRaidVars resets raidVars for the duration of the test so the
+// caller can assert on entries seeded during the test in isolation.
+func withCleanRaidVars(t *testing.T) {
+	t.Helper()
+	raidVarsMu.Lock()
+	prev := raidVars
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+	t.Cleanup(func() {
+		raidVarsMu.Lock()
+		raidVars = prev
+		raidVarsMu.Unlock()
+	})
+}
+
+func TestSetRepoVars_populatesAllFields(t *testing.T) {
+	withCleanRaidVars(t)
+
+	setRepoVars([]Repo{
+		{Name: "api", Path: "/tmp/api", URL: "https://github.com/example/api.git", Branch: "main"},
+		{Name: "my-web", Path: "/tmp/web", URL: "git@github.com:example/web.git", Branch: ""},
+	})
+
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	checks := map[string]string{
+		"RAID_REPO_API_URL":       "https://github.com/example/api.git",
+		"RAID_REPO_API_PATH":      "/tmp/api",
+		"RAID_REPO_API_BRANCH":    "main",
+		"RAID_REPO_MY_WEB_URL":    "git@github.com:example/web.git",
+		"RAID_REPO_MY_WEB_PATH":   "/tmp/web",
+		"RAID_REPO_MY_WEB_BRANCH": "",
+	}
+	for k, want := range checks {
+		got, ok := raidVars[k]
+		if !ok {
+			t.Errorf("raidVars missing %q", k)
+			continue
+		}
+		if got != want {
+			t.Errorf("raidVars[%q] = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestSetRepoVars_skipsEmptyOrInvalidName(t *testing.T) {
+	withCleanRaidVars(t)
+
+	setRepoVars([]Repo{
+		{Name: "", Path: "/tmp/x", URL: "u"},
+		{Name: "---", Path: "/tmp/y", URL: "u"},
+	})
+
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	for k := range raidVars {
+		if strings.HasPrefix(k, "RAID_REPO_") {
+			t.Errorf("raidVars unexpectedly contains %q for empty/invalid repo name", k)
+		}
+	}
+}
+
+func TestSetRepoVars_overwritesPriorEntries(t *testing.T) {
+	// Profile values are canonical: a stale RAID_REPO_API_URL from the
+	// persisted vars file must be replaced when the profile is loaded.
+	withCleanRaidVars(t)
+	raidVarsMu.Lock()
+	raidVars["RAID_REPO_API_URL"] = "stale"
+	raidVarsMu.Unlock()
+
+	setRepoVars([]Repo{{Name: "api", Path: "/tmp/api", URL: "fresh"}})
+
+	raidVarsMu.RLock()
+	got := raidVars["RAID_REPO_API_URL"]
+	raidVarsMu.RUnlock()
+	if got != "fresh" {
+		t.Errorf("RAID_REPO_API_URL = %q after setRepoVars, want %q", got, "fresh")
+	}
+}
+
+func TestForceLoad_seedsRepoVars(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	// Redirect the persisted vars file so the user's real ~/.raid/vars
+	// doesn't bleed into this test.
+	oldVarsPath := raidVarsOverridePath
+	t.Cleanup(func() { raidVarsOverridePath = oldVarsPath })
+	raidVarsOverridePath = filepath.Join(t.TempDir(), "vars")
+
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "myrepo")
+	os.MkdirAll(filepath.Join(repoDir, ".git"), 0755)
+
+	profilePath := filepath.Join(dir, "profile.yaml")
+	content := "name: testprofile\nrepositories:\n  - name: my-api\n    path: " + repoDir + "\n    url: https://example.com/repo.git\n    branch: main\n"
+	if err := os.WriteFile(profilePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(wd)
+
+	if err := AddProfile(Profile{Name: "testprofile", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("testprofile"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad: %v", err)
+	}
+
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	checks := map[string]string{
+		"RAID_REPO_MY_API_URL":    "https://example.com/repo.git",
+		"RAID_REPO_MY_API_PATH":   repoDir,
+		"RAID_REPO_MY_API_BRANCH": "main",
+	}
+	for k, want := range checks {
+		if got := raidVars[k]; got != want {
+			t.Errorf("raidVars[%q] after ForceLoad = %q, want %q", k, got, want)
+		}
+	}
+}
