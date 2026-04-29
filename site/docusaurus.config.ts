@@ -99,6 +99,26 @@ const config: Config = {
               label: 'Getting Started',
               to: '/docs/overview',
             },
+            {
+              label: 'What\'s New',
+              to: '/docs/whats-new',
+            },
+            {
+              label: 'Usage',
+              to: '/docs/category/usage',
+            },
+            {
+              label: 'Features',
+              to: '/docs/category/features',
+            },
+            {
+              label: 'Examples',
+              to: '/docs/category/examples',
+            },
+            {
+              label: 'References',
+              to: '/docs/category/references',
+            },
           ],
         },
         {
@@ -107,6 +127,25 @@ const config: Config = {
             {
               label: 'GitHub',
               href: 'https://github.com/8bitalex/raid',
+            },
+            {
+              label: 'Product Hunt',
+              href: 'https://www.producthunt.com/products/raid',
+            },
+            {
+              label: 'Launch Llama',
+              href: 'https://tools.launchllama.co/products/raid',
+            },
+          ],
+        },
+        {
+          title: 'Featured On',
+          items: [
+            {
+              html: `<a href="https://launchllama.co?utm_source=badge&utm_medium=referral" target="_blank" rel="noopener noreferrer"><img src="/img/launch-llama-badge.png" alt="Featured on Launch Llama" width="200" height="50" /></a>`,
+            },
+            {
+              html: `<a href="https://www.producthunt.com/products/raid?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-raid" target="_blank" rel="noopener noreferrer"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1128226&theme=neutral&t=1776801713624" alt="Featured on Product Hunt" width="200" height="43" /></a>`,
             },
           ],
         },

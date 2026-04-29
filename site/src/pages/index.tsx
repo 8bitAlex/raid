@@ -13,7 +13,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import styles from './index.module.css';
 
 function CostSavings() {
-  const HOURS_INCREMENT = 48;
+  const HOURS_INCREMENT = 8;
   const RATE = 150;
   const RAMP_DUR = 800;
   const PAUSE_DUR = 4000;
