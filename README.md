@@ -177,6 +177,10 @@ Print a condensed snapshot of the active workspace — profile, environment, rep
 
 Check the current configuration for issues and get suggestions for fixing them. Useful after initial setup or when something isn't working as expected.
 
+### JSON output for read commands
+
+Read commands accept `--json` for scriptable, machine-readable output: `raid profile list`, `raid env`, `raid env list`, `raid doctor`, and `raid context`. Output shapes are stable; severity strings in `doctor` are one of `ok`, `warn`, `error`.
+
 ### `raid <command>`
 
 Run a custom command defined in the active profile or any of its repositories.

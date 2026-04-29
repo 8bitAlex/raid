@@ -58,6 +58,21 @@ Remove a profile:
 raid profile remove my-team
 ```
 
+## JSON output
+
+`raid profile list` accepts `--json` for scriptable, machine-readable output. The result is an array of objects with `name`, `path`, and a boolean `active` flag for the currently selected profile.
+
+```bash
+raid profile list --json
+```
+
+```json
+[
+  { "name": "team", "path": "/Users/me/team.raid.yaml", "active": true },
+  { "name": "personal", "path": "/Users/me/personal.raid.yaml", "active": false }
+]
+```
+
 ## Profile files
 
 A profile is a YAML file describing repositories, environments, install tasks, and custom commands. See [Profile Configuration](/docs/features/profiles) for the full format.

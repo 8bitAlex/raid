@@ -2,6 +2,7 @@ package env
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -91,6 +92,89 @@ func TestCommand_noArgs_noActiveEnv(t *testing.T) {
 	}
 }
 
+func TestCommand_noArgs_jsonNoActive(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { showJSON = false })
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(Command)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"env", "--json"})
+	_ = root.Execute()
+
+	var got envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if got.Name != "" || got.Active {
+		t.Errorf("got = %+v, want zero envEntry when no env set", got)
+	}
+}
+
+func TestCommand_noArgs_jsonWithActive(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { showJSON = false })
+	viper.Set("env", "staging")
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(Command)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"env", "--json"})
+	_ = root.Execute()
+
+	var got envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if got.Name != "staging" || !got.Active {
+		t.Errorf("got = %+v, want {Name:staging Active:true}", got)
+	}
+}
+
+func TestListEnvCmd_jsonEmpty(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { listJSON = false })
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(ListEnvCmd)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"list", "--json"})
+	_ = root.Execute()
+
+	var got []envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len(got) = %d, want 0", len(got))
+	}
+}
+
+func TestCommand_jsonWithArgument_isError(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { showJSON = false })
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.AddCommand(Command)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"env", "anything", "--json"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected error when --json is combined with an argument, got nil")
+	} else if !strings.Contains(err.Error(), "--json") {
+		t.Errorf("error %q should mention --json", err.Error())
+	}
+}
+
 func TestCommand_envNotFound(t *testing.T) {
 	setupConfig(t)
 
@@ -118,7 +202,7 @@ func TestCommand_noArgs_withActiveEnv(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	Command.Run(fakeCmd, []string{})
+	_ = Command.RunE(fakeCmd, []string{})
 
 	got := buf.String()
 	if !strings.Contains(got, "Active environment") {
@@ -238,6 +322,39 @@ func TestListEnvCmd_withEnvironments(t *testing.T) {
 	}
 }
 
+func TestListEnvCmd_jsonWithEnvironments(t *testing.T) {
+	setupConfigWithEnv(t, "list-json-profile", "staging")
+	t.Cleanup(func() { listJSON = false })
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.AddCommand(ListEnvCmd)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"list", "--json"})
+	_ = root.Execute()
+
+	var got []envEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), err)
+	}
+	if len(got) == 0 {
+		t.Fatalf("got 0 entries, want >=1; output=%q", buf.String())
+	}
+	found := false
+	for _, e := range got {
+		if e.Name == "staging" {
+			found = true
+			if e.Active {
+				t.Errorf("staging entry Active = true, want false (env not loaded)")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("staging missing from %+v", got)
+	}
+}
+
 func TestCommand_envFound_fullSuccess(t *testing.T) {
 	setupConfigWithEnv(t, "success-profile", "prod")
 
@@ -245,7 +362,7 @@ func TestCommand_envFound_fullSuccess(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	Command.Run(fakeCmd, []string{"prod"})
+	_ = Command.RunE(fakeCmd, []string{"prod"})
 
 	got := buf.String()
 	if !strings.Contains(got, "Environment executed successfully") {
@@ -267,7 +384,7 @@ func TestCommand_envFound_forceLoadError(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	Command.Run(fakeCmd, []string{"failing"})
+	_ = Command.RunE(fakeCmd, []string{"failing"})
 
 	got := buf.String()
 	if !strings.Contains(got, "Failed to reload profile") {
@@ -328,7 +445,7 @@ func TestCommand_envFound_executeError(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	Command.Run(fakeCmd, []string{"badenv"})
+	_ = Command.RunE(fakeCmd, []string{"badenv"})
 
 	got := buf.String()
 	if !strings.Contains(got, "Failed to execute environment") {
@@ -357,7 +474,7 @@ func TestCommand_envSetError(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	Command.Run(fakeCmd, []string{"dev"})
+	_ = Command.RunE(fakeCmd, []string{"dev"})
 
 	got := buf.String()
 	if !strings.Contains(got, "Failed to switch environment") {

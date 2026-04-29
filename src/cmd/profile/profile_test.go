@@ -3,6 +3,7 @@ package profile
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -131,6 +132,61 @@ func TestListProfileCmd_withProfiles(t *testing.T) {
 	})
 	if !strings.Contains(out, "listed") {
 		t.Errorf("ListProfileCmd with profiles: got %q, want 'listed'", out)
+	}
+}
+
+func TestListProfileCmd_jsonEmpty(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { listJSON = false })
+	out := captureStdout(t, func() {
+		root := &cobra.Command{Use: "raid"}
+		root.AddCommand(ListProfileCmd)
+		root.SetArgs([]string{"list", "--json"})
+		_ = root.Execute()
+	})
+	var got []profileEntry
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", out, err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len(got) = %d, want 0", len(got))
+	}
+}
+
+func TestListProfileCmd_jsonWithProfiles(t *testing.T) {
+	setupConfig(t)
+	t.Cleanup(func() { listJSON = false })
+	if err := lib.AddProfile(lib.Profile{Name: "alpha", Path: "/a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "beta", Path: "/b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("beta"); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		root := &cobra.Command{Use: "raid"}
+		root.AddCommand(ListProfileCmd)
+		root.SetArgs([]string{"list", "--json"})
+		_ = root.Execute()
+	})
+	var got []profileEntry
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", out, err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	byName := map[string]profileEntry{}
+	for _, e := range got {
+		byName[e.Name] = e
+	}
+	if e := byName["beta"]; !e.Active || e.Path != "/b" {
+		t.Errorf("beta entry = %+v, want active with path /b", e)
+	}
+	if e := byName["alpha"]; e.Active || e.Path != "/a" {
+		t.Errorf("alpha entry = %+v, want inactive with path /a", e)
 	}
 }
 
