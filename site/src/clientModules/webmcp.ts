@@ -2,7 +2,7 @@
 // https://webmachinelearning.github.io/webmcp/
 let controller: AbortController | null = null;
 
-export function onRouteDidUpdate(): void {
+function registerMcpTools(): void {
   if (typeof navigator === 'undefined' || !('modelContext' in navigator)) {
     return;
   }
@@ -66,4 +66,10 @@ export function onRouteDidUpdate(): void {
     },
     signal,
   });
+}
+
+// Run immediately when the module loads and on every route change.
+registerMcpTools();
+export function onRouteDidUpdate(): void {
+  registerMcpTools();
 }
