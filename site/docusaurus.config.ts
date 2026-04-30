@@ -35,6 +35,7 @@ const config: Config = {
         docsRouteBasePath: '/docs',
       },
     ],
+    './plugins/posthog',
   ],
 
   presets: [
