@@ -55,7 +55,8 @@ const config: Config = {
           'posthog-docusaurus',
           {
             apiKey: process.env.POSTHOG_API_KEY,
-            appUrl: process.env.POSTHOG_HOST,
+            appUrl: 'https://raidcli.dev/ingest',
+            ui_host: process.env.POSTHOG_HOST,
             enableInDevelopment: false,
           },
         ]]
