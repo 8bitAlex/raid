@@ -112,9 +112,10 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
 	startSession()
 	defer endSession()
 
-	startedAt := RecordRecentStart(found.Name)
+	recentName := repoName + ":" + found.Name
+	startedAt := RecordRecentStart(recentName)
 	err := runCommand(found)
-	RecordRecentEnd(found.Name, err, startedAt)
+	RecordRecentEnd(recentName, err, startedAt)
 	return err
 }
 

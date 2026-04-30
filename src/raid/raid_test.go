@@ -165,6 +165,20 @@ func TestExecuteCommand_noContext(t *testing.T) {
 	}
 }
 
+func TestGetRepos_emptyState(t *testing.T) {
+	setupConfig(t)
+	repos := GetRepos()
+	_ = repos
+}
+
+func TestExecuteRepoCommand_noContext(t *testing.T) {
+	setupConfig(t)
+	err := ExecuteRepoCommand("repo", "cmd", nil)
+	if err == nil {
+		t.Fatal("ExecuteRepoCommand() expected error with no context, got nil")
+	}
+}
+
 func TestInitialize_withTempConfig(t *testing.T) {
 	dir := t.TempDir()
 	old := lib.CfgPath
