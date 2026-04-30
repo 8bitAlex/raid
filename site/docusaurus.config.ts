@@ -27,6 +27,8 @@ const config: Config = {
     locales: ['en'],
   },
 
+  clientModules: [require.resolve('./src/clientModules/webmcp.ts')],
+
   plugins: [
     [
       '@easyops-cn/docusaurus-search-local',

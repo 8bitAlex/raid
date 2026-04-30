@@ -1,0 +1,13 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://raidcli.dev/",
+      "service-doc": [
+        { "href": "https://raidcli.dev/docs", "type": "text/html" }
+      ],
+      "describedby": [
+        { "href": "https://raidcli.dev/docs/references/schema", "type": "text/html" }
+      ]
+    }
+  ]
+}

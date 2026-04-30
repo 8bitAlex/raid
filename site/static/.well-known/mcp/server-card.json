@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "serverInfo": {
+    "name": "raid",
+    "version": "0.7.4-beta",
+    "description": "Distributed development environment orchestrator. Manages multi-repo workflows, environments, and tasks via an MCP stdio server."
+  },
+  "transport": [
+    {
+      "type": "stdio",
+      "command": "raid context serve"
+    }
+  ],
+  "capabilities": {
+    "tools": [
+      { "name": "raid_install",       "description": "Clone repositories and run install tasks for the active profile" },
+      { "name": "raid_env_switch",    "description": "Switch to a named environment and run its tasks" },
+      { "name": "raid_run_task",      "description": "Execute a named command from the active profile" },
+      { "name": "raid_list_profiles", "description": "List all available profiles" },
+      { "name": "raid_list_repos",    "description": "List repositories in the active profile" },
+      { "name": "raid_describe_repo", "description": "Get details about a specific repository by name or path" }
+    ]
+  },
+  "documentation": "https://raidcli.dev/docs/usage/context"
+}

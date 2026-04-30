@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agentskills.io/schema/v0.2.0/index.schema.json",
+  "skills": [
+    {
+      "name": "raid-mcp-server",
+      "type": "mcp",
+      "description": "MCP stdio server exposing raid tools for managing multi-repo development environments. Install raid and run `raid context serve` to activate.",
+      "url": "https://raidcli.dev/.well-known/mcp/server-card.json"
+    }
+  ]
+}
