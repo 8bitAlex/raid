@@ -29,6 +29,19 @@ const config: Config = {
 
   clientModules: [require.resolve('./src/clientModules/webmcp.ts')],
 
+  headTags: [
+    {
+      tagName: 'script',
+      attributes: {},
+      innerHTML: `(function(){
+  if(typeof navigator==='undefined'||!('modelContext' in navigator))return;
+  var s=(new AbortController()).signal;
+  navigator.modelContext.registerTool({name:'navigate_to_docs',description:'Navigate to a section of the raid documentation.',inputSchema:{type:'object',properties:{section:{type:'string',enum:['overview','usage','features','examples','references','whats-new']}},required:['section']},execute:function(p){var m={overview:'/docs/overview',usage:'/docs/category/usage',features:'/docs/category/features',examples:'/docs/category/examples',references:'/docs/category/references','whats-new':'/docs/whats-new'};window.location.href=m[p.section]||'/docs/overview';},signal:s});
+  navigator.modelContext.registerTool({name:'get_install_command',description:'Returns the command to install raid on the current platform.',inputSchema:{type:'object',properties:{platform:{type:'string',enum:['macos','linux','windows']}},required:['platform']},execute:function(p){var c={macos:'brew install 8bitalex/tap/raid',linux:'curl -sSL https://github.com/8bitalex/raid/releases/latest/download/raid_linux_amd64.tar.gz | tar -xz && sudo mv raid /usr/local/bin/',windows:'scoop bucket add 8bitalex https://github.com/8bitalex/scoop-bucket && scoop install raid'};return c[p.platform]||c.macos;},signal:s});
+})();`,
+    },
+  ],
+
   plugins: [
     [
       '@easyops-cn/docusaurus-search-local',
