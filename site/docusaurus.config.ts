@@ -35,14 +35,16 @@ const config: Config = {
         docsRouteBasePath: '/docs',
       },
     ],
-    [
-      'posthog-docusaurus',
-      {
-        apiKey: 'phc_w823aLMew2MjPSi9zP93DfYxT8nPjZKFFgCBZgbH2mKT',
-        appUrl: 'https://us.i.posthog.com',
-        enableInDevelopment: false,
-      },
-    ],
+    ...(process.env.POSTHOG_API_KEY
+      ? [[
+          'posthog-docusaurus',
+          {
+            apiKey: process.env.POSTHOG_API_KEY,
+            appUrl: process.env.POSTHOG_HOST,
+            enableInDevelopment: false,
+          },
+        ]]
+      : []),
   ],
 
   presets: [
