@@ -83,9 +83,26 @@ commands:
 
 When `out` is omitted entirely, both stdout and stderr are shown. When `out` is present, only streams explicitly set to `true` are displayed. The `file` field writes both stdout and stderr to the specified path regardless of the `stdout`/`stderr` settings.
 
+## Repo-scoped commands
+
+When a profile and a repository define commands with the same name, the profile's version takes priority for `raid <command>`. To explicitly target a specific repository's command, use:
+
+```bash
+raid <repo-name> <command>
+```
+
+For example, if both the profile and the `backend` repo define a `test` command:
+
+```bash
+raid test           # runs the profile-level "test"
+raid backend test   # runs the backend repo's "test"
+```
+
+Each repository that defines commands appears as a subcommand in `raid --help`. Run `raid <repo> --help` to see that repo's available commands.
+
 ## Constraints
 
-Custom command names cannot shadow built-in names: `profile`, `install`, `env`, `doctor`.
+Custom command names cannot shadow reserved built-in CLI names: `profile`, `install`, `env`, `doctor`, `context`, `help`, `version`, `completion`.
 
 ## Running tasks in parallel
 

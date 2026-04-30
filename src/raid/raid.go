@@ -102,6 +102,11 @@ func GetCommands() []lib.Command {
 	return lib.GetCommands()
 }
 
+// GetRepos returns the repositories in the active profile.
+func GetRepos() []lib.Repo {
+	return lib.GetRepos()
+}
+
 // QuietGetCommands performs a best-effort, read-only profile load and returns
 // the available commands. It does not create config files or emit warnings, and
 // returns nil if the config is absent or loading fails.
@@ -112,6 +117,11 @@ func QuietGetCommands() []lib.Command {
 // ExecuteCommand runs the named command from the active profile.
 func ExecuteCommand(name string, args []string) error {
 	return lib.ExecuteCommand(name, args)
+}
+
+// ExecuteRepoCommand runs a command defined in a specific repository's raid.yaml.
+func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
+	return lib.ExecuteRepoCommand(repoName, cmdName, args)
 }
 
 // Severity indicates the importance of a Doctor finding.
