@@ -5,7 +5,7 @@
       "service-doc": [
         { "href": "https://raidcli.dev/docs", "type": "text/html" }
       ],
-      "describedby": [
+      "service-desc": [
         { "href": "https://raidcli.dev/docs/references/schema", "type": "text/html" }
       ]
     }
