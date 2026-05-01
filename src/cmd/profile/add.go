@@ -21,9 +21,21 @@ var (
 )
 
 var AddProfileCmd = &cobra.Command{
-	Use:   "add filepath",
-	Short: "Add profile(s) from YAML or JSON file",
-	Args:  cobra.ExactArgs(1),
+	Use:   "add <path|url>",
+	Short: "Add profile(s) from a local file or URL",
+	Long: `Add one or more profiles from a local file, a git repository URL, or a raw file URL.
+
+Local path: the file is validated and registered directly.
+
+Git URL (git@ prefix, .git suffix, or any HTTP URL that responds to git ls-remote):
+  raid shallow-clones the repo and imports *.raid.yaml, *.raid.yml, and profile.json
+  files found at the root.
+
+Raw file URL (HTTP/HTTPS URL ending in .yaml, .yml, or .json):
+  the file is downloaded, validated, and registered.
+
+Profiles from URLs are saved to ~/<name>.raid.yaml before registration.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		code := runAddProfile(args[0])
 		if code != 0 {

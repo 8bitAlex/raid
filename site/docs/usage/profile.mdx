@@ -10,6 +10,8 @@ Manage profiles — create, register, switch, and remove.
 raid profile <subcommand>
 ```
 
+`raid p` is a shorthand alias for `raid profile`.
+
 ## Subcommands
 
 | Subcommand | Description |
@@ -28,25 +30,35 @@ Create a new profile interactively:
 raid profile create
 ```
 
-Add a profile from a git repository (raid shallow-clones it and looks for `*.raid.yaml`, `*.raid.yml`, and `profile.json` files at the repo root):
+Add a profile from a local file:
+
+```bash
+raid profile add ./my-profile.yaml
+```
+
+Add a profile from a git repository — raid shallow-clones it and imports `*.raid.yaml`, `*.raid.yml`, and `profile.json` files found at the root:
 
 ```bash
 raid profile add https://github.com/my-org/raid-profiles
 raid profile add git@github.com:my-org/raid-profiles.git
 ```
 
-Add a profile from a raw URL pointing directly to a YAML or JSON file:
+Add a profile from a raw file URL (HTTP/HTTPS URL ending in `.yaml`, `.yml`, or `.json`):
 
 ```bash
 raid profile add https://example.com/team-profile.yaml
 raid profile add https://raw.githubusercontent.com/my-org/repo/main/team.raid.yaml
 ```
 
-The profile is saved to `~/<name>.raid.yaml` and registered automatically. If the argument has no URL scheme it is treated as a local file path:
+**URL type detection.** Raid picks the right strategy automatically:
 
-```bash
-raid profile add ./my-profile.yaml
-```
+| URL form | Strategy |
+|---|---|
+| `git@…` prefix or `.git` suffix | Git clone |
+| HTTP/HTTPS ending in `.yaml` / `.yml` / `.json` | Direct download |
+| Any other HTTP/HTTPS URL | Probed with `git ls-remote`; cloned if it responds, otherwise downloaded |
+
+Profiles fetched from a URL are saved to `~/<name>.raid.yaml` and registered automatically. If no active profile is set, the first imported profile becomes active.
 
 List all profiles and see which is active:
 

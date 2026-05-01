@@ -134,7 +134,7 @@ raid profile create   # interactive wizard: name your profile and add repositori
 raid install          # clone repos and run install tasks
 ```
 
-You can also write a profile file manually (see [Configuration](#configuration)) and register it with `raid profile add <file>`.
+You can also write a profile file manually (see [Configuration](#configuration)) and register it with `raid profile add <path|url>`.
 
 ---
 
@@ -145,7 +145,7 @@ You can also write a profile file manually (see [Configuration](#configuration))
 Manage profiles. A profile is a named collection of repositories and environments.
 
 - `raid profile create` — interactive wizard to create and register a new profile
-- `raid profile add <file>` — register profiles from a YAML or JSON file
+- `raid profile add <path|url>` — register profiles from a local file, a git repo URL, or a raw file URL
 - `raid profile list` — list all registered profiles
 - `raid profile <name>` — switch the active profile
 - `raid profile remove <name>` — remove a profile
@@ -528,7 +528,7 @@ commands:
       file: $DEPLOY_LOG    # also write all output here; supports $VAR expansion
 ```
 
-**`name`** (required) — the subcommand name; e.g. `name: deploy` is invoked as `raid deploy`. Cannot shadow built-in names (`profile`, `install`, `env`, `doctor`, `help`, `version`, `completion`).
+**`name`** (required) — the subcommand name; e.g. `name: deploy` is invoked as `raid deploy`. Cannot shadow built-in names (`profile`, `install`, `env`, `doctor`, `context`, `help`, `version`, `completion`).
 
 **`usage`** (optional) — short description shown next to the command in `raid --help`.
 

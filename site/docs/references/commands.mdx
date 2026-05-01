@@ -10,7 +10,7 @@ A reference for all built-in `raid` commands. For custom commands defined in you
 
 | Flag | Description |
 |---|---|
-| `-c, --config` | Path to the config file (default: `$HOME/.config/raid/config.toml`) |
+| `-c, --config <path>` | Path to the config file (default: `~/.raid/config.toml`) |
 
 ---
 
@@ -60,7 +60,7 @@ Manage profiles.
 
 ```bash
 raid profile create           # interactive wizard to create a new profile
-raid profile add <file>       # register a YAML or JSON profile file
+raid profile add <path|url>   # register a profile from a local file, git URL, or raw file URL
 raid profile list             # list all registered profiles
 raid profile <name>           # switch the active profile
 raid profile remove <name>    # remove a profile

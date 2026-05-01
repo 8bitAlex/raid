@@ -9,7 +9,7 @@ import (
 )
 
 var RemoveProfileCmd = &cobra.Command{
-	Use:        "remove profile",
+	Use:        "remove <name>",
 	Short:      "Remove profile(s)",
 	SuggestFor: []string{"delete"},
 	Args:       cobra.MinimumNArgs(1),

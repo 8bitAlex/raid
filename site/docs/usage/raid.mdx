@@ -41,6 +41,7 @@ This is useful when managing multiple independent setups or during testing.
 | [`env`](./env) | Apply, list, or check environments |
 | [`profile`](./profile) | Create, add, list, switch, or remove profiles |
 | [`doctor`](./doctor) | Check the active configuration for issues |
+| [`context`](./context) | Print workspace snapshot; `context serve` runs the MCP server |
 | [`completion`](#shell-completion) | Generate shell autocompletion scripts |
 
 Custom commands defined in the active profile or its repositories are also available as `raid <name>`. See [Custom Commands](./custom) for details.
@@ -79,6 +80,6 @@ Run `raid completion <shell> --help` for detailed instructions for each shell.
 
 The following names are reserved for built-in commands and cannot be used as custom command names:
 
-`profile`, `install`, `env`, `doctor`, `help`, `version`, `completion`
+`profile`, `install`, `env`, `doctor`, `context`, `help`, `version`, `completion`
 
 If a custom command in your profile uses a reserved name, it is ignored and a warning is printed.
