@@ -36,6 +36,9 @@ var AddProfileCmd = &cobra.Command{
 // Extracted from AddProfileCmd.Run so tests can observe the exit code
 // without os.Exit terminating the test process.
 func runAddProfile(path string) int {
+	if isURL(path) {
+		return runAddProfileFromURL(path)
+	}
 	path = sys.ExpandPath(path)
 
 	if !sys.FileExists(path) {

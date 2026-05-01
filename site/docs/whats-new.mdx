@@ -11,6 +11,8 @@ User-visible changes per release, latest first. For full commit history see the 
 
 ## 0.7.0 — upcoming
 
+**Add profiles from a URL.** `raid profile add` now accepts a git repo URL or a direct file URL in addition to a local path. Pass a GitHub (or any git host) URL and raid shallow-clones the repo, finds `*.raid.yaml`, `*.raid.yml`, or `profile.json` files at the root, and saves them to `~/<name>.raid.yaml`. Pass a raw HTTPS URL ending in `.yaml`/`.yml`/`.json` and raid downloads and registers it directly. Ambiguous HTTPS URLs are probed with `git ls-remote` to determine the right strategy automatically.
+
 **MCP server.** `raid context serve` runs raid as a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so MCP-aware hosts (Claude Code, Cursor, Cline) can read the active workspace as resources and invoke raid tools (`raid_install`, `raid_env_switch`, `raid_run_task`, `raid_list_profiles`, `raid_list_repos`, `raid_describe_repo`) directly. Output from mutating tools is captured into the tool result so it doesn't corrupt JSON-RPC framing on stdout. See [Context → MCP server](/docs/usage/context).
 
 **Set variables reach subprocesses.** Variables defined by a `Set` task are now exported as environment variables to Script and Shell task subprocesses, so a script's source can reference `$VAR` directly without raid pre-expanding the script body. Raid values take precedence over OS-environment variables of the same name.

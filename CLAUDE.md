@@ -6,6 +6,8 @@ Layout: main.go→src/cmd. src/cmd/raid.go=root cmd+subcommand registration+vers
 
 Config: raid.yaml=per-repo (environments+tasks: Shell|Script|HTTP|Wait|Template|Group|Git|Prompt|Confirm|Set|Print). profile.raid.yml=user profile (tracked repos, global settings).
 
+Versioning: version in src/resources/app.properties. Bump second position (minor) for feature/large changes; bump third position (patch) for small changes or bug fixes.
+
 Non-obvious:
 - applyConfigFlag in src/cmd/raid.go scans os.Args for --config/-c BEFORE Cobra parses, because config must load before subcommand registration
 - Async version check goroutine on every invocation; info cmds (help/version/completion) wait up to 1.5s, others non-blocking
@@ -19,6 +21,7 @@ Non-obvious:
 - Cross-process mutation lock at ~/.raid/.lock via gofrs/flock. raid.WithMutationLock(fn) wraps the lock+release; every mutating cobra entry point and every MCP mutating handler must call it so CLI usage and the MCP server serialize against each other. Read paths don't acquire the lock. Tests must redirect lib.LockPathOverride (alongside RecentPathOverride) in any setup helper that exercises a mutating path; cmd/context tests use a TestMain to do this once for the whole package.
 - Cobra commands: prefer RunE over Run on read commands so enc.Encode errors and arg-validation errors propagate to the root error handler instead of being silently swallowed. Use cmd.OutOrStdout()/cmd.OutOrStderr() (not fmt.Println / os.Stdout) so tests can capture output via root.SetOut(&buf). When changing Run → RunE, also update any test that calls Command.Run(...) directly to Command.RunE(...).
 - JSON output is public CLI contract: --json field names and types are breaking-change surface. Use camelCase tags consistent with `raid context --json`; severities/enums encode as strings ("ok"/"warn"/"error", not ints). Renaming or removing a field needs a whats-new entry.
+- `raid profile add <url>` accepts HTTP/HTTPS/git@ URLs. URL type detection in src/cmd/profile/fetch.go: git@ prefix or .git suffix → clone; .yaml/.yml/.json extension → raw HTTP download; otherwise probed live with sys.DetectGitDefaultBranch. Profiles are copied to ~/<name>.raid.yaml (home dir root, not ~/.raid/). detectGitURL/gitCloneFunc/httpGetFunc are package-level vars for test injection; tests must set detectGitURL to avoid live network probes.
 
 CI: .github/workflows/ — build.yml (build+test), deploy.yml (release), preview.yml (preview releases), codecov.yml (coverage), docs.yml (deploy Pages from site/), docs-build.yml (PR build check for site/)
 
