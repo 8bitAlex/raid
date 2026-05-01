@@ -5,6 +5,18 @@ export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
+    // Serve the existing SVG favicon at /favicon.ico so browsers that
+    // request the default path get a valid icon. Cache-Control overrides the
+    // 10-minute GitHub Pages default so Cloudflare caches it efficiently.
+    if (url.pathname === '/favicon.ico') {
+      const svgUrl = new URL('/img/favicon.svg', url);
+      const response = await fetch(svgUrl.toString());
+      const headers = new Headers(response.headers);
+      headers.set('Content-Type', 'image/svg+xml');
+      headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      return new Response(response.body, { status: response.status, headers });
+    }
+
     // Strip the /ingest prefix
     const path = url.pathname.replace(/^\/ingest/, '') || '/';
 
