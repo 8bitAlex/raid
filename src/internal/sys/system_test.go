@@ -261,6 +261,55 @@ func TestCreateFile_existingFile(t *testing.T) {
 	f.Close()
 }
 
+// --- CopyFile ---
+
+func TestCopyFile_createsDestWithContent(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dest := filepath.Join(dir, "sub", "dest.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyFile(src, dest); err != nil {
+		t.Fatalf("CopyFile() error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile dest: %v", err)
+	}
+	if string(got) != "hello" {
+		t.Errorf("dest content = %q, want %q", got, "hello")
+	}
+}
+
+func TestCopyFile_srcNotFound(t *testing.T) {
+	dir := t.TempDir()
+	if err := CopyFile(filepath.Join(dir, "missing.txt"), filepath.Join(dir, "dest.txt")); err == nil {
+		t.Error("CopyFile() with missing src: want error, got nil")
+	}
+}
+
+func TestCopyFile_destParentIsFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ENOTDIR semantics differ on Windows")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(src, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Use a regular file as the parent directory — MkdirAll must fail.
+	f, err := os.CreateTemp(dir, "file-not-dir-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	dest := filepath.Join(f.Name(), "dest.txt")
+	if err := CopyFile(src, dest); err == nil {
+		t.Error("CopyFile() with file-as-parent: want error, got nil")
+	}
+}
+
 // --- ValidateFileName ---
 
 func TestValidateFileName(t *testing.T) {

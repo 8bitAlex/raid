@@ -28,13 +28,21 @@ Create a new profile interactively:
 raid profile create
 ```
 
-Register your team's shared profile from a URL:
+Add a profile from a git repository (raid shallow-clones it and looks for `*.raid.yaml` files at the repo root):
+
+```bash
+raid profile add https://github.com/my-org/raid-profiles
+raid profile add git@github.com:my-org/raid-profiles.git
+```
+
+Add a profile from a raw URL pointing directly to a YAML or JSON file:
 
 ```bash
 raid profile add https://example.com/team-profile.yaml
+raid profile add https://raw.githubusercontent.com/my-org/repo/main/team.raid.yaml
 ```
 
-Register a local file:
+The profile is saved to `~/<name>.raid.yaml` and registered automatically. If the argument has no URL scheme it is treated as a local file path:
 
 ```bash
 raid profile add ./my-profile.yaml

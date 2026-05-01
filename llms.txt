@@ -28,7 +28,7 @@ Raid is written in Go, distributed as a single self-contained binary, and publis
 
 - [raid install](https://raidcli.dev/docs/usage/install): Clone repositories and run install tasks across your profile
 - [raid env](https://raidcli.dev/docs/usage/env): Switch between development, staging, and production environments
-- [raid profile](https://raidcli.dev/docs/usage/profile): Add, list, switch, and remove profiles
+- [raid profile](https://raidcli.dev/docs/usage/profile): Add profiles from a git repo URL, raw file URL, or local path; list, switch, and remove profiles
 - [Custom commands](https://raidcli.dev/docs/usage/custom): Define and invoke `raid <cmd>` team workflows
 - [raid doctor](https://raidcli.dev/docs/usage/doctor): Diagnose profile and repo configuration issues
 - [raid root command](https://raidcli.dev/docs/usage/raid): Global flags and top-level invocation

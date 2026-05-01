@@ -59,6 +59,18 @@ func CreateFile(filePath string) (*os.File, error) {
 	return os.OpenFile(pathEx, os.O_RDWR|os.O_CREATE, 0644)
 }
 
+// CopyFile copies the file at src to dest, creating parent directories as needed.
+func CopyFile(src, dest string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(dest, data, 0644)
+}
+
 // FileExists reports whether the file or directory at path exists.
 // Permission errors are treated as the path existing to avoid silently
 // overwriting or recreating inaccessible files.

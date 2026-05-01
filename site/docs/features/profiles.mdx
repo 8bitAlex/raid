@@ -51,6 +51,23 @@ commands:
         path: "~/dev/frontend"
 ```
 
+## Adding profiles from a URL
+
+`raid profile add` accepts a git repo URL, a raw file URL, or a local path:
+
+```bash
+# Shallow-clone a repo and import any *.raid.yaml files found at the root
+raid profile add https://github.com/my-org/raid-profiles
+
+# Download a single profile file directly
+raid profile add https://raw.githubusercontent.com/my-org/repo/main/team.raid.yaml
+
+# Register a local file
+raid profile add ./team.raid.yaml
+```
+
+Raid auto-detects the argument type. Git URLs (including `git@` and `.git`-suffix URLs) are cloned; HTTP URLs ending with `.yaml`, `.yml`, or `.json` are downloaded directly; ambiguous HTTP URLs are probed with `git ls-remote`. Downloaded profiles are saved to `~/<name>.raid.yaml` before registration.
+
 ## Top-level fields
 
 | Field | Required | Description |

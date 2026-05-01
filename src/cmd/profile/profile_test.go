@@ -880,7 +880,7 @@ func TestRunAddProfile_setActiveSuccess(t *testing.T) {
 
 // --- Mock-based tests for runAddProfile error paths ---
 
-// saveProMocks saves and returns a restore function for all pro* function vars.
+// saveProMocks saves and returns a restore function for all pro* and fetch injectable vars.
 func saveProMocks() func() {
 	origValidate := proValidate
 	origUnmarshal := proUnmarshal
@@ -891,6 +891,10 @@ func saveProMocks() func() {
 	origWriteFile := proWriteFile
 	origCollectRepos := proCollectRepos
 	origCreateRepoConfigs := proCreateRepoConfigs
+	origGitClone := gitCloneFunc
+	origHTTPGet := httpGetFunc
+	origDetect := detectGitURL
+	origHome := getHomeDir
 	return func() {
 		proValidate = origValidate
 		proUnmarshal = origUnmarshal
@@ -901,6 +905,10 @@ func saveProMocks() func() {
 		proWriteFile = origWriteFile
 		proCollectRepos = origCollectRepos
 		proCreateRepoConfigs = origCreateRepoConfigs
+		gitCloneFunc = origGitClone
+		httpGetFunc = origHTTPGet
+		detectGitURL = origDetect
+		getHomeDir = origHome
 	}
 }
 
