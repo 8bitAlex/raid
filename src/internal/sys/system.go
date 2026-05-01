@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -61,14 +62,23 @@ func CreateFile(filePath string) (*os.File, error) {
 
 // CopyFile copies the file at src to dest, creating parent directories as needed.
 func CopyFile(src, dest string) error {
-	data, err := os.ReadFile(src)
+	srcFile, err := os.Open(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("open %s: %w", src, err)
 	}
+	defer srcFile.Close()
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-		return err
+		return fmt.Errorf("create parent dir for %s: %w", dest, err)
 	}
-	return os.WriteFile(dest, data, 0644)
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", dest, err)
+	}
+	defer destFile.Close()
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return fmt.Errorf("copy %s → %s: %w", src, dest, err)
+	}
+	return nil
 }
 
 // FileExists reports whether the file or directory at path exists.

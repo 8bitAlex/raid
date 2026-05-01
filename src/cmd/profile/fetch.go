@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
@@ -21,7 +22,8 @@ var (
 		return exec.Command("git", "clone", "--depth", "1", repoURL, dir).Run()
 	}
 	httpGetFunc = func(rawURL string) ([]byte, error) {
-		resp, err := http.Get(rawURL) //nolint:gosec
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Get(rawURL) //nolint:gosec
 		if err != nil {
 			return nil, err
 		}
@@ -29,7 +31,15 @@ var (
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, rawURL)
 		}
-		return io.ReadAll(resp.Body)
+		const maxBytes = 10 * 1024 * 1024
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(data)) > maxBytes {
+			return nil, fmt.Errorf("response from %s exceeds 10 MB limit", rawURL)
+		}
+		return data, nil
 	}
 	// detectGitURL is injectable so tests can skip the live git ls-remote probe.
 	detectGitURL = isGitURL
@@ -99,7 +109,11 @@ func addProfilesFromHTTPURL(rawURL string) int {
 		return 1
 	}
 
-	u, _ := url.Parse(rawURL)
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		fmt.Printf("Invalid URL: %v\n", err)
+		return 1
+	}
 	ext := strings.ToLower(filepath.Ext(u.Path))
 	if ext == "" {
 		ext = ".yaml"
@@ -142,7 +156,10 @@ func findProfileFilesInDir(dir string) []string {
 	add("profile.raid.yaml")
 	add("profile.raid.yml")
 
-	entries, _ := os.ReadDir(dir)
+	entries, rdErr := os.ReadDir(dir)
+	if rdErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to read directory %q: %v\n", dir, rdErr)
+	}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -170,6 +187,7 @@ func processProfileFiles(paths []string) int {
 
 	var queued []pending
 	var existingNames []string
+	seenQueued := map[string]bool{}
 
 	for _, srcPath := range paths {
 		if err := proValidate(srcPath); err != nil {
@@ -182,10 +200,19 @@ func processProfileFiles(paths []string) int {
 			continue
 		}
 		for _, p := range profiles {
+			if err := sys.ValidateFileName(p.Name); err != nil {
+				fmt.Printf("Skipping profile with invalid name %q: %v\n", p.Name, err)
+				continue
+			}
 			if proContains(p.Name) {
 				existingNames = append(existingNames, p.Name)
 				continue
 			}
+			if seenQueued[p.Name] {
+				fmt.Printf("Skipping duplicate profile name %q\n", p.Name)
+				continue
+			}
+			seenQueued[p.Name] = true
 			queued = append(queued, pending{p: p, srcPath: srcPath})
 		}
 	}

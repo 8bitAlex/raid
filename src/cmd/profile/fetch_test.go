@@ -443,6 +443,67 @@ func TestRunAddProfile_copyError(t *testing.T) {
 	}
 }
 
+func TestRunAddProfile_invalidProfileName(t *testing.T) {
+	setupConfig(t)
+	defer saveFetchMocks()()
+	defer saveProMocks()()
+
+	homeDir := t.TempDir()
+	getHomeDir = func() string { return homeDir }
+	detectGitURL = func(string) bool { return false }
+	httpGetFunc = func(string) ([]byte, error) {
+		return []byte("name: goodprofile\n"), nil
+	}
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) {
+		return []pro.Profile{{Name: "../../evil"}}, nil
+	}
+	proContains = func(string) bool { return false }
+
+	out := captureStdout(t, func() {
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
+			t.Errorf("code = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "invalid name") {
+		t.Errorf("got %q, want 'invalid name' in output", out)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, "..evil.raid.yaml")); err == nil {
+		t.Error("traversal file must not be written")
+	}
+}
+
+func TestRunAddProfile_duplicateProfileName(t *testing.T) {
+	setupConfig(t)
+	defer saveFetchMocks()()
+	defer saveProMocks()()
+
+	homeDir := t.TempDir()
+	getHomeDir = func() string { return homeDir }
+	detectGitURL = func(string) bool { return false }
+	httpGetFunc = func(string) ([]byte, error) {
+		return []byte("name: dupprofile\n"), nil
+	}
+	proValidate = func(string) error { return nil }
+	proUnmarshal = func(string) ([]pro.Profile, error) {
+		return []pro.Profile{{Name: "dupprofile"}, {Name: "dupprofile"}}, nil
+	}
+	proContains = func(string) bool { return false }
+
+	out := captureStdout(t, func() {
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
+			t.Errorf("code = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "duplicate") {
+		t.Errorf("got %q, want 'duplicate' in output", out)
+	}
+	// Only one file should be written.
+	if _, err := os.Stat(filepath.Join(homeDir, "dupprofile.raid.yaml")); err != nil {
+		t.Errorf("expected one saved file: %v", err)
+	}
+}
+
 // --- Subprocess test: AddProfileCmd.Run wrapper calls osExit on clone failure ---
 
 const subprocURLCloneFail = "RAID_TEST_URL_CLONE_FAIL"
