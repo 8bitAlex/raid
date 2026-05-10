@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,9 +16,11 @@ func TestRepoIsZero(t *testing.T) {
 	}{
 		{"empty", Repo{}, true},
 		{"name only", Repo{Name: "test"}, true},
-		{"name and path", Repo{Name: "test", Path: "/path"}, true},
-		{"name and url", Repo{Name: "test", URL: "http://example.com"}, true},
-		{"path and url", Repo{Path: "/path", URL: "http://example.com"}, true},
+		// Local-only repos (no url) are valid as long as name and path
+		// are set — the URL check was dropped to support local-only setups.
+		{"name and path (local-only)", Repo{Name: "test", Path: "/path"}, false},
+		{"name and url (no path)", Repo{Name: "test", URL: "http://example.com"}, true},
+		{"path and url (no name)", Repo{Path: "/path", URL: "http://example.com"}, true},
 		{"all three fields", Repo{Name: "test", Path: "/path", URL: "http://example.com"}, false},
 	}
 
@@ -25,6 +28,27 @@ func TestRepoIsZero(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.repo.IsZero(); got != tt.want {
 				t.Errorf("IsZero() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRepoIsLocalOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		repo Repo
+		want bool
+	}{
+		{"empty url", Repo{Name: "x", Path: "/p"}, true},
+		{"whitespace-only url", Repo{Name: "x", Path: "/p", URL: "   "}, true},
+		{"tabs and newlines", Repo{Name: "x", Path: "/p", URL: "\t\n "}, true},
+		{"padded url is remote", Repo{Name: "x", Path: "/p", URL: "  git@example.com:x.git  "}, false},
+		{"with url", Repo{Name: "x", Path: "/p", URL: "git@example.com:x.git"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.repo.IsLocalOnly(); got != tt.want {
+				t.Errorf("IsLocalOnly() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -108,6 +132,27 @@ func TestCloneRepository_pathExistsNotGitRepo(t *testing.T) {
 	err := CloneRepository(repo)
 	if err == nil {
 		t.Fatal("CloneRepository() expected error for failed clone")
+	}
+}
+
+func TestCloneRepository_localOnly_pathExists(t *testing.T) {
+	dir := t.TempDir()
+	// Local-only repo (no URL) at an existing path: must skip clone with no
+	// error so install tasks can run against the directory as-is.
+	repo := Repo{Name: "local", Path: dir}
+	if err := CloneRepository(repo); err != nil {
+		t.Errorf("CloneRepository() local-only at existing path: %v", err)
+	}
+}
+
+func TestCloneRepository_localOnly_missingPath(t *testing.T) {
+	repo := Repo{Name: "local", Path: filepath.Join(t.TempDir(), "missing")}
+	err := CloneRepository(repo)
+	if err == nil {
+		t.Fatal("CloneRepository() local-only with missing path: expected error")
+	}
+	if !strings.Contains(err.Error(), "no url") {
+		t.Errorf("error should mention missing url, got: %v", err)
 	}
 }
 

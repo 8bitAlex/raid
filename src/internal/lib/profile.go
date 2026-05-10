@@ -258,9 +258,12 @@ func CollectRepos(reader *bufio.Reader) []RepoDraft {
 			break
 		}
 		name := sys.ReadLine(reader, "  Name: ")
-		url := sys.ReadLine(reader, "  URL: ")
+		url := sys.ReadLine(reader, "  URL (leave empty for local-only): ")
 		path := sys.ReadLine(reader, "  Local path: ")
-		defaultBranch := sys.DetectGitDefaultBranch(url)
+		var defaultBranch string
+		if url != "" {
+			defaultBranch = sys.DetectGitDefaultBranch(url)
+		}
 		branchPrompt := "  Default branch: "
 		if defaultBranch != "" {
 			branchPrompt = fmt.Sprintf("  Default branch [%s]: ", defaultBranch)
@@ -270,8 +273,8 @@ func CollectRepos(reader *bufio.Reader) []RepoDraft {
 			branch = defaultBranch
 		}
 		repo := RepoDraft{Name: name, URL: url, Path: path, Branch: branch}
-		if repo.Name == "" || repo.URL == "" || repo.Path == "" {
-			fmt.Println("  Name, URL, and path are all required. Skipping.")
+		if repo.Name == "" || repo.Path == "" {
+			fmt.Println("  Name and path are required. Skipping.")
 			continue
 		}
 		repos = append(repos, repo)

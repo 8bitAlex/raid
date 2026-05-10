@@ -243,6 +243,27 @@ func TestCheckRepo_notGitRepository(t *testing.T) {
 	}
 }
 
+func TestCheckRepo_localOnly_notGitIsOK(t *testing.T) {
+	dir := t.TempDir()
+	// Local-only repo: no URL, no .git, but path exists.
+
+	repo := Repo{Name: "local", Path: dir}
+	findings := checkRepo(repo)
+	for _, f := range findings {
+		if f.Severity == SeverityWarn {
+			t.Errorf("checkRepo(): unexpected warning for local-only repo: %+v", f)
+		}
+	}
+}
+
+func TestCheckRepo_localOnly_missingPathIsError(t *testing.T) {
+	repo := Repo{Name: "local", Path: filepath.Join(t.TempDir(), "missing")}
+	findings := checkRepo(repo)
+	if !severitySet(findings)[SeverityError] {
+		t.Errorf("checkRepo(): expected error for missing local-only repo, got %+v", findings)
+	}
+}
+
 // severitySet returns a set of all severities present in findings.
 func severitySet(findings []Finding) map[Severity]bool {
 	out := make(map[Severity]bool, len(findings))

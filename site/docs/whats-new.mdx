@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.10.0 — upcoming
+
+**Local-only repositories.** `url` is now optional on profile repository entries. Omit it for projects that aren't backed by a git remote — raid skips cloning and runs install tasks against the existing path. The path must already exist on disk; if it doesn't, raid surfaces a clear error instead of trying to `git clone ""`. `raid doctor` no longer flags a missing `.git` directory as a warning for local-only repos. Closes [#71](https://github.com/8bitAlex/raid/issues/71).
+
 ## 0.9.0 — upcoming
 
 **Live variable updates in the MCP server.** `raid context serve` now watches `~/.raid/vars` and reloads the workspace when the file is modified by another raid process, a `Set` task in a separate invocation, or a hand edit. Connected MCP hosts see fresh state on the next read instead of stale values cached at server start. Reloads run under the cross-process mutation lock so they serialize cleanly with concurrent install / env-switch / run-task calls. Closes [#27](https://github.com/8bitAlex/raid/issues/27).

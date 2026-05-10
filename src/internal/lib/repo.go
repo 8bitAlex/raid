@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"gopkg.in/yaml.v3"
@@ -23,9 +24,22 @@ type Repo struct {
 	Commands     []Command `json:"commands"`
 }
 
-// IsZero reports whether the repo is uninitialized.
+// IsZero reports whether the repo is uninitialized. URL is intentionally
+// excluded — local-only repos with no git remote leave it empty.
 func (r Repo) IsZero() bool {
-	return r.Name == "" || r.Path == "" || r.URL == ""
+	return r.Name == "" || r.Path == ""
+}
+
+// IsLocalOnly reports whether the repo has no configured git remote.
+// Local-only repos skip cloning; install tasks run directly against the
+// existing path. The path must already exist on disk for install to work.
+//
+// Whitespace-only URLs (e.g. `url: " "` from a stray edit) are treated as
+// local-only — the trimmed value is what would be handed to `git clone`,
+// and an empty string there produces a confusing error rather than a
+// useful one.
+func (r Repo) IsLocalOnly() bool {
+	return strings.TrimSpace(r.URL) == ""
 }
 
 func (r Repo) getEnv(name string) Env {
@@ -63,9 +77,21 @@ func buildRepo(repo *Repo) error {
 	return nil
 }
 
-// CloneRepository clones a repository to its configured path. Skips if it already exists.
+// CloneRepository clones a repository to its configured path. Skips if it
+// already exists. Repos with no configured `url` (local-only) are never
+// cloned — the path must already exist on disk; otherwise an error is
+// returned so the user knows the local repo is missing rather than getting
+// a confusing git error.
 func CloneRepository(repo Repo) error {
 	path := sys.ExpandPath(repo.Path)
+
+	if repo.IsLocalOnly() {
+		if !sys.FileExists(path) {
+			return fmt.Errorf("repository '%s' has no url and path '%s' does not exist; create the directory or add a url to clone", repo.Name, path)
+		}
+		fmt.Fprintf(commandStdout, "Repository '%s' is local-only at %s, skipping clone\n", repo.Name, path)
+		return nil
+	}
 
 	if sys.FileExists(path) && isGitRepository(path) {
 		fmt.Fprintf(commandStdout, "Repository '%s' already exists at %s, skipping\n", repo.Name, path)
@@ -80,7 +106,7 @@ func CloneRepository(repo Repo) error {
 		return fmt.Errorf("failed to create directory '%s': %w", path, err)
 	}
 
-	if err := clone(path, repo.URL, repo.Branch); err != nil {
+	if err := clone(path, strings.TrimSpace(repo.URL), repo.Branch); err != nil {
 		return fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
 	}
 

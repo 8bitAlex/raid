@@ -26,10 +26,10 @@
           },
           "url": {
             "type": "string",
-            "description": "The URL of the repository"
+            "description": "The URL of the repository. Optional — omit for local-only repos that aren't backed by a git remote. When omitted, raid skips cloning and runs install tasks against the existing path."
           }
         },
-        "required": ["name", "path", "url"]
+        "required": ["name", "path"]
       },
       "minItems": 1
     },

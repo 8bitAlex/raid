@@ -60,8 +60,8 @@ repositories:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | Yes | Used to reference the repo (e.g. `raid install api`) |
-| `url` | string | Yes | Git remote URL |
-| `path` | string | Yes | Local clone destination (supports `~`) |
+| `url` | string | No | Git remote URL. Omit for local-only directories with no git remote — raid skips cloning and runs install tasks against the existing `path`. |
+| `path` | string | Yes | Local clone destination (supports `~`). For local-only repos, the path must already exist. |
 | [`install`](#install) | object | No | Install configuration for this repo |
 
 ---

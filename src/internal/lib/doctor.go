@@ -116,6 +116,14 @@ func checkRepo(repo Repo) []Finding {
 	repoPath := sys.ExpandPath(repo.Path)
 
 	if !sys.FileExists(repoPath) {
+		if repo.IsLocalOnly() {
+			return append(findings, Finding{
+				Severity:   SeverityError,
+				Check:      fmt.Sprintf("repo/%s", repo.Name),
+				Message:    fmt.Sprintf("local-only repo missing at %s", repoPath),
+				Suggestion: "create the directory or add a 'url' so 'raid install' can clone it",
+			})
+		}
 		return append(findings, Finding{
 			Severity:   SeverityWarn,
 			Check:      fmt.Sprintf("repo/%s", repo.Name),
@@ -130,7 +138,9 @@ func checkRepo(repo Repo) []Finding {
 		Message:  fmt.Sprintf("found at %s", repoPath),
 	})
 
-	if !isGitRepository(repoPath) {
+	// Local-only repos don't need to be git repositories — that's the whole
+	// point. Only warn about a missing .git when a url is configured.
+	if !repo.IsLocalOnly() && !isGitRepository(repoPath) {
 		findings = append(findings, Finding{
 			Severity: SeverityWarn,
 			Check:    fmt.Sprintf("repo/%s", repo.Name),
