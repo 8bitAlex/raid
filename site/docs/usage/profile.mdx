@@ -36,18 +36,20 @@ Add a profile from a local file:
 raid profile add ./my-profile.yaml
 ```
 
-Add a profile from a git repository — raid shallow-clones it and imports `*.raid.yaml`, `*.raid.yml`, and `profile.json` files found at the root:
+Add a profile from a git repository — raid shallow-clones it and imports `*.raid.yaml`, `*.raid.yml`, and `profile.json` files found at the root. If none of those match, raid falls back to any plain `.yaml` / `.yml` / `.json` at the root, so a single-file gist (or scratch repo) with `profile.yaml` or `myprofile.yml` works without renaming:
 
 ```bash
 raid profile add https://github.com/my-org/raid-profiles
 raid profile add git@github.com:my-org/raid-profiles.git
+raid profile add https://gist.github.com/<user>/<id>     # gist with profile.yaml
 ```
 
-Add a profile from a raw file URL (HTTP/HTTPS URL ending in `.yaml`, `.yml`, or `.json`):
+Add a profile from a raw file URL (HTTP/HTTPS URL ending in `.yaml`, `.yml`, or `.json`) — handy for the gist "Raw" link, where the filename inside the gist doesn't matter:
 
 ```bash
 raid profile add https://example.com/team-profile.yaml
 raid profile add https://raw.githubusercontent.com/my-org/repo/main/team.raid.yaml
+raid profile add https://gist.githubusercontent.com/<user>/<id>/raw/<sha>/profile.yaml
 ```
 
 **URL type detection.** Raid picks the right strategy automatically:

@@ -139,6 +139,12 @@ func addProfilesFromHTTPURL(rawURL string) int {
 
 // findProfileFilesInDir returns profile YAML/JSON files found at the root of dir.
 // Priority: profile.raid.yaml/yml first, then any *.raid.yaml/yml, then profile.json.
+// Fallback for repositories that don't follow the *.raid.yaml convention
+// (single-file gists, scratch repos): if none of the above match, accept any
+// plain .yaml/.yml/.json at the root. processProfileFiles validates each
+// candidate against the profile schema, so non-profile YAML lying around
+// in a repo root produces a clear "Skipping … invalid profile" message
+// rather than incorrect behavior.
 func findProfileFilesInDir(dir string) []string {
 	seen := map[string]bool{}
 	var found []string
@@ -174,6 +180,18 @@ func findProfileFilesInDir(dir string) []string {
 	}
 
 	add("profile.json")
+
+	if len(found) == 0 {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(e.Name()))
+			if ext == ".yaml" || ext == ".yml" || ext == ".json" {
+				add(e.Name())
+			}
+		}
+	}
 
 	return found
 }
@@ -222,6 +240,17 @@ func processProfileFiles(paths []string) int {
 	}
 
 	if len(queued) == 0 {
+		// Differentiate "all profiles already registered" (fine, exit 0)
+		// from "we found candidate files but none validated as profiles"
+		// (a real failure — exit 1 so callers and CI catch it). The
+		// fallback in findProfileFilesInDir can pull in plain root yamls
+		// like docker-compose.yaml from gists/scratch repos; without
+		// this branch `raid profile add <url>` would exit 0 even though
+		// nothing was imported.
+		if len(existingNames) == 0 {
+			fmt.Println("No valid profiles found")
+			return 1
+		}
 		fmt.Println("No new profiles found")
 		return 0
 	}

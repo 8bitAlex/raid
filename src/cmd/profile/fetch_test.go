@@ -143,13 +143,70 @@ func TestFindProfileFilesInDir_noDuplicates(t *testing.T) {
 	}
 }
 
-func TestFindProfileFilesInDir_noRaidYAML_noJSON(t *testing.T) {
+func TestFindProfileFilesInDir_plainYAMLFallback(t *testing.T) {
 	dir := t.TempDir()
-	// A plain .yaml file should not be picked up.
+	// Single-file gist scenario: a plain .yaml at the root, no *.raid.yaml.
+	// Should be picked up as a fallback.
 	writeRaidYAML(t, dir, "plain.yaml", "p")
 	got := findProfileFilesInDir(dir)
-	if len(got) != 0 {
-		t.Errorf("findProfileFilesInDir plain yaml: got %v, want none", got)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "plain.yaml") {
+		t.Errorf("findProfileFilesInDir plain yaml fallback: got %v", got)
+	}
+}
+
+func TestFindProfileFilesInDir_plainYAMLNotPickedUpWhenRaidYAMLExists(t *testing.T) {
+	dir := t.TempDir()
+	// When a *.raid.yaml is present, plain .yaml/.yml siblings (e.g. CI
+	// configs, docker-compose files) must NOT be picked up — the fallback
+	// only kicks in when there are no primary matches.
+	writeRaidYAML(t, dir, "profile.raid.yaml", "p")
+	writeRaidYAML(t, dir, "docker-compose.yaml", "ignored")
+	writeRaidYAML(t, dir, "ci.yml", "ignored")
+	got := findProfileFilesInDir(dir)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "profile.raid.yaml") {
+		t.Errorf("findProfileFilesInDir: got %v, want only profile.raid.yaml", got)
+	}
+}
+
+func TestFindProfileFilesInDir_multiplePlainYAMLFallback(t *testing.T) {
+	dir := t.TempDir()
+	// Multi-file gist: multiple plain yaml files, no *.raid.yaml. All are
+	// picked up; processProfileFiles will validate each one and skip those
+	// that aren't valid profiles.
+	writeRaidYAML(t, dir, "a.yaml", "a")
+	writeRaidYAML(t, dir, "b.yml", "b")
+	got := findProfileFilesInDir(dir)
+	if len(got) != 2 {
+		t.Errorf("findProfileFilesInDir multi plain: got %d files, want 2", len(got))
+	}
+}
+
+func TestFindProfileFilesInDir_plainJSONFallback(t *testing.T) {
+	dir := t.TempDir()
+	// Plain .json file (not literally named profile.json) — picked up via
+	// the same fallback so a gist with `myprofile.json` works.
+	path := filepath.Join(dir, "myprofile.json")
+	if err := os.WriteFile(path, []byte(`{"name":"j"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findProfileFilesInDir(dir)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "myprofile.json") {
+		t.Errorf("findProfileFilesInDir plain json fallback: got %v", got)
+	}
+}
+
+func TestFindProfileFilesInDir_fallbackSkipsDirectories(t *testing.T) {
+	dir := t.TempDir()
+	// Subdirectory at the repo root must be skipped by the fallback loop —
+	// only files are considered profile candidates. Real-world example: a
+	// scratch repo with `docs/` and `assets/` plus a single profile.yaml.
+	if err := os.Mkdir(filepath.Join(dir, "docs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeRaidYAML(t, dir, "profile.yaml", "p")
+	got := findProfileFilesInDir(dir)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "profile.yaml") {
+		t.Errorf("findProfileFilesInDir with subdir: got %v, want only profile.yaml", got)
 	}
 }
 
@@ -264,6 +321,40 @@ func TestRunAddProfile_gitURL_noProfiles(t *testing.T) {
 	}
 }
 
+// TestRunAddProfile_gitURL_onlyNonProfileYAML covers the regression
+// surface introduced by the plain-yaml fallback in findProfileFilesInDir.
+// A repo (or single-file gist) whose only root yaml/json files are
+// non-profile content (e.g. docker-compose.yaml, package.json) now gets
+// pulled in by the fallback, fails schema validation in
+// processProfileFiles, and must exit 1 with "No valid profiles found"
+// rather than misleadingly succeeding with "No new profiles found".
+func TestRunAddProfile_gitURL_onlyNonProfileYAML(t *testing.T) {
+	setupConfig(t)
+	defer saveFetchMocks()()
+
+	homeDir := t.TempDir()
+	getHomeDir = func() string { return homeDir }
+	detectGitURL = func(string) bool { return true }
+	gitCloneFunc = func(_, dir string) error {
+		// Plain non-profile yaml at the repo root — matches the fallback
+		// glob but fails schema validation.
+		return os.WriteFile(filepath.Join(dir, "docker-compose.yaml"),
+			[]byte("services:\n  web:\n    image: nginx\n"), 0644)
+	}
+
+	out := captureStdout(t, func() {
+		if code := runAddProfile("https://github.com/example/repo"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+	if !strings.Contains(out, "No valid profiles found") {
+		t.Errorf("got %q, want 'No valid profiles found'", out)
+	}
+	if !strings.Contains(out, "Skipping docker-compose.yaml") {
+		t.Errorf("got %q, want 'Skipping docker-compose.yaml' diagnostic", out)
+	}
+}
+
 func TestRunAddProfile_httpURL_success(t *testing.T) {
 	setupConfig(t)
 	defer saveFetchMocks()()
@@ -318,12 +409,16 @@ func TestRunAddProfile_httpURL_invalidProfile(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
-			t.Errorf("code = %d, want 0", code)
+		// Schema-invalid input is a real failure — exit 1, not 0. The
+		// previous "No new profiles found" exit-0 behavior masked
+		// failures (especially relevant now that the file-discovery
+		// fallback can pull in arbitrary plain yaml).
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
 		}
 	})
-	if !strings.Contains(out, "No new profiles found") {
-		t.Errorf("got %q, want 'No new profiles found'", out)
+	if !strings.Contains(out, "No valid profiles found") {
+		t.Errorf("got %q, want 'No valid profiles found'", out)
 	}
 }
 
@@ -342,12 +437,13 @@ func TestRunAddProfile_httpURL_unmarshalError(t *testing.T) {
 	proUnmarshal = func(string) ([]pro.Profile, error) { return nil, errMock }
 
 	out := captureStdout(t, func() {
-		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
-			t.Errorf("code = %d, want 0", code)
+		// Unmarshal failures are real errors — exit 1.
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
 		}
 	})
-	if !strings.Contains(out, "No new profiles found") {
-		t.Errorf("got %q, want 'No new profiles found'", out)
+	if !strings.Contains(out, "No valid profiles found") {
+		t.Errorf("got %q, want 'No valid profiles found'", out)
 	}
 }
 
@@ -461,8 +557,9 @@ func TestRunAddProfile_invalidProfileName(t *testing.T) {
 	proContains = func(string) bool { return false }
 
 	out := captureStdout(t, func() {
-		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
-			t.Errorf("code = %d, want 0", code)
+		// All profiles rejected by ValidateFileName → real failure, exit 1.
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
 		}
 	})
 	if !strings.Contains(out, "invalid name") {
