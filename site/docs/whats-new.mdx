@@ -9,6 +9,12 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.9.0 — upcoming
+
+**Live variable updates in the MCP server.** `raid context serve` now watches `~/.raid/vars` and reloads the workspace when the file is modified by another raid process, a `Set` task in a separate invocation, or a hand edit. Connected MCP hosts see fresh state on the next read instead of stale values cached at server start. Reloads run under the cross-process mutation lock so they serialize cleanly with concurrent install / env-switch / run-task calls. Closes [#27](https://github.com/8bitAlex/raid/issues/27).
+
+**Variables as an MCP resource.** Persisted raid variables — `Set`-task values plus the auto-derived `RAID_REPO_*` keys — are now exposed as `raid://workspace/vars` (JSON object). Joins the existing `profile`, `env`, `repos`, `commands`, and `recent` workspace resources.
+
 ## 0.7.0 — upcoming
 
 **Add profiles from a URL.** `raid profile add` now accepts a git repo URL or a direct file URL in addition to a local path. Pass a GitHub (or any git host) URL and raid shallow-clones the repo, finds `*.raid.yaml`, `*.raid.yml`, or `profile.json` files at the root, and saves them to `~/<name>.raid.yaml`. Pass a raw HTTPS URL ending in `.yaml`/`.yml`/`.json` and raid downloads and registers it directly. Ambiguous HTTPS URLs are probed with `git ls-remote` to determine the right strategy automatically.

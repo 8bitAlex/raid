@@ -3,6 +3,8 @@ module github.com/8bitalex/raid
 go 1.25.5
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
+	github.com/gofrs/flock v0.13.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.49.0
 	github.com/mitchellh/go-homedir v1.1.0
@@ -13,9 +15,7 @@ require (
 )
 
 require (
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

@@ -77,6 +77,19 @@ func TestBuildServer_returnsConfiguredServer(t *testing.T) {
 	}
 }
 
+// TestStartVarsWatcher_swallowsErrors guards that a watcher startup failure
+// does not bubble out of startVarsWatcher — the MCP server must still come
+// up even if fsnotify cannot attach (e.g. inotify limit reached). The
+// failure is logged to stderr.
+func TestStartVarsWatcher_swallowsErrors(t *testing.T) {
+	// Cancelling immediately means the watcher goroutine exits at once,
+	// but the call itself just kicks off the background watcher and
+	// returns nothing — verify it doesn't panic.
+	ctx, cancel := stdctx.WithCancel(stdctx.Background())
+	cancel()
+	startVarsWatcher(ctx)
+}
+
 func TestServeCmd_isWired(t *testing.T) {
 	if ServeCmd == nil {
 		t.Fatal("ServeCmd is nil")
@@ -157,6 +170,26 @@ func TestReadWorkspaceRecent_returnsValidJSON(t *testing.T) {
 	var parsed any
 	if err := json.Unmarshal([]byte(tc.Text), &parsed); err != nil {
 		t.Errorf("body is not valid JSON: %v\n%s", err, tc.Text)
+	}
+}
+
+func TestReadWorkspaceVars_returnsObjectEvenWhenEmpty(t *testing.T) {
+	got, err := readWorkspaceVars(stdctx.Background(), mcp.ReadResourceRequest{})
+	if err != nil {
+		t.Fatalf("readWorkspaceVars: %v", err)
+	}
+	tc := got[0].(mcp.TextResourceContents)
+	if tc.URI != uriVars {
+		t.Errorf("URI = %q, want %q", tc.URI, uriVars)
+	}
+	if tc.MIMEType != "application/json" {
+		t.Errorf("MIMEType = %q, want application/json", tc.MIMEType)
+	}
+	// When the workspace has no vars the body must still be a JSON object,
+	// never `null` — clients shouldn't have to special-case the empty case.
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(tc.Text), &parsed); err != nil {
+		t.Errorf("body is not a JSON object: %v\n%s", err, tc.Text)
 	}
 }
 
@@ -677,8 +710,15 @@ func toolResultText(res *mcp.CallToolResult) string {
 // reaches the stdio entry point. The real entry blocks on stdin; the
 // overridable serveStdioFn lets us capture the call instead.
 func TestServeCmd_runDelegatesToServeStdioFn(t *testing.T) {
-	old := serveStdioFn
-	t.Cleanup(func() { serveStdioFn = old })
+	oldServe := serveStdioFn
+	oldWatch := startVarsWatcherFn
+	t.Cleanup(func() {
+		serveStdioFn = oldServe
+		startVarsWatcherFn = oldWatch
+	})
+
+	watcherStarted := false
+	startVarsWatcherFn = func(_ stdctx.Context) { watcherStarted = true }
 
 	called := false
 	serveStdioFn = func(s *server.MCPServer) error {
@@ -694,5 +734,8 @@ func TestServeCmd_runDelegatesToServeStdioFn(t *testing.T) {
 	}
 	if !called {
 		t.Error("serveStdioFn was not invoked")
+	}
+	if !watcherStarted {
+		t.Error("startVarsWatcherFn was not invoked")
 	}
 }
