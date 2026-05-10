@@ -142,26 +142,70 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[strin
 }
 
 // setCommandArgs binds positional args to RAID_ARG_N and named args/flags to
-// uppercased env vars for the lifetime of a command run. Returns a cleanup
-// closure that unsets every env var we touched, including the named ones,
-// so a second invocation doesn't see stale state from the first.
+// sanitised, uppercased env vars for the lifetime of a command run. Returns
+// a cleanup closure that restores any pre-existing values raid overwrote
+// (or unsets entries that didn't exist) so a command declaring e.g.
+// `name: PATH` doesn't permanently clobber the parent process's PATH.
+//
+// Names are normalised via sanitizeEnvName: lowercase → uppercase, anything
+// outside [A-Za-z0-9_] becomes '_'. Names that sanitise to a non-identifier
+// (empty / all-underscores) are skipped — the schema rejects these
+// up-front via the `pattern` constraint, this is defence-in-depth for
+// callers that construct lib.Command directly (tests, future MCP hooks).
 func setCommandArgs(args []string, named map[string]string) func() {
 	clearRaidArgs()
 	for i, arg := range args {
 		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
 	}
-	touched := make([]string, 0, len(named))
+	type prev struct {
+		key      string
+		oldValue string
+		hadValue bool
+	}
+	snapshots := make([]prev, 0, len(named))
 	for k, v := range named {
-		key := strings.ToUpper(k)
+		key := sanitizeEnvName(k)
+		if key == "" {
+			continue
+		}
+		old, had := os.LookupEnv(key)
+		snapshots = append(snapshots, prev{key, old, had})
 		os.Setenv(key, v)
-		touched = append(touched, key)
 	}
 	return func() {
 		clearRaidArgs()
-		for _, k := range touched {
-			os.Unsetenv(k)
+		for _, p := range snapshots {
+			if p.hadValue {
+				os.Setenv(p.key, p.oldValue)
+			} else {
+				os.Unsetenv(p.key)
+			}
 		}
 	}
+}
+
+// sanitizeEnvName normalises an arg/flag name to a valid env var identifier.
+// Mirrors sanitizeRepoVarName so RAID_REPO_* and command-arg/flag names use
+// the same scheme. Returns "" for inputs that produce only underscores
+// (which would expand to a meaningless empty/underscore env var).
+func sanitizeEnvName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	out := b.String()
+	if strings.Trim(out, "_") == "" {
+		return ""
+	}
+	return out
 }
 
 // clearRaidArgs unsets all RAID_ARG_* environment variables.

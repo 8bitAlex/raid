@@ -459,13 +459,14 @@
                     },
                     "args": {
                         "type": "array",
-                        "description": "Declared positional arguments. The supplied value is exported as an env var named after `name` (uppercased) for the duration of the command, available in tasks as $NAME. Required args without a corresponding positional value cause cobra to reject the invocation.",
+                        "description": "Declared positional arguments. Required args must be supplied; declarations cap the total number of positional args cobra accepts. The supplied value is exported as an env var named after `name` (uppercased) for the duration of the command, available in tasks as $NAME.",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "name": {
                                     "type": "string",
-                                    "description": "Argument name. Uppercased to form the variable name."
+                                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                                    "description": "Argument name. Must be a valid env var identifier ([A-Za-z_][A-Za-z0-9_]*). Uppercased to form the variable name."
                                 },
                                 "usage": {
                                     "type": "string",
@@ -489,7 +490,8 @@
                             "properties": {
                                 "name": {
                                     "type": "string",
-                                    "description": "Flag name; the long form is --<name> and the env var is the uppercased name."
+                                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                                    "description": "Flag name. Must be a valid env var identifier ([A-Za-z_][A-Za-z0-9_]*). The long form is --<name> and the env var is the uppercased name."
                                 },
                                 "short": {
                                     "type": "string",
@@ -513,16 +515,30 @@
                                     "default": false
                                 },
                                 "default": {
-                                    "description": "Value used when the flag is omitted. Must match `type`.",
-                                    "oneOf": [
-                                        {"type": "string"},
-                                        {"type": "boolean"},
-                                        {"type": "integer"}
-                                    ]
+                                    "description": "Value used when the flag is omitted. Must match `type` — the conditional `allOf` below enforces this so a string default on an int flag is rejected at config-load time."
                                 }
                             },
                             "required": ["name"],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "allOf": [
+                                {
+                                    "if": {"properties": {"type": {"const": "bool"}}, "required": ["type"]},
+                                    "then": {"properties": {"default": {"type": "boolean"}}}
+                                },
+                                {
+                                    "if": {"properties": {"type": {"const": "int"}}, "required": ["type"]},
+                                    "then": {"properties": {"default": {"type": "integer"}}}
+                                },
+                                {
+                                    "if": {
+                                        "anyOf": [
+                                            {"not": {"required": ["type"]}},
+                                            {"properties": {"type": {"const": "string"}}, "required": ["type"]}
+                                        ]
+                                    },
+                                    "then": {"properties": {"default": {"type": "string"}}}
+                                }
+                            ]
                         }
                     },
                     "tasks": {

@@ -194,6 +194,107 @@ func TestExecuteCommand_staleArgsCleared(t *testing.T) {
 	}
 }
 
+func TestSanitizeEnvName(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"ticket", "TICKET"},
+		{"dry-run", "DRY_RUN"},
+		{"foo.bar", "FOO_BAR"},
+		{"already_VALID", "ALREADY_VALID"},
+		{"with spaces", "WITH_SPACES"},
+		{"123abc", "123ABC"}, // permissive — schema is the primary gate
+		{"", ""},
+		{"___", ""}, // all-underscore sanitises to empty (rejected)
+		{"!@#", ""}, // only non-identifier characters
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			if got := sanitizeEnvName(tt.in); got != tt.want {
+				t.Errorf("sanitizeEnvName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExecuteCommand_namedBindings_restoresPreviousEnv(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	// Deliberately collide with a name a real user might declare ("PATH"-like
+	// scenarios). The cleanup must restore the original value, not leave the
+	// process with an unset / stale env after the command exits.
+	const key = "RAID_NAMED_TEST_KEY"
+	t.Setenv(key, "original")
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
+		},
+	}
+
+	if err := ExecuteCommand("noop", nil, map[string]string{key: "overwritten"}); err != nil {
+		t.Fatalf("ExecuteCommand: %v", err)
+	}
+
+	if got := os.Getenv(key); got != "original" {
+		t.Errorf("env after exec = %q, want \"original\" (cleanup must restore)", got)
+	}
+}
+
+func TestExecuteCommand_namedBindings_unsetsAddedKeys(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	// Key must NOT exist in env at start so cleanup can verify the unset path.
+	const key = "RAID_NAMED_UNSET_TEST"
+	os.Unsetenv(key)
+	t.Cleanup(func() { os.Unsetenv(key) })
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
+		},
+	}
+
+	if err := ExecuteCommand("noop", nil, map[string]string{key: "value"}); err != nil {
+		t.Fatalf("ExecuteCommand: %v", err)
+	}
+
+	if _, set := os.LookupEnv(key); set {
+		t.Errorf("env still set after exec, want unset (had no prior value)")
+	}
+}
+
+func TestExecuteCommand_namedBindings_skipsInvalidKeys(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
+		},
+	}
+
+	// Empty keys and all-underscore keys must not call os.Setenv (which would
+	// either error on the empty key or set a useless `_=value`).
+	if err := ExecuteCommand("noop", nil, map[string]string{
+		"":    "skipme",
+		"___": "skipme",
+	}); err != nil {
+		t.Fatalf("ExecuteCommand: %v", err)
+	}
+	if got := os.Getenv("___"); got != "" {
+		t.Errorf("invalid key was set: %q", got)
+	}
+}
+
 func TestExecuteCommand_namedBindings(t *testing.T) {
 	setupTestConfig(t)
 	origOut, origErr := commandStdout, commandStderr

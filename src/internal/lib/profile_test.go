@@ -396,6 +396,138 @@ func TestValidateProfile_schemaViolation(t *testing.T) {
 	}
 }
 
+// TestValidateProfile_commandArgsAndFlags exercises the schema constraints on
+// the new command `args` / `flags` declarations: the name pattern, the
+// conditional default-type matching, and that valid declarations pass.
+func TestValidateProfile_commandArgsAndFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{
+			name: "valid args and flags",
+			body: `name: t
+commands:
+  - name: patch
+    args:
+      - name: ticket
+        required: true
+    flags:
+      - name: host
+        type: string
+        default: "localhost"
+      - name: count
+        type: int
+        default: 3
+      - name: verbose
+        type: bool
+        default: false
+    tasks:
+      - type: Print
+        message: hi
+`,
+		},
+		{
+			name: "arg name with hyphen rejected",
+			body: `name: t
+commands:
+  - name: c
+    args:
+      - name: dry-run
+    tasks:
+      - type: Print
+        message: hi
+`,
+			wantErr: true,
+		},
+		{
+			name: "flag name starting with digit rejected",
+			body: `name: t
+commands:
+  - name: c
+    flags:
+      - name: 1invalid
+    tasks:
+      - type: Print
+        message: hi
+`,
+			wantErr: true,
+		},
+		{
+			name: "int flag with string default rejected",
+			body: `name: t
+commands:
+  - name: c
+    flags:
+      - name: count
+        type: int
+        default: "not a number"
+    tasks:
+      - type: Print
+        message: hi
+`,
+			wantErr: true,
+		},
+		{
+			name: "bool flag with string default rejected",
+			body: `name: t
+commands:
+  - name: c
+    flags:
+      - name: verbose
+        type: bool
+        default: "yes"
+    tasks:
+      - type: Print
+        message: hi
+`,
+			wantErr: true,
+		},
+		{
+			name: "string flag (default type) with bool default rejected",
+			body: `name: t
+commands:
+  - name: c
+    flags:
+      - name: host
+        default: true
+    tasks:
+      - type: Print
+        message: hi
+`,
+			wantErr: true,
+		},
+		{
+			name: "short longer than one char rejected",
+			body: `name: t
+commands:
+  - name: c
+    flags:
+      - name: host
+        short: "ho"
+    tasks:
+      - type: Print
+        message: hi
+`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "profile.yaml")
+			if err := os.WriteFile(path, []byte(tt.body), 0644); err != nil {
+				t.Fatalf("write profile: %v", err)
+			}
+			err := ValidateProfile(path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateProfile() err = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestValidateProfile_taskAcceptsSharedAndVariantFields verifies that the
 // allOf+taskCommon schema refactor still permits both shared task properties
 // (name, concurrent, condition) and variant-specific ones (cmd) on the same

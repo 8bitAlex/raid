@@ -112,7 +112,7 @@ raid patch -s host.example.com 67890         # comment optional
 | `required` | When true, cobra rejects the invocation if the value is omitted. |
 | `default` (flags only) | Used when the flag is omitted. Type must match `type`. |
 
-Unparsed positional arguments (those beyond declared `args`) and `RAID_ARG_N` continue to work; declarations are additive.
+Once a command declares `args`, cobra rejects extra positional values beyond the declared list — the cap is `len(args)`. To accept an unbounded number of positional arguments, omit `args:` and read them from `$RAID_ARG_1`, `$RAID_ARG_2`, … as before. `RAID_ARG_N` remains populated for declared positional values too, so a task can reference either `$TICKET` (named) or `$RAID_ARG_1` interchangeably.
 
 ## Output configuration
 
