@@ -24,6 +24,11 @@
 #   - name: frontend
 #     path: ~/dev/my-project/frontend
 #     url: https://github.com/myorg/frontend.git
+#   - name: scratch
+#     path: ~/dev/my-project/scratch
+#     # url is optional — omit it for local-only directories with no git
+#     # remote. raid will skip cloning and run install tasks against the
+#     # existing path. The path must already exist on disk.
 
 # ---------------------------------------------------------------------------
 # Environments  (raid env <name>)
