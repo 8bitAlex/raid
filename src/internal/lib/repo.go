@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"gopkg.in/yaml.v3"
@@ -32,8 +33,13 @@ func (r Repo) IsZero() bool {
 // IsLocalOnly reports whether the repo has no configured git remote.
 // Local-only repos skip cloning; install tasks run directly against the
 // existing path. The path must already exist on disk for install to work.
+//
+// Whitespace-only URLs (e.g. `url: " "` from a stray edit) are treated as
+// local-only — the trimmed value is what would be handed to `git clone`,
+// and an empty string there produces a confusing error rather than a
+// useful one.
 func (r Repo) IsLocalOnly() bool {
-	return r.URL == ""
+	return strings.TrimSpace(r.URL) == ""
 }
 
 func (r Repo) getEnv(name string) Env {
@@ -100,7 +106,7 @@ func CloneRepository(repo Repo) error {
 		return fmt.Errorf("failed to create directory '%s': %w", path, err)
 	}
 
-	if err := clone(path, repo.URL, repo.Branch); err != nil {
+	if err := clone(path, strings.TrimSpace(repo.URL), repo.Branch); err != nil {
 		return fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
 	}
 

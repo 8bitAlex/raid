@@ -40,6 +40,9 @@ func TestRepoIsLocalOnly(t *testing.T) {
 		want bool
 	}{
 		{"empty url", Repo{Name: "x", Path: "/p"}, true},
+		{"whitespace-only url", Repo{Name: "x", Path: "/p", URL: "   "}, true},
+		{"tabs and newlines", Repo{Name: "x", Path: "/p", URL: "\t\n "}, true},
+		{"padded url is remote", Repo{Name: "x", Path: "/p", URL: "  git@example.com:x.git  "}, false},
 		{"with url", Repo{Name: "x", Path: "/p", URL: "git@example.com:x.git"}, false},
 	}
 	for _, tt := range tests {
