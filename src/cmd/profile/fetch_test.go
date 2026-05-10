@@ -195,6 +195,21 @@ func TestFindProfileFilesInDir_plainJSONFallback(t *testing.T) {
 	}
 }
 
+func TestFindProfileFilesInDir_fallbackSkipsDirectories(t *testing.T) {
+	dir := t.TempDir()
+	// Subdirectory at the repo root must be skipped by the fallback loop —
+	// only files are considered profile candidates. Real-world example: a
+	// scratch repo with `docs/` and `assets/` plus a single profile.yaml.
+	if err := os.Mkdir(filepath.Join(dir, "docs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeRaidYAML(t, dir, "profile.yaml", "p")
+	got := findProfileFilesInDir(dir)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "profile.yaml") {
+		t.Errorf("findProfileFilesInDir with subdir: got %v, want only profile.yaml", got)
+	}
+}
+
 // --- runAddProfile (URL paths) ---
 
 func TestRunAddProfile_gitURL_success(t *testing.T) {
