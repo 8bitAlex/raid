@@ -121,12 +121,37 @@ commands:
 |---|---|---|---|
 | `name` | string | Yes | Command name — invoked as `raid <name>` |
 | `usage` | string | No | Description shown in `raid --help` |
+| `args` | list | No | Declared positional arguments. See [Args](#command-args). |
+| `flags` | list | No | Declared flags / options. See [Flags](#command-flags). |
 | [`tasks`](#task) | list | Yes | Task sequence to run |
 | [`out`](#output) | object | No | Output configuration |
 
 Command names cannot shadow built-in names: `install`, `env`, `profile`, `doctor`.
 
-Arguments passed after the command name are available as `RAID_ARG_1`, `RAID_ARG_2`, etc.
+Arguments passed after the command name are available as `RAID_ARG_1`, `RAID_ARG_2`, etc. Declared `args` and `flags` (below) additionally bind to env vars named after each entry's `name` (uppercased).
+
+### Command args
+
+Each entry under `args` declares a positional argument. The supplied value is exported as an env var named after `name` (uppercased) for the duration of the command.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Argument name — uppercased to form the env var. |
+| `usage` | string | No | Short description shown in `--help`. |
+| `required` | bool | No | If true, the command fails when the positional value is omitted. Defaults to false. |
+
+### Command flags
+
+Each entry under `flags` declares a long-form `--name` flag (and optionally a `-x` short form). Values bind to an env var named after `name` (uppercased).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Flag name — long form is `--name`, env var is `NAME`. |
+| `short` | string (1 char) | No | Single-character short form, e.g. `v` → `-v`. |
+| `usage` | string | No | Short description shown in `--help`. |
+| `type` | enum | No | One of `string` (default), `bool`, `int`. Bool flags bind as the literal strings `"true"` / `"false"`. |
+| `required` | bool | No | If true, cobra rejects the invocation when the flag is omitted. |
+| `default` | string \| bool \| int | No | Value used when the flag is omitted. Must match `type`. |
 
 ### Output
 

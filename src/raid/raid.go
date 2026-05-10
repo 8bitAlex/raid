@@ -124,14 +124,17 @@ func QuietGetCommands() []lib.Command {
 	return lib.QuietLoad()
 }
 
-// ExecuteCommand runs the named command from the active profile.
-func ExecuteCommand(name string, args []string) error {
-	return lib.ExecuteCommand(name, args)
+// ExecuteCommand runs the named command from the active profile. `named`
+// carries values for declared args/flags; pass nil for the legacy
+// positional-only path.
+func ExecuteCommand(name string, args []string, named map[string]string) error {
+	return lib.ExecuteCommand(name, args, named)
 }
 
 // ExecuteRepoCommand runs a command defined in a specific repository's raid.yaml.
-func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
-	return lib.ExecuteRepoCommand(repoName, cmdName, args)
+// See ExecuteCommand for `named`.
+func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[string]string) error {
+	return lib.ExecuteRepoCommand(repoName, cmdName, args, named)
 }
 
 // Severity indicates the importance of a Doctor finding.

@@ -169,7 +169,7 @@ func TestInstallRepo_noProfile(t *testing.T) {
 
 func TestExecuteCommand_noContext(t *testing.T) {
 	setupConfig(t)
-	err := ExecuteCommand("somecmd", nil)
+	err := ExecuteCommand("somecmd", nil, nil)
 	if err == nil {
 		t.Fatal("ExecuteCommand() expected error with no context, got nil")
 	}
@@ -183,7 +183,7 @@ func TestGetRepos_emptyState(t *testing.T) {
 
 func TestExecuteRepoCommand_noContext(t *testing.T) {
 	setupConfig(t)
-	err := ExecuteRepoCommand("repo", "cmd", nil)
+	err := ExecuteRepoCommand("repo", "cmd", nil, nil)
 	if err == nil {
 		t.Fatal("ExecuteRepoCommand() expected error with no context, got nil")
 	}

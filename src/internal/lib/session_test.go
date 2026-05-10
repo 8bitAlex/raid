@@ -316,7 +316,7 @@ func TestShellSession_exportedVarFlowsToSetThenShell(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("test", nil); err != nil {
+	if err := ExecuteCommand("test", nil, nil); err != nil {
 		t.Fatalf("ExecuteCommand error: %v", err)
 	}
 
@@ -356,7 +356,7 @@ func TestShellSession_earlyExitStillCapturesEnv(t *testing.T) {
 	commandStdout = &buf
 	t.Cleanup(func() { commandStdout = origOut })
 
-	if err := ExecuteCommand("early", nil); err != nil {
+	if err := ExecuteCommand("early", nil, nil); err != nil {
 		t.Fatalf("ExecuteCommand error: %v", err)
 	}
 	if got := strings.TrimSpace(buf.String()); got != "captured" {
@@ -385,7 +385,7 @@ func TestShellSession_setECapturesEnvBeforeFailure(t *testing.T) {
 	}
 
 	// The command fails (false exits 1), but BEFORE_FAIL must be captured.
-	_ = ExecuteCommand("sete", nil)
+	_ = ExecuteCommand("sete", nil, nil)
 
 	commandSession = &commandSessionStore{
 		vars:     map[string]string{},
@@ -429,7 +429,7 @@ func TestShellSession_shellLocalVarNotExpandedByRaid(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("local", nil); err != nil {
+	if err := ExecuteCommand("local", nil, nil); err != nil {
 		t.Fatalf("ExecuteCommand error: %v", err)
 	}
 

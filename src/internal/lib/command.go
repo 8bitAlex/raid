@@ -14,8 +14,33 @@ import (
 type Command struct {
 	Name  string   `json:"name"`
 	Usage string   `json:"usage"`
+	Args  []Arg    `json:"args,omitempty"`
+	Flags []Flag   `json:"flags,omitempty"`
 	Tasks []Task   `json:"tasks"`
 	Out   *Output  `json:"out,omitempty"`
+}
+
+// Arg declares a positional argument for a custom command. The supplied value
+// is bound to the env var named after Name (uppercased) for the duration of
+// the command, so tasks can reference it as `$NAME`. Required args without a
+// matching positional value cause cobra to reject the invocation.
+type Arg struct {
+	Name     string `json:"name"`
+	Usage    string `json:"usage,omitempty"`
+	Required bool   `json:"required,omitempty"`
+}
+
+// Flag declares a long-form (--name) and optional short-form (-x) flag for a
+// custom command. Type is one of "string" (default), "bool", or "int".
+// Required flags are enforced by cobra. Default supplies the value when the
+// flag is omitted; bool flags default to false unless overridden.
+type Flag struct {
+	Name     string `json:"name"`
+	Short    string `json:"short,omitempty"`
+	Usage    string `json:"usage,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Required bool   `json:"required,omitempty"`
+	Default  any    `json:"default,omitempty"`
 }
 
 // Output configures how a command's task output is handled.
@@ -49,9 +74,11 @@ func GetRepos() []Repo {
 }
 
 // ExecuteCommand runs the tasks for the named command, applying any output configuration.
-// Args are exposed as RAID_ARG_1, RAID_ARG_2, ... environment variables for the duration
-// of the command and are unset afterwards.
-func ExecuteCommand(name string, args []string) error {
+// Positional `args` are exposed as RAID_ARG_1, RAID_ARG_2, ... environment
+// variables. When `named` is non-nil, each entry is also exported as a env
+// var with the key uppercased — this is how cobra-parsed named arguments and
+// flags reach task scripts. All bindings are unset after the command exits.
+func ExecuteCommand(name string, args []string, named map[string]string) error {
 	var found Command
 	for _, cmd := range GetCommands() {
 		if cmd.Name == name {
@@ -63,11 +90,8 @@ func ExecuteCommand(name string, args []string) error {
 		return fmt.Errorf("command '%s' not found", name)
 	}
 
-	clearRaidArgs()
-	defer clearRaidArgs()
-	for i, arg := range args {
-		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
-	}
+	cleanup := setCommandArgs(args, named)
+	defer cleanup()
 
 	startSession()
 	defer endSession()
@@ -79,7 +103,8 @@ func ExecuteCommand(name string, args []string) error {
 }
 
 // ExecuteRepoCommand runs a command defined in a specific repository's raid.yaml.
-func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
+// See ExecuteCommand for how `args` and `named` are bound to env vars.
+func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[string]string) error {
 	repos := GetRepos()
 	var repo *Repo
 	for i := range repos {
@@ -103,11 +128,8 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
 		return fmt.Errorf("command '%s' not found in repository '%s'", cmdName, repoName)
 	}
 
-	clearRaidArgs()
-	defer clearRaidArgs()
-	for i, arg := range args {
-		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
-	}
+	cleanup := setCommandArgs(args, named)
+	defer cleanup()
 
 	startSession()
 	defer endSession()
@@ -117,6 +139,29 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
 	err := runCommand(found)
 	RecordRecentEnd(recentName, err, startedAt)
 	return err
+}
+
+// setCommandArgs binds positional args to RAID_ARG_N and named args/flags to
+// uppercased env vars for the lifetime of a command run. Returns a cleanup
+// closure that unsets every env var we touched, including the named ones,
+// so a second invocation doesn't see stale state from the first.
+func setCommandArgs(args []string, named map[string]string) func() {
+	clearRaidArgs()
+	for i, arg := range args {
+		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
+	}
+	touched := make([]string, 0, len(named))
+	for k, v := range named {
+		key := strings.ToUpper(k)
+		os.Setenv(key, v)
+		touched = append(touched, key)
+	}
+	return func() {
+		clearRaidArgs()
+		for _, k := range touched {
+			os.Unsetenv(k)
+		}
+	}
 }
 
 // clearRaidArgs unsets all RAID_ARG_* environment variables.

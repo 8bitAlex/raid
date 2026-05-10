@@ -457,6 +457,74 @@
                         "type": "string",
                         "description": "Short description shown in 'raid --help'"
                     },
+                    "args": {
+                        "type": "array",
+                        "description": "Declared positional arguments. The supplied value is exported as an env var named after `name` (uppercased) for the duration of the command, available in tasks as $NAME. Required args without a corresponding positional value cause cobra to reject the invocation.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Argument name. Uppercased to form the variable name."
+                                },
+                                "usage": {
+                                    "type": "string",
+                                    "description": "Short description shown in '--help'."
+                                },
+                                "required": {
+                                    "type": "boolean",
+                                    "description": "If true the command fails when the positional value is omitted.",
+                                    "default": false
+                                }
+                            },
+                            "required": ["name"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "flags": {
+                        "type": "array",
+                        "description": "Declared flags / options. Long form is --<name>; an optional `short` adds a single-character -<x>. Values bind to an env var named after `name` (uppercased) for the duration of the command. Booleans bind as the literal strings 'true' or 'false'.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Flag name; the long form is --<name> and the env var is the uppercased name."
+                                },
+                                "short": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1,
+                                    "description": "Single-character short form, e.g. 'v' to bind -v."
+                                },
+                                "usage": {
+                                    "type": "string",
+                                    "description": "Short description shown in '--help'."
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["string", "bool", "int"],
+                                    "description": "Value type. Defaults to 'string' when omitted.",
+                                    "default": "string"
+                                },
+                                "required": {
+                                    "type": "boolean",
+                                    "description": "If true cobra rejects the invocation when the flag is omitted.",
+                                    "default": false
+                                },
+                                "default": {
+                                    "description": "Value used when the flag is omitted. Must match `type`.",
+                                    "oneOf": [
+                                        {"type": "string"},
+                                        {"type": "boolean"},
+                                        {"type": "integer"}
+                                    ]
+                                }
+                            },
+                            "required": ["name"],
+                            "additionalProperties": false
+                        }
+                    },
                     "tasks": {
                         "$ref": "#/properties/tasks"
                     },
