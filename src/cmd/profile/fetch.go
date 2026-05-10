@@ -139,6 +139,12 @@ func addProfilesFromHTTPURL(rawURL string) int {
 
 // findProfileFilesInDir returns profile YAML/JSON files found at the root of dir.
 // Priority: profile.raid.yaml/yml first, then any *.raid.yaml/yml, then profile.json.
+// Fallback for repositories that don't follow the *.raid.yaml convention
+// (single-file gists, scratch repos): if none of the above match, accept any
+// plain .yaml/.yml/.json at the root. processProfileFiles validates each
+// candidate against the profile schema, so non-profile YAML lying around
+// in a repo root produces a clear "Skipping … invalid profile" message
+// rather than incorrect behavior.
 func findProfileFilesInDir(dir string) []string {
 	seen := map[string]bool{}
 	var found []string
@@ -174,6 +180,18 @@ func findProfileFilesInDir(dir string) []string {
 	}
 
 	add("profile.json")
+
+	if len(found) == 0 {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(e.Name()))
+			if ext == ".yaml" || ext == ".yml" || ext == ".json" {
+				add(e.Name())
+			}
+		}
+	}
 
 	return found
 }

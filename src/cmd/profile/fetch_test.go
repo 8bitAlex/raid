@@ -143,13 +143,55 @@ func TestFindProfileFilesInDir_noDuplicates(t *testing.T) {
 	}
 }
 
-func TestFindProfileFilesInDir_noRaidYAML_noJSON(t *testing.T) {
+func TestFindProfileFilesInDir_plainYAMLFallback(t *testing.T) {
 	dir := t.TempDir()
-	// A plain .yaml file should not be picked up.
+	// Single-file gist scenario: a plain .yaml at the root, no *.raid.yaml.
+	// Should be picked up as a fallback.
 	writeRaidYAML(t, dir, "plain.yaml", "p")
 	got := findProfileFilesInDir(dir)
-	if len(got) != 0 {
-		t.Errorf("findProfileFilesInDir plain yaml: got %v, want none", got)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "plain.yaml") {
+		t.Errorf("findProfileFilesInDir plain yaml fallback: got %v", got)
+	}
+}
+
+func TestFindProfileFilesInDir_plainYAMLNotPickedUpWhenRaidYAMLExists(t *testing.T) {
+	dir := t.TempDir()
+	// When a *.raid.yaml is present, plain .yaml/.yml siblings (e.g. CI
+	// configs, docker-compose files) must NOT be picked up — the fallback
+	// only kicks in when there are no primary matches.
+	writeRaidYAML(t, dir, "profile.raid.yaml", "p")
+	writeRaidYAML(t, dir, "docker-compose.yaml", "ignored")
+	writeRaidYAML(t, dir, "ci.yml", "ignored")
+	got := findProfileFilesInDir(dir)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "profile.raid.yaml") {
+		t.Errorf("findProfileFilesInDir: got %v, want only profile.raid.yaml", got)
+	}
+}
+
+func TestFindProfileFilesInDir_multiplePlainYAMLFallback(t *testing.T) {
+	dir := t.TempDir()
+	// Multi-file gist: multiple plain yaml files, no *.raid.yaml. All are
+	// picked up; processProfileFiles will validate each one and skip those
+	// that aren't valid profiles.
+	writeRaidYAML(t, dir, "a.yaml", "a")
+	writeRaidYAML(t, dir, "b.yml", "b")
+	got := findProfileFilesInDir(dir)
+	if len(got) != 2 {
+		t.Errorf("findProfileFilesInDir multi plain: got %d files, want 2", len(got))
+	}
+}
+
+func TestFindProfileFilesInDir_plainJSONFallback(t *testing.T) {
+	dir := t.TempDir()
+	// Plain .json file (not literally named profile.json) — picked up via
+	// the same fallback so a gist with `myprofile.json` works.
+	path := filepath.Join(dir, "myprofile.json")
+	if err := os.WriteFile(path, []byte(`{"name":"j"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findProfileFilesInDir(dir)
+	if len(got) != 1 || !strings.HasSuffix(got[0], "myprofile.json") {
+		t.Errorf("findProfileFilesInDir plain json fallback: got %v", got)
 	}
 }
 
