@@ -121,15 +121,24 @@ var ServeCmd = &cobra.Command{
 // startVarsWatcher launches the file watcher for ~/.raid/vars. Reload events
 // run ForceLoad under the cross-process mutation lock so the in-memory
 // workspace stays consistent with on-disk changes made by other raid
-// processes (CLI, other MCP server instances) or by hand. Errors starting
-// the watcher are logged to stderr and ignored — a missing watcher degrades
-// gracefully to the previous load-once behaviour, but should not prevent the
-// MCP server from coming up.
+// processes (CLI, other MCP server instances) or by hand.
+//
+// Errors starting the watcher are logged to stderr and ignored — a missing
+// watcher degrades gracefully to the previous load-once behaviour, but
+// should not prevent the MCP server from coming up. Reload errors are also
+// surfaced to stderr so a recurring failure (bad profile after an external
+// edit, transient IO error) is visible rather than silently leaving the
+// server with a stale snapshot. The previous in-memory snapshot is
+// retained on failure since ForceLoad only swaps the cached context on
+// success.
 func startVarsWatcher(ctx stdctx.Context) {
 	err := raid.WatchRaidVars(ctx, func() {
-		_ = raid.WithMutationLock(func() error {
+		lockErr := raid.WithMutationLock(func() error {
 			return raid.ForceLoad()
 		})
+		if lockErr != nil {
+			fmt.Fprintf(os.Stderr, "raid: vars reload failed: %v\n", lockErr)
+		}
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "raid: vars watcher unavailable: %v\n", err)

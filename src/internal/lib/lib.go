@@ -172,12 +172,31 @@ func runVarsWatcher(ctx stdctx.Context, w *fsnotify.Watcher, varsPath string, on
 	defer w.Close()
 	target := filepath.Base(varsPath)
 
-	var timer *time.Timer
+	// Use a timer.C channel rather than time.AfterFunc so onChange runs
+	// from this goroutine — gated by the same select that watches
+	// ctx.Done. With AfterFunc the callback could still fire after a
+	// successful Stop+cancel race because the timer goroutine had already
+	// scheduled it.
+	timer := time.NewTimer(varsWatchDebounce)
+	stopTimer(timer)
+	armed := false
+	arm := func() {
+		if armed {
+			stopTimer(timer)
+		}
+		timer.Reset(varsWatchDebounce)
+		armed = true
+	}
+
 	for {
+		var fire <-chan time.Time
+		if armed {
+			fire = timer.C
+		}
 		select {
 		case <-ctx.Done():
-			if timer != nil {
-				timer.Stop()
+			if armed {
+				stopTimer(timer)
 			}
 			return
 		case ev, ok := <-w.Events:
@@ -187,16 +206,33 @@ func runVarsWatcher(ctx stdctx.Context, w *fsnotify.Watcher, varsPath string, on
 			if filepath.Base(ev.Name) != target {
 				continue
 			}
-			if timer == nil {
-				timer = time.AfterFunc(varsWatchDebounce, onChange)
-			} else {
-				timer.Reset(varsWatchDebounce)
+			arm()
+		case <-fire:
+			armed = false
+			// Belt-and-braces: if ctx was cancelled in the same tick the
+			// timer fired, skip the reload. The for-loop will then exit
+			// on the next ctx.Done iteration.
+			if ctx.Err() != nil {
+				return
 			}
+			onChange()
 		case err, ok := <-w.Errors:
 			if !ok {
 				return
 			}
 			fmt.Fprintf(os.Stderr, "raid: vars watcher error: %v\n", err)
+		}
+	}
+}
+
+// stopTimer stops t and drains a pending tick if Stop reports the timer
+// had already fired. Safe to call on a freshly-created timer that has not
+// yet fired or been read.
+func stopTimer(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
 		}
 	}
 }
