@@ -3,6 +3,7 @@ package lib
 
 import (
 	"bytes"
+	stdctx "context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/8bitalex/raid/schemas"
 	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/fsnotify/fsnotify"
 	"github.com/joho/godotenv"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -100,6 +103,137 @@ func loadRaidVars() {
 	defer raidVarsMu.Unlock()
 	for k, v := range m {
 		raidVars[strings.ToUpper(k)] = v
+	}
+}
+
+// snapshotRaidVars returns an independent copy of the raidVars map so callers
+// can serialize or hand it to JSON without holding the mutex or sharing
+// internal state. Returns nil when there are no vars so the JSON serializer
+// honours `omitempty` instead of emitting an empty object.
+func snapshotRaidVars() map[string]string {
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	if len(raidVars) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(raidVars))
+	for k, v := range raidVars {
+		out[k] = v
+	}
+	return out
+}
+
+// varsWatchDebounce is the window in which successive fsnotify events on the
+// vars file are coalesced into a single onChange call. Atomic writes (temp
+// file + rename, the pattern used by execSetVar and most editors) fire
+// CREATE+RENAME+WRITE in quick succession; reloading per event would thrash.
+var varsWatchDebounce = 50 * time.Millisecond
+
+// newVarsWatcherFn is the watcher factory. Tests swap it for a fake that
+// drives onChange synchronously instead of going through fsnotify.
+var newVarsWatcherFn = newVarsWatcher
+
+// WatchRaidVars watches the raid vars file (~/.raid/vars) for the lifetime
+// of ctx and invokes onChange whenever the file is created, modified, or
+// replaced. Events are debounced. The watcher is attached to the parent
+// directory so atomic-rename writes (which swap the inode) keep firing —
+// a watch on the file itself would silently go deaf after the first rename.
+//
+// onChange is the caller's reload hook; lib does not assume what to reload,
+// so the MCP server passes a closure that runs ForceLoad under the
+// cross-process mutation lock.
+func WatchRaidVars(ctx stdctx.Context, onChange func()) error {
+	if onChange == nil {
+		return fmt.Errorf("WatchRaidVars: onChange must not be nil")
+	}
+	return newVarsWatcherFn(ctx, raidVarsPath(), onChange)
+}
+
+func newVarsWatcher(ctx stdctx.Context, varsPath string, onChange func()) error {
+	dir := filepath.Dir(varsPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("ensure vars watch dir %s: %w", dir, err)
+	}
+
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("create fsnotify watcher: %w", err)
+	}
+	if err := w.Add(dir); err != nil {
+		_ = w.Close()
+		return fmt.Errorf("watch %s: %w", dir, err)
+	}
+
+	go runVarsWatcher(ctx, w, varsPath, onChange)
+	return nil
+}
+
+func runVarsWatcher(ctx stdctx.Context, w *fsnotify.Watcher, varsPath string, onChange func()) {
+	defer w.Close()
+	target := filepath.Base(varsPath)
+
+	// Use a timer.C channel rather than time.AfterFunc so onChange runs
+	// from this goroutine — gated by the same select that watches
+	// ctx.Done. With AfterFunc the callback could still fire after a
+	// successful Stop+cancel race because the timer goroutine had already
+	// scheduled it.
+	timer := time.NewTimer(varsWatchDebounce)
+	stopTimer(timer)
+	armed := false
+	arm := func() {
+		if armed {
+			stopTimer(timer)
+		}
+		timer.Reset(varsWatchDebounce)
+		armed = true
+	}
+
+	for {
+		var fire <-chan time.Time
+		if armed {
+			fire = timer.C
+		}
+		select {
+		case <-ctx.Done():
+			if armed {
+				stopTimer(timer)
+			}
+			return
+		case ev, ok := <-w.Events:
+			if !ok {
+				return
+			}
+			if filepath.Base(ev.Name) != target {
+				continue
+			}
+			arm()
+		case <-fire:
+			armed = false
+			// Belt-and-braces: if ctx was cancelled in the same tick the
+			// timer fired, skip the reload. The for-loop will then exit
+			// on the next ctx.Done iteration.
+			if ctx.Err() != nil {
+				return
+			}
+			onChange()
+		case err, ok := <-w.Errors:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "raid: vars watcher error: %v\n", err)
+		}
+	}
+}
+
+// stopTimer stops t and drains a pending tick if Stop reports the timer
+// had already fired. Safe to call on a freshly-created timer that has not
+// yet fired or been read.
+func stopTimer(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
 	}
 }
 

@@ -61,6 +61,43 @@ func TestGetWorkspaceContext_zeroProfile(t *testing.T) {
 	}
 }
 
+func TestGetWorkspaceContext_includesVars(t *testing.T) {
+	resetWorkspaceContextState(t)
+	withIsolatedRaidVars(t)
+
+	raidVarsMu.Lock()
+	raidVars["FOO"] = "bar"
+	raidVars["RAID_REPO_API_URL"] = "https://example.com/api.git"
+	raidVarsMu.Unlock()
+
+	got := GetWorkspaceContext()
+	if got.Workspace.Vars["FOO"] != "bar" {
+		t.Errorf("Vars[FOO] = %q, want %q", got.Workspace.Vars["FOO"], "bar")
+	}
+	if got.Workspace.Vars["RAID_REPO_API_URL"] != "https://example.com/api.git" {
+		t.Errorf("Vars missing RAID_REPO_API_URL: %v", got.Workspace.Vars)
+	}
+
+	// Snapshot must be independent — mutating the returned map must not
+	// touch raidVars.
+	got.Workspace.Vars["FOO"] = "tampered"
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	if raidVars["FOO"] != "bar" {
+		t.Errorf("Workspace.Vars leaked into raidVars: FOO=%q", raidVars["FOO"])
+	}
+}
+
+func TestGetWorkspaceContext_omitsEmptyVars(t *testing.T) {
+	resetWorkspaceContextState(t)
+	withIsolatedRaidVars(t)
+
+	got := GetWorkspaceContext()
+	if got.Workspace.Vars != nil {
+		t.Errorf("Vars = %v, want nil so json `omitempty` applies", got.Workspace.Vars)
+	}
+}
+
 func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 	resetWorkspaceContextState(t)
 	context = &Context{

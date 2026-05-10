@@ -34,11 +34,17 @@ const (
 	uriRepos    = "raid://workspace/repos"
 	uriCommands = "raid://workspace/commands"
 	uriRecent   = "raid://workspace/recent"
+	uriVars     = "raid://workspace/vars"
 )
 
 // serveStdioFn is the stdio entry point. Overridable in tests so we can
 // exercise BuildServer without actually consuming stdin/stdout.
 var serveStdioFn = func(s *server.MCPServer) error { return server.ServeStdio(s) }
+
+// startVarsWatcherFn is the watcher entry point. Overridable in tests so
+// `serve` can be exercised without actually attaching fsnotify to the user's
+// real ~/.raid directory.
+var startVarsWatcherFn = startVarsWatcher
 
 func init() {
 	Command.AddCommand(ServeCmd)
@@ -100,9 +106,43 @@ var ServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Run an MCP server exposing the active workspace over stdio",
 	Args:  cobra.NoArgs,
-	RunE: func(_ *cobra.Command, _ []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		parent := cmd.Context()
+		if parent == nil {
+			parent = stdctx.Background()
+		}
+		ctx, cancel := stdctx.WithCancel(parent)
+		defer cancel()
+		startVarsWatcherFn(ctx)
 		return serveStdioFn(BuildServer())
 	},
+}
+
+// startVarsWatcher launches the file watcher for ~/.raid/vars. Reload events
+// run ForceLoad under the cross-process mutation lock so the in-memory
+// workspace stays consistent with on-disk changes made by other raid
+// processes (CLI, other MCP server instances) or by hand.
+//
+// Errors starting the watcher are logged to stderr and ignored — a missing
+// watcher degrades gracefully to the previous load-once behaviour, but
+// should not prevent the MCP server from coming up. Reload errors are also
+// surfaced to stderr so a recurring failure (bad profile after an external
+// edit, transient IO error) is visible rather than silently leaving the
+// server with a stale snapshot. The previous in-memory snapshot is
+// retained on failure since ForceLoad only swaps the cached context on
+// success.
+func startVarsWatcher(ctx stdctx.Context) {
+	err := raid.WatchRaidVars(ctx, func() {
+		lockErr := raid.WithMutationLock(func() error {
+			return raid.ForceLoad()
+		})
+		if lockErr != nil {
+			fmt.Fprintf(os.Stderr, "raid: vars reload failed: %v\n", lockErr)
+		}
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "raid: vars watcher unavailable: %v\n", err)
+	}
 }
 
 // BuildServer wires up the MCP server with the workspace resources and the
@@ -166,6 +206,13 @@ func registerResources(s *server.MCPServer) {
 		),
 		readWorkspaceRecent,
 	)
+	s.AddResource(
+		mcp.NewResource(uriVars, "vars",
+			mcp.WithResourceDescription("Persisted raid variables (Set-task values + auto-derived RAID_REPO_*). Reloaded live when ~/.raid/vars changes on disk."),
+			mcp.WithMIMEType("application/json"),
+		),
+		readWorkspaceVars,
+	)
 }
 
 func readWorkspaceProfile(_ stdctx.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
@@ -186,6 +233,16 @@ func readWorkspaceCommands(_ stdctx.Context, _ mcp.ReadResourceRequest) ([]mcp.R
 
 func readWorkspaceRecent(_ stdctx.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 	return jsonResource(uriRecent, rctx.Get().Workspace.Recent)
+}
+
+func readWorkspaceVars(_ stdctx.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	vars := rctx.Get().Workspace.Vars
+	if vars == nil {
+		// jsonResource on a nil map produces "null" which is a valid JSON
+		// value but inconvenient for clients; emit an empty object instead.
+		vars = map[string]string{}
+	}
+	return jsonResource(uriVars, vars)
 }
 
 func textResource(uri, mime, text string) []mcp.ResourceContents {

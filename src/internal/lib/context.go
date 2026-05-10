@@ -44,6 +44,7 @@ type Workspace struct {
 	Repos    []WorkspaceRepo    `json:"repos"`
 	Commands []WorkspaceCommand `json:"commands"`
 	Recent   []RecentEntry      `json:"recent,omitempty"`
+	Vars     map[string]string  `json:"vars,omitempty"`
 }
 
 // WorkspaceTool describes a built-in `raid` subcommand the agent can invoke
@@ -107,6 +108,7 @@ func GetWorkspaceContext() WorkspaceContext {
 			Repos:    []WorkspaceRepo{},
 			Commands: []WorkspaceCommand{},
 			Recent:   ReadRecent(),
+			Vars:     snapshotRaidVars(),
 		},
 	}
 	if context == nil {

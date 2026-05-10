@@ -175,7 +175,7 @@ raid context serve   # blocks; intended to be launched by an MCP host
 
 ### What's exposed
 
-**Resources** — five `raid://workspace/*` URIs that mirror the static snapshot's `workspace` object. Each is fetched live on demand:
+**Resources** — six `raid://workspace/*` URIs that mirror the static snapshot's `workspace` object. Each is fetched live on demand:
 
 | URI | MIME | Contents |
 |---|---|---|
@@ -184,6 +184,7 @@ raid context serve   # blocks; intended to be launched by an MCP host
 | `raid://workspace/repos` | `application/json` | Repositories with current git state |
 | `raid://workspace/commands` | `application/json` | User-defined raid commands |
 | `raid://workspace/recent` | `application/json` | Recent command invocations |
+| `raid://workspace/vars` | `application/json` | Persisted raid variables (`Set` task values + `RAID_REPO_*`). The server watches `~/.raid/vars` and reloads when another process modifies it, so reads are live across concurrent raid invocations. |
 
 **Tools** — the canonical raid agent toolkit defined in [issue #45](https://github.com/8bitalex/raid/issues/45):
 

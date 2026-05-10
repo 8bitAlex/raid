@@ -15,6 +15,7 @@ Related packages:
 package raid
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -85,6 +86,15 @@ func SetCommandOutput(stdout, stderr io.Writer) func() {
 // are recoverable.
 func WithMutationLock(fn func() error) error {
 	return lib.WithMutationLock(fn)
+}
+
+// WatchRaidVars watches the persisted raid vars file (~/.raid/vars) for the
+// lifetime of ctx and invokes onChange whenever the file is created, modified,
+// or replaced. Events are debounced internally. The watcher returns when ctx
+// is cancelled. See lib.WatchRaidVars for atomic-rename / inode-swap
+// semantics.
+func WatchRaidVars(ctx context.Context, onChange func()) error {
+	return lib.WatchRaidVars(ctx, onChange)
 }
 
 // Install the active profile

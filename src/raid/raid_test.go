@@ -1,6 +1,7 @@
 package raid
 
 import (
+	stdctx "context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,6 +99,15 @@ func TestLoad_noProfile(t *testing.T) {
 	setupConfig(t)
 	// Load returns an error when no profile is configured — this is expected.
 	_ = Load()
+}
+
+// TestWatchRaidVars_rejectsNilOnChange guards the public re-export so a
+// caller using the raid package (instead of lib directly) gets the same
+// guardrail.
+func TestWatchRaidVars_rejectsNilOnChange(t *testing.T) {
+	if err := WatchRaidVars(stdctx.Background(), nil); err == nil {
+		t.Fatal("expected error for nil onChange")
+	}
 }
 
 func TestForceLoad_noProfile(t *testing.T) {
