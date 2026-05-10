@@ -240,6 +240,17 @@ func processProfileFiles(paths []string) int {
 	}
 
 	if len(queued) == 0 {
+		// Differentiate "all profiles already registered" (fine, exit 0)
+		// from "we found candidate files but none validated as profiles"
+		// (a real failure — exit 1 so callers and CI catch it). The
+		// fallback in findProfileFilesInDir can pull in plain root yamls
+		// like docker-compose.yaml from gists/scratch repos; without
+		// this branch `raid profile add <url>` would exit 0 even though
+		// nothing was imported.
+		if len(existingNames) == 0 {
+			fmt.Println("No valid profiles found")
+			return 1
+		}
 		fmt.Println("No new profiles found")
 		return 0
 	}

@@ -306,6 +306,40 @@ func TestRunAddProfile_gitURL_noProfiles(t *testing.T) {
 	}
 }
 
+// TestRunAddProfile_gitURL_onlyNonProfileYAML covers the regression
+// surface introduced by the plain-yaml fallback in findProfileFilesInDir.
+// A repo (or single-file gist) whose only root yaml/json files are
+// non-profile content (e.g. docker-compose.yaml, package.json) now gets
+// pulled in by the fallback, fails schema validation in
+// processProfileFiles, and must exit 1 with "No valid profiles found"
+// rather than misleadingly succeeding with "No new profiles found".
+func TestRunAddProfile_gitURL_onlyNonProfileYAML(t *testing.T) {
+	setupConfig(t)
+	defer saveFetchMocks()()
+
+	homeDir := t.TempDir()
+	getHomeDir = func() string { return homeDir }
+	detectGitURL = func(string) bool { return true }
+	gitCloneFunc = func(_, dir string) error {
+		// Plain non-profile yaml at the repo root — matches the fallback
+		// glob but fails schema validation.
+		return os.WriteFile(filepath.Join(dir, "docker-compose.yaml"),
+			[]byte("services:\n  web:\n    image: nginx\n"), 0644)
+	}
+
+	out := captureStdout(t, func() {
+		if code := runAddProfile("https://github.com/example/repo"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
+	if !strings.Contains(out, "No valid profiles found") {
+		t.Errorf("got %q, want 'No valid profiles found'", out)
+	}
+	if !strings.Contains(out, "Skipping docker-compose.yaml") {
+		t.Errorf("got %q, want 'Skipping docker-compose.yaml' diagnostic", out)
+	}
+}
+
 func TestRunAddProfile_httpURL_success(t *testing.T) {
 	setupConfig(t)
 	defer saveFetchMocks()()
@@ -360,12 +394,16 @@ func TestRunAddProfile_httpURL_invalidProfile(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
-			t.Errorf("code = %d, want 0", code)
+		// Schema-invalid input is a real failure — exit 1, not 0. The
+		// previous "No new profiles found" exit-0 behavior masked
+		// failures (especially relevant now that the file-discovery
+		// fallback can pull in arbitrary plain yaml).
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
 		}
 	})
-	if !strings.Contains(out, "No new profiles found") {
-		t.Errorf("got %q, want 'No new profiles found'", out)
+	if !strings.Contains(out, "No valid profiles found") {
+		t.Errorf("got %q, want 'No valid profiles found'", out)
 	}
 }
 
@@ -384,12 +422,13 @@ func TestRunAddProfile_httpURL_unmarshalError(t *testing.T) {
 	proUnmarshal = func(string) ([]pro.Profile, error) { return nil, errMock }
 
 	out := captureStdout(t, func() {
-		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
-			t.Errorf("code = %d, want 0", code)
+		// Unmarshal failures are real errors — exit 1.
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
 		}
 	})
-	if !strings.Contains(out, "No new profiles found") {
-		t.Errorf("got %q, want 'No new profiles found'", out)
+	if !strings.Contains(out, "No valid profiles found") {
+		t.Errorf("got %q, want 'No valid profiles found'", out)
 	}
 }
 
@@ -503,8 +542,9 @@ func TestRunAddProfile_invalidProfileName(t *testing.T) {
 	proContains = func(string) bool { return false }
 
 	out := captureStdout(t, func() {
-		if code := runAddProfile("https://example.com/profile.yaml"); code != 0 {
-			t.Errorf("code = %d, want 0", code)
+		// All profiles rejected by ValidateFileName → real failure, exit 1.
+		if code := runAddProfile("https://example.com/profile.yaml"); code != 1 {
+			t.Errorf("code = %d, want 1", code)
 		}
 	})
 	if !strings.Contains(out, "invalid name") {
