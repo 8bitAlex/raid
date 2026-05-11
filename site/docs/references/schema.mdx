@@ -6,6 +6,31 @@ sidebar_position: 5
 
 Complete field reference for profile files and repository `raid.yaml` files.
 
+## Published JSON Schemas
+
+Raid publishes versioned JSON Schemas under a stable URL. Point your editor or
+agent at these to get autocomplete, validation, and inline docs:
+
+| File | Schema URL |
+|---|---|
+| `*.raid.yaml` profile files | `https://raidcli.dev/schema/v1/raid-profile.schema.json` |
+| Per-repo `raid.yaml` files | `https://raidcli.dev/schema/v1/raid-repo.schema.json` |
+| Shared `$defs` (referenced by the two above) | `https://raidcli.dev/schema/v1/raid-defs.schema.json` |
+
+The `/v1/` path is a stability contract — schemas under it are kept
+backwards-compatible. Breaking changes will publish to `/v2/`.
+
+Add a `# yaml-language-server` modeline to wire schema validation in your editor:
+
+```yaml
+# yaml-language-server: $schema=https://raidcli.dev/schema/v1/raid-profile.schema.json
+name: my-project
+```
+
+Editors that consult SchemaStore (VS Code + Red Hat YAML, JetBrains, Neovim
+with `yaml-language-server`, Helix, …) auto-associate `*.raid.yaml` and
+`raid.yaml` with the published schemas, so the modeline is optional.
+
 ---
 
 ## Profile file

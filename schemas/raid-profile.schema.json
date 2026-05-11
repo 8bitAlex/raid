@@ -1,6 +1,6 @@
-{ 
+{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "raid-profile.schema.json",
+  "$id": "https://raidcli.dev/schema/v1/raid-profile.schema.json",
   "title": "Raid Profile Configuration",
   "description": "Configuration for one or more raid profiles.",
   "type": "object",
@@ -34,22 +34,21 @@
       "minItems": 1
     },
     "environments": {
-      "$ref": "raid-defs.schema.json#/properties/environments"
+      "$ref": "https://raidcli.dev/schema/v1/raid-defs.schema.json#/properties/environments"
     },
     "install": {
-      "$ref": "raid-defs.schema.json#/properties/install"
+      "$ref": "https://raidcli.dev/schema/v1/raid-defs.schema.json#/properties/install"
     },
     "task_groups": {
       "type": "object",
       "description": "Named reusable task sequences. Reference them in any task list with type: Group and ref: <name>.",
       "additionalProperties": {
-        "$ref": "raid-defs.schema.json#/properties/tasks"
+        "$ref": "https://raidcli.dev/schema/v1/raid-defs.schema.json#/properties/tasks"
       }
     },
     "commands": {
-      "$ref": "raid-defs.schema.json#/properties/commands"
+      "$ref": "https://raidcli.dev/schema/v1/raid-defs.schema.json#/properties/commands"
     }
   },
   "required": ["name"]
 }
-

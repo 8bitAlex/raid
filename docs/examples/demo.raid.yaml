@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
+# yaml-language-server: $schema=https://raidcli.dev/schema/v1/raid-profile.schema.json
 
 # This is a raid profile definition for a fictional company called Acme. It defines two repositories (web and api) 
 # and a development environment with tasks to set up and run the projects.
