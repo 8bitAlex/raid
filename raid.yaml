@@ -21,6 +21,11 @@ install:
         platform: linux
         cmd: "! which node"
     - type: Shell
+      name: Verify Node.js version
+      literal: true
+      cmd: |-
+        node -e 'const v=process.versions.node.split(".").map(Number); if (!(v[0]>=24 || (v[0]===22 && v[1]>=22))) { console.error("Node.js v22.22+ or v24+ required (you have v"+process.versions.node+"). Use nvm/fnm (an .nvmrc is provided in ./site) or upgrade via brew."); process.exit(1); }'
+    - type: Shell
       name: Install dependencies
       cmd: cd ./site && npm install
 
