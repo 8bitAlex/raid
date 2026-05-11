@@ -1029,6 +1029,84 @@ func TestForceLoad_singleRepoProfile_invalidSchema(t *testing.T) {
 	}
 }
 
+// TestBuildSingleRepoProfile_wrongBasename rejects paths that don't end in
+// the canonical raid.yaml name — ExtractRepo reads <dir>/raid.yaml so
+// validating one file and loading another would be a silent footgun.
+func TestBuildSingleRepoProfile_wrongBasename(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	// Write a valid raid.yaml so the repo-schema check would pass, but
+	// hand BuildSingleRepoProfile a renamed copy.
+	if err := os.WriteFile(filepath.Join(dir, RaidConfigFileName), []byte("name: ok\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	renamed := filepath.Join(dir, "not-raid.yaml")
+	if err := os.WriteFile(renamed, []byte("name: ok\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := BuildSingleRepoProfile(renamed)
+	if err == nil {
+		t.Fatal("BuildSingleRepoProfile expected error for non-raid.yaml basename")
+	}
+	if !strings.Contains(err.Error(), RaidConfigFileName) {
+		t.Errorf("error = %v, want mention of %s", err, RaidConfigFileName)
+	}
+}
+
+// TestBuildProfile_singleRepoNameMismatch ensures buildProfile refuses to
+// load a single-repo profile whose registered name no longer matches the
+// raid.yaml's current name field.
+func TestBuildProfile_singleRepoNameMismatch(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	if err := os.WriteFile(repoYaml, []byte("name: newname\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Registered profile uses "oldname" — simulates the user renaming the
+	// raid.yaml's name field after `raid profile add`.
+	_, err := buildProfile(Profile{Name: "oldname", Path: repoYaml})
+	if err == nil {
+		t.Fatal("buildProfile expected error when registered name diverges from raid.yaml name")
+	}
+	if !strings.Contains(err.Error(), "oldname") || !strings.Contains(err.Error(), "newname") {
+		t.Errorf("error = %v, want both registered and current names mentioned", err)
+	}
+}
+
+// TestBuildProfile_singleRepoNameMatch confirms the name-match path
+// succeeds and returns the synthesized profile.
+func TestBuildProfile_singleRepoNameMatch(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	if err := os.WriteFile(repoYaml, []byte("name: match\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := buildProfile(Profile{Name: "match", Path: repoYaml})
+	if err != nil {
+		t.Fatalf("buildProfile: %v", err)
+	}
+	if p.Name != "match" {
+		t.Errorf("Name = %q, want match", p.Name)
+	}
+}
+
 // TestWriteProfileFile_error tests the error path when the save path is invalid.
 func TestWriteProfileFile_error(t *testing.T) {
 	if runtime.GOOS == "windows" {

@@ -1172,3 +1172,47 @@ func TestRunCreateWizardCore_withReposAndConfigCreate(t *testing.T) {
 		t.Error("proCreateRepoConfigs should have been called")
 	}
 }
+
+// TestRunAddProfile_repoConfigInvalidSchema covers the new "raid.yaml fails
+// repo-schema validation" path: when basename is raid.yaml we report it as
+// an invalid raid.yaml, not as an invalid profile.
+func TestRunAddProfile_repoConfigInvalidSchema(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, "raid.yaml")
+	// Missing required `branch` — repo schema should reject this.
+	if err := os.WriteFile(repoYaml, []byte("name: noBranch\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if code := runAddProfile(repoYaml); code != 1 {
+			t.Errorf("runAddProfile invalid raid.yaml: code = %d, want 1", code)
+		}
+	})
+	if !strings.Contains(out, "Invalid raid.yaml") {
+		t.Errorf("expected 'Invalid raid.yaml' in output, got %q", out)
+	}
+}
+
+// TestRunAddProfile_nonRaidYamlFallbackFailsBasenameGuard covers the
+// non-raid.yaml branch where profile validation fails and the fallback
+// synthesis fails BuildSingleRepoProfile's basename guard — the original
+// profile-validation error is the one reported to the user.
+func TestRunAddProfile_nonRaidYamlFallbackFailsBasenameGuard(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "renamed.raid.yaml")
+	// Contents look like a repo config (has `branch`), so profile schema
+	// rejects them. Basename guard then rejects the repo-schema fallback.
+	if err := os.WriteFile(path, []byte("name: renamed\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if code := runAddProfile(path); code != 1 {
+			t.Errorf("runAddProfile non-raid.yaml repo content: code = %d, want 1", code)
+		}
+	})
+	if !strings.Contains(out, "Invalid Profile") {
+		t.Errorf("expected 'Invalid Profile' in output, got %q", out)
+	}
+}
