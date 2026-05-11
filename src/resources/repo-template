@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json
+# yaml-language-server: $schema=https://raidcli.dev/schema/v1/raid-repo.schema.json
 #
 # Raid Repository Configuration
 # A raid.yaml file lives in the root of a repository and defines per-repo

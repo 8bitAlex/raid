@@ -17,7 +17,7 @@ import (
 const (
 	activeProfileKey  = "profile"
 	allProfilesKey    = "profiles"
-	profileSchemaPath = "raid-profile.schema.json"
+	profileSchemaPath = "https://raidcli.dev/schema/v1/raid-profile.schema.json"
 )
 
 // Profile represents a named collection of repositories, environments, and task groups.

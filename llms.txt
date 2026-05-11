@@ -41,9 +41,9 @@ Raid is written in Go, distributed as a single self-contained binary, and publis
 
 ## Schemas
 
-- [Profile JSON Schema](https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json): Validation schema for `*.raid.yaml` profile files
-- [Repository JSON Schema](https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-repo.schema.json): Validation schema for per-repo `raid.yaml` files
-- [Shared definitions schema](https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-defs.schema.json): Common type definitions referenced by both schemas
+- [Profile JSON Schema](https://raidcli.dev/schema/v1/raid-profile.schema.json): Validation schema for `*.raid.yaml` profile files (v1 — stable URL)
+- [Repository JSON Schema](https://raidcli.dev/schema/v1/raid-repo.schema.json): Validation schema for per-repo `raid.yaml` files (v1 — stable URL)
+- [Shared definitions schema](https://raidcli.dev/schema/v1/raid-defs.schema.json): Common type definitions referenced by both schemas (v1 — stable URL)
 - [SchemaStore catalog](https://www.schemastore.org/api/json/catalog.json): Published catalog entries — auto-discovered by VS Code, JetBrains, Neovim, and other editors using the schemastore catalog
 
 ## Examples

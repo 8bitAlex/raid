@@ -547,10 +547,11 @@ func ValidateSchema(path string, schemaPath string) error {
 }
 
 // validateWithEmbeddedSchema validates path against a schema embedded in the binary.
-// schemaName must be the bare filename of a schema in the embedded schemas directory
-// (e.g. "raid-profile.schema.json"). All embedded schemas are registered so that
-// cross-schema $ref values resolve correctly.
-func validateWithEmbeddedSchema(path, schemaName string) error {
+// schemaID must be the canonical $id URL of an embedded schema
+// (e.g. "https://raidcli.dev/schema/v1/raid-profile.schema.json"). All embedded
+// schemas are registered under their $id so cross-schema $ref values resolve
+// correctly without any network access.
+func validateWithEmbeddedSchema(path, schemaID string) error {
 	path = sys.ExpandPath(path)
 	if path == "" || !sys.FileExists(path) {
 		return fmt.Errorf("file not found at %s", path)
@@ -562,20 +563,28 @@ func validateWithEmbeddedSchema(path, schemaName string) error {
 		return fmt.Errorf("failed to read embedded schemas: %w", err)
 	}
 	for _, entry := range entries {
-		data, err := schemas.FS.ReadFile(entry.Name())
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		data, err := schemas.FS.ReadFile(name)
 		if err != nil {
-			return fmt.Errorf("failed to read embedded schema %s: %w", entry.Name(), err)
+			return fmt.Errorf("failed to read embedded schema %s: %w", name, err)
 		}
-		var doc any
+		var doc map[string]any
 		if err := json.Unmarshal(data, &doc); err != nil {
-			return fmt.Errorf("failed to parse embedded schema %s: %w", entry.Name(), err)
+			return fmt.Errorf("failed to parse embedded schema %s: %w", name, err)
 		}
-		if err := c.AddResource(entry.Name(), doc); err != nil {
-			return fmt.Errorf("failed to register embedded schema %s: %w", entry.Name(), err)
+		id, _ := doc["$id"].(string)
+		if id == "" {
+			return fmt.Errorf("embedded schema %s is missing $id", name)
+		}
+		if err := c.AddResource(id, doc); err != nil {
+			return fmt.Errorf("failed to register embedded schema %s: %w", name, err)
 		}
 	}
 
-	sch, err := c.Compile(schemaName)
+	sch, err := c.Compile(schemaID)
 	if err != nil {
 		return err
 	}

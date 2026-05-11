@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const repoSchemaPath = "raid-repo.schema.json"
+const repoSchemaPath = "https://raidcli.dev/schema/v1/raid-repo.schema.json"
 
 // Repo represents a single repository entry in a profile.
 type Repo struct {

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../schemas/raid-repo.schema.json
+# yaml-language-server: $schema=https://raidcli.dev/schema/v1/raid-repo.schema.json
 
 name: raid
 branch: main

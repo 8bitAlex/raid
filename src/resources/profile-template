@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/8bitalex/raid/main/schemas/raid-profile.schema.json
+# yaml-language-server: $schema=https://raidcli.dev/schema/v1/raid-profile.schema.json
 #
 # Raid Profile
 # A raid profile defines a collection of repositories, shared environments,
