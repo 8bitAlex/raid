@@ -77,6 +77,23 @@ func checkProfile() []Finding {
 		Message:  fmt.Sprintf("found at %s", profile.Path),
 	})
 
+	if profile.IsSingleRepo() {
+		fullProfile, err := BuildSingleRepoProfile(profile.Path)
+		if err != nil {
+			return append(findings, Finding{
+				Severity:   SeverityError,
+				Check:      "profile schema",
+				Message:    err.Error(),
+				Suggestion: "fix the raid.yaml to match the repo schema",
+			})
+		}
+		findings = append(findings, Finding{Severity: SeverityOK, Check: "profile schema", Message: "valid (single-repo)"})
+		for _, repo := range fullProfile.Repositories {
+			findings = append(findings, checkRepo(repo)...)
+		}
+		return findings
+	}
+
 	if err := ValidateProfile(profile.Path); err != nil {
 		return append(findings, Finding{
 			Severity:   SeverityError,

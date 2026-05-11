@@ -601,7 +601,7 @@ Profiles are registered in a [Viper](https://github.com/spf13/viper)-managed con
 
 ### Can I use Raid with a monorepo?
 
-Raid is optimized for multi-repo setups, but it works for a single repo too — you can skip the top-level profile and commit a `raid.yaml` at the repo root to define commands, environments, and tasks for that project.
+Raid is optimized for multi-repo setups, but it works for a single repo too — commit a `raid.yaml` at the repo root and register it as a single-repo profile with `raid profile add ./raid.yaml`. No wrapping profile file required; the profile is named after the raid.yaml's `name` field and behaves like any other profile.
 
 ### How do I share profiles across my team?
 

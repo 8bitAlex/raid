@@ -12,12 +12,14 @@ import (
 
 // Injectable profile-package functions for testing error paths.
 var (
-	proValidate  = pro.Validate
-	proUnmarshal = pro.Unmarshal
-	proContains  = pro.Contains
-	proAddAll    = pro.AddAll
-	proGet       = pro.Get
-	proSet       = pro.Set
+	proValidate         = pro.Validate
+	proValidateRepo     = pro.ValidateRepoConfig
+	proSynthesizeRepo   = pro.SynthesizeFromRepoConfig
+	proUnmarshal        = pro.Unmarshal
+	proContains         = pro.Contains
+	proAddAll           = pro.AddAll
+	proGet              = pro.Get
+	proSet              = pro.Set
 )
 
 var AddProfileCmd = &cobra.Command{
@@ -25,7 +27,10 @@ var AddProfileCmd = &cobra.Command{
 	Short: "Add profile(s) from a local file or URL",
 	Long: `Add one or more profiles from a local file, a git repository URL, or a raw file URL.
 
-Local path: the file is validated and registered directly.
+Local path: the file is validated and registered directly. A repo config
+(raid.yaml) is also accepted and registered as a single-repo profile named
+after the raid.yaml's ` + "`name`" + ` field — handy for projects that ship
+only a raid.yaml without a wrapping profile.
 
 Git URL (git@ prefix, .git suffix, or any HTTP URL that responds to git ls-remote):
   raid shallow-clones the repo and imports *.raid.yaml, *.raid.yml, and profile.json
@@ -58,15 +63,28 @@ func runAddProfile(path string) int {
 		return 1
 	}
 
+	var profiles []pro.Profile
 	if err := proValidate(path); err != nil {
-		fmt.Printf("Invalid Profile: %v\n", err)
-		return 1
-	}
-
-	profiles, err := proUnmarshal(path)
-	if err != nil {
-		fmt.Printf("Failed to extract profiles: %v\n", err)
-		return 1
+		// Fall back to repo-schema validation so users can run
+		// `raid profile add ./raid.yaml` directly on a repo config.
+		if rerr := proValidateRepo(path); rerr == nil {
+			single, serr := proSynthesizeRepo(path)
+			if serr != nil {
+				fmt.Printf("Invalid Repo Config: %v\n", serr)
+				return 1
+			}
+			profiles = []pro.Profile{single}
+		} else {
+			fmt.Printf("Invalid Profile: %v\n", err)
+			return 1
+		}
+	} else {
+		extracted, err := proUnmarshal(path)
+		if err != nil {
+			fmt.Printf("Failed to extract profiles: %v\n", err)
+			return 1
+		}
+		profiles = extracted
 	}
 
 	var newProfiles []pro.Profile

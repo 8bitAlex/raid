@@ -184,6 +184,41 @@ func TestValidate_invalidYAML(t *testing.T) {
 	}
 }
 
+func TestValidateRepoConfig_valid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "raid.yaml")
+	os.WriteFile(path, []byte("name: ok\nbranch: main\n"), 0644)
+	if err := ValidateRepoConfig(path); err != nil {
+		t.Errorf("ValidateRepoConfig() error = %v, want nil", err)
+	}
+}
+
+func TestValidateRepoConfig_invalid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "raid.yaml")
+	// Missing required `branch` field per repo schema.
+	os.WriteFile(path, []byte("name: ok\n"), 0644)
+	if err := ValidateRepoConfig(path); err == nil {
+		t.Fatal("ValidateRepoConfig() expected error for missing branch")
+	}
+}
+
+func TestSynthesizeFromRepoConfig_valid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "raid.yaml")
+	os.WriteFile(path, []byte("name: synth\nbranch: main\n"), 0644)
+	p, err := SynthesizeFromRepoConfig(path)
+	if err != nil {
+		t.Fatalf("SynthesizeFromRepoConfig() error: %v", err)
+	}
+	if p.Name != "synth" || p.Path != path {
+		t.Errorf("got name=%q path=%q, want name=synth path=%q", p.Name, p.Path, path)
+	}
+	if !p.IsSingleRepo() {
+		t.Error("IsSingleRepo() = false on synthesized profile")
+	}
+}
+
 func TestContains_false(t *testing.T) {
 	setupConfig(t)
 	if Contains("absent") {

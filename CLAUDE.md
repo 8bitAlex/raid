@@ -4,7 +4,7 @@ Build: `go build -o raid .` Test: `go test ./...` Run: `go run . <cmd>`
 
 Layout: main.go→src/cmd. src/cmd/raid.go=root cmd+subcommand registration+version check. Reserved built-in subcmds: context/, doctor/, env/, install/, profile/ (user cmds w/ same name ignored w/ warning). context/ has subcmd serve (MCP stdio server). src/raid/=core domain (profile loading, env resolution, cmd execution). src/internal/=lib/ (shared types), sys/ (OS helpers, GitHub release checks), utils/. schemas/=JSON schemas (raid-repo.schema.json, raid-profile.schema.json, raid-defs.schema.json). src/resources/=embedded assets (app.properties, profile-template, repo-template) via go:embed; resources.go exposes them. site/=Docusaurus source (merged from docsite-source 2026-04-10); builds to gh-pages via .github/workflows/docs.yml on site/** changes.
 
-Config: raid.yaml=per-repo (environments+tasks: Shell|Script|HTTP|Wait|Template|Group|Git|Prompt|Confirm|Set|Print). profile.raid.yml=user profile (tracked repos, global settings).
+Config: raid.yaml=per-repo (environments+tasks: Shell|Script|HTTP|Wait|Template|Group|Git|Prompt|Confirm|Set|Print). profile.raid.yml=user profile (tracked repos, global settings). This repo dogfoods single-repo-profile mode (#52): no profile.raid.yml is committed; raid.yaml is registered directly with `raid profile add ./raid.yaml` and activated via `raid profile raid`. profile.raid.yml is in .gitignore so local dev profiles never accidentally get committed.
 
 Versioning: version in src/resources/app.properties. Bump second position (minor) for feature/large changes; bump third position (patch) for small changes or bug fixes.
 

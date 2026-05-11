@@ -697,6 +697,50 @@ func TestRunAddProfile_allDuplicates(t *testing.T) {
 	})
 }
 
+// TestRunAddProfile_repoConfigAsProfile checks that a raid.yaml (repo schema)
+// can be registered as a single-repo profile. The profile name is the
+// raid.yaml's `name` field.
+func TestRunAddProfile_repoConfigAsProfile(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, "raid.yaml")
+	if err := os.WriteFile(repoYaml, []byte("name: soloproj\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if code := runAddProfile(repoYaml); code != 0 {
+			t.Errorf("runAddProfile repo-config: code = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(out, "soloproj") {
+		t.Errorf("runAddProfile repo-config: got %q, want 'soloproj'", out)
+	}
+	if !lib.ContainsProfile("soloproj") {
+		t.Error("runAddProfile repo-config: profile not registered")
+	}
+	got := lib.GetProfile()
+	if got.Name != "soloproj" || got.Path != repoYaml {
+		t.Errorf("active profile = %+v, want name=soloproj path=%s", got, repoYaml)
+	}
+}
+
+// TestRunAddProfile_repoConfigMissingName: a raid.yaml that passes the repo
+// schema check but has no name field should report an error.
+func TestRunAddProfile_repoConfigMissingName(t *testing.T) {
+	setupConfig(t)
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, "raid.yaml")
+	// Schema-valid (name is a string, just empty) and branch required.
+	if err := os.WriteFile(repoYaml, []byte("name: \"\"\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_ = captureStdout(t, func() {
+		if code := runAddProfile(repoYaml); code != 1 {
+			t.Errorf("runAddProfile empty-name: code = %d, want 1", code)
+		}
+	})
+}
+
 func TestRunAddProfile_multiDocSuccess(t *testing.T) {
 	setupConfig(t)
 	dir := t.TempDir()

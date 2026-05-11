@@ -264,6 +264,72 @@ func TestCheckRepo_localOnly_missingPathIsError(t *testing.T) {
 	}
 }
 
+// --- checkProfile in single-repo mode ---
+
+func TestCheckProfile_singleRepoValid(t *testing.T) {
+	setupTestConfig(t)
+
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	os.WriteFile(repoYaml, []byte("name: sr\nbranch: main\n"), 0644)
+	// Make the directory look like a git repo so the repo check passes cleanly.
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+
+	if err := AddProfile(Profile{Name: "sr", Path: repoYaml}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("sr"); err != nil {
+		t.Fatal(err)
+	}
+
+	findings := checkProfile()
+	severities := severitySet(findings)
+	if severities[SeverityError] {
+		t.Errorf("checkProfile(): unexpected error findings for single-repo profile: %v", findings)
+	}
+	// Confirm the "single-repo" label appears so users can tell which mode they're in.
+	var sawLabel bool
+	for _, f := range findings {
+		if f.Check == "profile schema" && f.Severity == SeverityOK {
+			sawLabel = true
+		}
+	}
+	if !sawLabel {
+		t.Error("checkProfile(): expected 'profile schema' OK finding in single-repo mode")
+	}
+}
+
+func TestCheckProfile_singleRepoInvalid(t *testing.T) {
+	setupTestConfig(t)
+
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	// Missing required `branch` field — repo schema violation.
+	os.WriteFile(repoYaml, []byte("name: sr-bad\n"), 0644)
+
+	if err := AddProfile(Profile{Name: "sr-bad", Path: repoYaml}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("sr-bad"); err != nil {
+		t.Fatal(err)
+	}
+
+	findings := checkProfile()
+	if !severitySet(findings)[SeverityError] {
+		t.Error("checkProfile(): expected error finding for invalid single-repo raid.yaml")
+	}
+}
+
 // severitySet returns a set of all severities present in findings.
 func severitySet(findings []Finding) map[Severity]bool {
 	out := make(map[Severity]bool, len(findings))
