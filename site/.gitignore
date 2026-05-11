@@ -10,6 +10,9 @@
 raid
 .env
 
+# Schemas copied from /schemas by plugins/copy-schemas.ts at build time
+/static/schema/
+
 # Misc
 .DS_Store
 .env.local

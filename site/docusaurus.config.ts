@@ -51,6 +51,7 @@ const config: Config = {
   ],
 
   plugins: [
+    require.resolve('./plugins/copy-schemas.ts'),
     [
       '@easyops-cn/docusaurus-search-local',
       {

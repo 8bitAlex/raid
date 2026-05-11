@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.11.1 — upcoming
+
+**Schemas published at a stable URL.** The profile, repo, and shared-defs JSON Schemas are now served at `https://raidcli.dev/schema/v1/raid-profile.schema.json`, `…/raid-repo.schema.json`, and `…/raid-defs.schema.json`. Generated profile and repo templates point at these URLs out of the box, so YAML LSPs and agents get autocomplete and inline validation against the canonical contract. The `/v1/` path is a stability promise — additive changes only; breaking changes will publish to `/v2/`. The docsite build copies `schemas/` into `static/schema/v1/`, so the canonical source remains the single Go-embedded copy. Closes [#48](https://github.com/8bitAlex/raid/issues/48).
+
 ## 0.11.0 — upcoming
 
 **Declared arguments and flags on custom commands.** `commands[]` entries now accept an `args` list (named positional arguments) and a `flags` list (long/short options with optional default and type — `string`, `bool`, or `int`). Declared values are exported as env vars named after each entry (uppercased), so `args: [{name: ticket, required: true}]` makes `$TICKET` available in tasks for the duration of the command. Cobra enforces required values and validates positional cardinality before raid runs anything. `RAID_ARG_N` continues to work for unnamed positional arguments. Closes [#26](https://github.com/8bitAlex/raid/issues/26).

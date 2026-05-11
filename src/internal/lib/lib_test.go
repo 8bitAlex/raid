@@ -749,14 +749,14 @@ func TestValidateSchema_invalidJSONArrayElement(t *testing.T) {
 // --- validateWithEmbeddedSchema ---
 
 func TestValidateWithEmbeddedSchema_missingFile(t *testing.T) {
-	err := validateWithEmbeddedSchema("/nonexistent/file.yaml", "raid-profile.schema.json")
+	err := validateWithEmbeddedSchema("/nonexistent/file.yaml", "https://raidcli.dev/schema/v1/raid-profile.schema.json")
 	if err == nil {
 		t.Fatal("validateWithEmbeddedSchema: expected error for missing file")
 	}
 }
 
 func TestValidateWithEmbeddedSchema_emptyPath(t *testing.T) {
-	err := validateWithEmbeddedSchema("", "raid-profile.schema.json")
+	err := validateWithEmbeddedSchema("", "https://raidcli.dev/schema/v1/raid-profile.schema.json")
 	if err == nil {
 		t.Fatal("validateWithEmbeddedSchema: expected error for empty path")
 	}
@@ -767,7 +767,7 @@ func TestValidateWithEmbeddedSchema_validProfile(t *testing.T) {
 	path := filepath.Join(dir, "profile.yaml")
 	os.WriteFile(path, []byte("name: test\n"), 0644)
 
-	err := validateWithEmbeddedSchema(path, "raid-profile.schema.json")
+	err := validateWithEmbeddedSchema(path, "https://raidcli.dev/schema/v1/raid-profile.schema.json")
 	if err != nil {
 		t.Errorf("validateWithEmbeddedSchema valid: %v", err)
 	}
@@ -778,9 +778,31 @@ func TestValidateWithEmbeddedSchema_invalidProfile(t *testing.T) {
 	path := filepath.Join(dir, "bad.yaml")
 	os.WriteFile(path, []byte("notaname: test\nextra: bad\n"), 0644)
 
-	err := validateWithEmbeddedSchema(path, "raid-profile.schema.json")
+	err := validateWithEmbeddedSchema(path, "https://raidcli.dev/schema/v1/raid-profile.schema.json")
 	if err == nil {
 		t.Fatal("validateWithEmbeddedSchema: expected error for invalid profile")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_unknownSchemaID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	os.WriteFile(path, []byte("name: test\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "https://raidcli.dev/schema/v1/does-not-exist.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for unknown schema ID")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_repoSchema(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "raid.yaml")
+	os.WriteFile(path, []byte("name: test\nbranch: main\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "https://raidcli.dev/schema/v1/raid-repo.schema.json")
+	if err != nil {
+		t.Errorf("validateWithEmbeddedSchema repo: %v", err)
 	}
 }
 
