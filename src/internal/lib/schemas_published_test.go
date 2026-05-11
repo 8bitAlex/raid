@@ -95,11 +95,10 @@ func TestEmbeddedTemplates_validateAgainstSchemas(t *testing.T) {
 	root := repoRoot(t)
 
 	tests := []struct {
-		name        string
-		template    string
-		fill        string
-		schemaID    string
-		wantInvalid bool
+		name     string
+		template string
+		fill     string
+		schemaID string
 	}{
 		{
 			name:     "profile-template",

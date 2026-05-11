@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	activeProfileKey  = "profile"
-	allProfilesKey    = "profiles"
-	profileSchemaPath = "https://raidcli.dev/schema/v1/raid-profile.schema.json"
+	activeProfileKey = "profile"
+	allProfilesKey   = "profiles"
+	profileSchemaID  = "https://raidcli.dev/schema/v1/raid-profile.schema.json"
 )
 
 // Profile represents a named collection of repositories, environments, and task groups.
@@ -219,7 +219,7 @@ func ContainsProfile(name string) bool {
 
 // ValidateProfile validates the profile file at path against the profile JSON schema.
 func ValidateProfile(path string) error {
-	return validateWithEmbeddedSchema(path, profileSchemaPath)
+	return validateWithEmbeddedSchema(path, profileSchemaID)
 }
 
 // ProfileDraft is the minimal structure written to a new profile file.

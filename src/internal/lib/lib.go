@@ -564,7 +564,7 @@ func validateWithEmbeddedSchema(path, schemaID string) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") {
+		if !strings.HasSuffix(name, ".schema.json") {
 			continue
 		}
 		data, err := schemas.FS.ReadFile(name)
