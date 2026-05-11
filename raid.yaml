@@ -1,4 +1,3 @@
-# Uses local schema for development
 # yaml-language-server: $schema=./schemas/raid-repo.schema.json
 
 # Required for YAML support in VSCode
@@ -7,6 +6,24 @@
 name: raid
 branch: main
 
+install:
+  tasks:
+    - type: Shell
+      name: Install Node.js (macOS)
+      cmd: brew install node
+      condition:
+        platform: darwin
+        cmd: "! which node"
+    - type: Shell
+      name: Install Node.js (Linux)
+      cmd: sudo apt-get update && sudo apt-get install -y nodejs npm
+      condition:
+        platform: linux
+        cmd: "! which node"
+    - type: Shell
+      name: Install dependencies
+      cmd: cd ./site && npm install
+
 commands:
   - name: serve
     usage: Serve the docsite
@@ -14,3 +31,53 @@ commands:
       - type: Shell
         name: Serve docsite
         cmd: cd ./site && npm install && npm run serve
+  - name: test
+    usage: Build and run all tests for the raid app and docsite
+    tasks:
+      - type: Print
+        message: "==> Building raid app"
+        color: cyan
+      - type: Shell
+        name: Build raid app
+        cmd: go build ./...
+        path: ~/Developer/raid
+      - type: Print
+        message: "==> Testing raid app"
+        color: cyan
+      - type: Shell
+        name: Test raid app
+        cmd: go test ./...
+        path: ~/Developer/raid
+      - type: Print
+        message: "==> Building docsite"
+        color: cyan
+      - type: Shell
+        name: Build docsite
+        cmd: npm install && npm run build
+        path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Testing docsite"
+        color: cyan
+      - type: Shell
+        name: Test docsite
+        cmd: npm test
+        path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Type-checking docsite"
+        color: cyan
+      - type: Shell
+        name: Type-check docsite
+        cmd: npm run typecheck
+        path: ~/Developer/raid/site
+      - type: Print
+        message: "==> Coverage report"
+        color: cyan
+      - type: Shell
+        name: Test coverage report
+        literal: true
+        cmd: |-
+          go test -coverpkg=./src/... -coverprofile=/tmp/raid-coverage.out ./... > /dev/null && go tool cover -func=/tmp/raid-coverage.out | awk 'END {print "Total coverage: " $NF}'
+        path: ~/Developer/raid
+      - type: Print
+        message: "==> Tests completed"
+        color: green
