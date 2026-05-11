@@ -325,7 +325,22 @@ func buildProfile(profile Profile) (Profile, error) {
 		return Profile{}, fmt.Errorf("profile file not found at %s", profile.Path)
 	}
 	if profile.IsSingleRepo() {
-		return BuildSingleRepoProfile(profile.Path)
+		built, err := BuildSingleRepoProfile(profile.Path)
+		if err != nil {
+			return Profile{}, err
+		}
+		// The registered profile name is the lookup key used by
+		// `raid profile <name>` and active-profile detection. If the
+		// raid.yaml's name field has drifted since registration, refuse
+		// to load rather than silently returning a profile whose Name
+		// differs from the registered key.
+		if profile.Name != "" && built.Name != profile.Name {
+			return Profile{}, fmt.Errorf(
+				"raid.yaml at %s now declares name %q but was registered as %q; re-run `raid profile add %s` to update",
+				profile.Path, built.Name, profile.Name, profile.Path,
+			)
+		}
+		return built, nil
 	}
 	if err := ValidateProfile(profile.Path); err != nil {
 		return Profile{}, fmt.Errorf("invalid profile: %w", err)
@@ -344,6 +359,9 @@ func buildProfile(profile Profile) (Profile, error) {
 // (commands, environments, install tasks) is merged in by buildRepo later
 // in the load pipeline.
 func BuildSingleRepoProfile(path string) (Profile, error) {
+	if filepath.Base(path) != RaidConfigFileName {
+		return Profile{}, fmt.Errorf("single-repo profile path must end in %s, got %s", RaidConfigFileName, path)
+	}
 	if err := ValidateRepo(path); err != nil {
 		return Profile{}, fmt.Errorf("invalid raid.yaml: %w", err)
 	}
@@ -353,7 +371,7 @@ func BuildSingleRepoProfile(path string) (Profile, error) {
 		return Profile{}, err
 	}
 	if repo.Name == "" {
-		return Profile{}, fmt.Errorf("raid.yaml at %s has no name field", path)
+		return Profile{}, fmt.Errorf("raid.yaml at %s has missing or empty name field", path)
 	}
 	return Profile{
 		Name: repo.Name,
