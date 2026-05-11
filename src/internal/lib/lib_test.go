@@ -784,6 +784,28 @@ func TestValidateWithEmbeddedSchema_invalidProfile(t *testing.T) {
 	}
 }
 
+func TestValidateWithEmbeddedSchema_unknownSchemaID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	os.WriteFile(path, []byte("name: test\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "https://raidcli.dev/schema/v1/does-not-exist.schema.json")
+	if err == nil {
+		t.Fatal("validateWithEmbeddedSchema: expected error for unknown schema ID")
+	}
+}
+
+func TestValidateWithEmbeddedSchema_repoSchema(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "raid.yaml")
+	os.WriteFile(path, []byte("name: test\nbranch: main\n"), 0644)
+
+	err := validateWithEmbeddedSchema(path, "https://raidcli.dev/schema/v1/raid-repo.schema.json")
+	if err != nil {
+		t.Errorf("validateWithEmbeddedSchema repo: %v", err)
+	}
+}
+
 // --- validateFile multi-doc YAML ---
 
 func TestValidateSchema_multiDocYAML(t *testing.T) {
