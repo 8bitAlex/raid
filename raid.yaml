@@ -6,3 +6,11 @@
 
 name: raid
 branch: main
+
+commands:
+  - name: serve
+    usage: Serve the docsite
+    tasks:
+      - type: Shell
+        name: Serve docsite
+        cmd: cd ./site && npm install && npm run serve
