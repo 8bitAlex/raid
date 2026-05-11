@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/8bitalex/raid/src/internal/sys"
@@ -12,14 +13,13 @@ import (
 
 // Injectable profile-package functions for testing error paths.
 var (
-	proValidate         = pro.Validate
-	proValidateRepo     = pro.ValidateRepoConfig
-	proSynthesizeRepo   = pro.SynthesizeFromRepoConfig
-	proUnmarshal        = pro.Unmarshal
-	proContains         = pro.Contains
-	proAddAll           = pro.AddAll
-	proGet              = pro.Get
-	proSet              = pro.Set
+	proValidate       = pro.Validate
+	proSynthesizeRepo = pro.SynthesizeFromRepoConfig
+	proUnmarshal      = pro.Unmarshal
+	proContains       = pro.Contains
+	proAddAll         = pro.AddAll
+	proGet            = pro.Get
+	proSet            = pro.Set
 )
 
 var AddProfileCmd = &cobra.Command{
@@ -64,15 +64,22 @@ func runAddProfile(path string) int {
 	}
 
 	var profiles []pro.Profile
-	if err := proValidate(path); err != nil {
-		// Fall back to repo-schema validation so users can run
-		// `raid profile add ./raid.yaml` directly on a repo config.
-		if rerr := proValidateRepo(path); rerr == nil {
-			single, serr := proSynthesizeRepo(path)
-			if serr != nil {
-				fmt.Printf("Invalid Repo Config: %v\n", serr)
-				return 1
-			}
+	if filepath.Base(path) == raid.RaidConfigFileName {
+		// Files named raid.yaml are repo configs by convention. Validate
+		// against the repo schema directly so a missing `branch` etc.
+		// surfaces as a repo-schema error rather than a misleading
+		// "Invalid Profile" message.
+		single, serr := proSynthesizeRepo(path)
+		if serr != nil {
+			fmt.Printf("Invalid raid.yaml: %v\n", serr)
+			return 1
+		}
+		profiles = []pro.Profile{single}
+	} else if err := proValidate(path); err != nil {
+		// Non-raid.yaml file failed profile-schema validation. Try the
+		// repo schema as a fallback so callers can still register a
+		// renamed repo config; otherwise report the profile error.
+		if single, serr := proSynthesizeRepo(path); serr == nil {
 			profiles = []pro.Profile{single}
 		} else {
 			fmt.Printf("Invalid Profile: %v\n", err)
