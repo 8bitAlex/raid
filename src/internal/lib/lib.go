@@ -357,6 +357,13 @@ func ForceLoad() error {
 		profile.Commands = mergeCommands(profile.Commands, repo.Commands)
 	}
 
+	// In single-repo mode the raid.yaml is the only source of configuration,
+	// so its environments need to surface at profile level for `raid env`
+	// and friends — there's no wrapping profile YAML to host them.
+	if profile.IsSingleRepo() && len(profile.Repositories) == 1 {
+		profile.Environments = append(profile.Environments, profile.Repositories[0].Environments...)
+	}
+
 	setRepoVars(profile.Repositories)
 
 	context = &Context{

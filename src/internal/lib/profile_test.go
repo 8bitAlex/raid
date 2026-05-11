@@ -858,6 +858,255 @@ func TestAddProfiles_errorPropagation(t *testing.T) {
 	}
 }
 
+// --- Single-repo profile (raid.yaml as a profile) ---
+
+func TestProfileIsSingleRepo(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile Profile
+		want    bool
+	}{
+		{"raid.yaml path", Profile{Name: "x", Path: "/some/dir/raid.yaml"}, true},
+		{"profile.yaml path", Profile{Name: "x", Path: "/some/dir/profile.raid.yaml"}, false},
+		{"empty path", Profile{Name: "x"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.profile.IsSingleRepo(); got != tt.want {
+				t.Errorf("IsSingleRepo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildSingleRepoProfile_success(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	content := "name: solo\nbranch: main\ncommands:\n  - name: hello\n    tasks:\n      - type: Print\n        message: hi\n"
+	if err := os.WriteFile(repoYaml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := BuildSingleRepoProfile(repoYaml)
+	if err != nil {
+		t.Fatalf("BuildSingleRepoProfile: %v", err)
+	}
+	if p.Name != "solo" {
+		t.Errorf("Name = %q, want solo", p.Name)
+	}
+	if p.Path != repoYaml {
+		t.Errorf("Path = %q, want %q", p.Path, repoYaml)
+	}
+	if len(p.Repositories) != 1 {
+		t.Fatalf("Repositories len = %d, want 1", len(p.Repositories))
+	}
+	if r := p.Repositories[0]; r.Name != "solo" || r.Path != dir || r.Branch != "main" || r.URL != "" {
+		t.Errorf("Repositories[0] = %+v, want {Name: solo, Path: %q, Branch: main}", r, dir)
+	}
+	if !p.IsSingleRepo() {
+		t.Error("IsSingleRepo() = false, want true on the returned profile")
+	}
+}
+
+func TestBuildSingleRepoProfile_invalidSchema(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	// Missing required `branch`; should fail repo schema validation.
+	if err := os.WriteFile(repoYaml, []byte("name: nb\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := BuildSingleRepoProfile(repoYaml)
+	if err == nil {
+		t.Fatal("BuildSingleRepoProfile expected schema error for missing branch")
+	}
+}
+
+func TestBuildSingleRepoProfile_emptyName(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	// Schema-valid (name+branch present), but name is empty after unmarshal.
+	if err := os.WriteFile(repoYaml, []byte("name: \"\"\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := BuildSingleRepoProfile(repoYaml)
+	if err == nil {
+		t.Fatal("BuildSingleRepoProfile expected error for empty name")
+	}
+}
+
+func TestForceLoad_singleRepoProfile(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	content := "name: mono\nbranch: main\nenvironments:\n  - name: dev\n    variables:\n      - name: FOO\n        value: bar\ncommands:\n  - name: greet\n    tasks:\n      - type: Print\n        message: hi\n"
+	if err := os.WriteFile(repoYaml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	if err := AddProfile(Profile{Name: "mono", Path: repoYaml}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("mono"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad: %v", err)
+	}
+	if context == nil || context.Profile.Name != "mono" {
+		t.Fatalf("context.Profile.Name = %q, want mono", context.Profile.Name)
+	}
+	if !context.Profile.IsSingleRepo() {
+		t.Error("IsSingleRepo() = false on loaded profile")
+	}
+	if len(context.Profile.Repositories) != 1 || context.Profile.Repositories[0].Path != dir {
+		t.Errorf("Repositories = %+v, want one repo with path %q", context.Profile.Repositories, dir)
+	}
+	// Repo-level environments should be promoted to profile level so `raid env`
+	// can find them without a wrapping profile YAML.
+	if len(context.Profile.Environments) != 1 || context.Profile.Environments[0].Name != "dev" {
+		t.Errorf("Environments = %+v, want one named 'dev'", context.Profile.Environments)
+	}
+	// Repo commands should have been merged into top-level commands.
+	found := false
+	for _, c := range context.Profile.Commands {
+		if c.Name == "greet" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Commands missing 'greet': %+v", context.Profile.Commands)
+	}
+}
+
+func TestForceLoad_singleRepoProfile_invalidSchema(t *testing.T) {
+	root := repoRoot(t)
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	// Missing required `branch` — should fail repo schema validation.
+	if err := os.WriteFile(repoYaml, []byte("name: bad\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	if err := AddProfile(Profile{Name: "bad", Path: repoYaml}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("bad"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ForceLoad(); err == nil {
+		t.Fatal("ForceLoad: expected error when single-repo raid.yaml is invalid")
+	}
+}
+
+// TestBuildSingleRepoProfile_wrongBasename rejects paths that don't end in
+// the canonical raid.yaml name — ExtractRepo reads <dir>/raid.yaml so
+// validating one file and loading another would be a silent footgun.
+func TestBuildSingleRepoProfile_wrongBasename(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	// Write a valid raid.yaml so the repo-schema check would pass, but
+	// hand BuildSingleRepoProfile a renamed copy.
+	if err := os.WriteFile(filepath.Join(dir, RaidConfigFileName), []byte("name: ok\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	renamed := filepath.Join(dir, "not-raid.yaml")
+	if err := os.WriteFile(renamed, []byte("name: ok\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := BuildSingleRepoProfile(renamed)
+	if err == nil {
+		t.Fatal("BuildSingleRepoProfile expected error for non-raid.yaml basename")
+	}
+	if !strings.Contains(err.Error(), RaidConfigFileName) {
+		t.Errorf("error = %v, want mention of %s", err, RaidConfigFileName)
+	}
+}
+
+// TestBuildProfile_singleRepoNameMismatch ensures buildProfile refuses to
+// load a single-repo profile whose registered name no longer matches the
+// raid.yaml's current name field.
+func TestBuildProfile_singleRepoNameMismatch(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	if err := os.WriteFile(repoYaml, []byte("name: newname\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Registered profile uses "oldname" — simulates the user renaming the
+	// raid.yaml's name field after `raid profile add`.
+	_, err := buildProfile(Profile{Name: "oldname", Path: repoYaml})
+	if err == nil {
+		t.Fatal("buildProfile expected error when registered name diverges from raid.yaml name")
+	}
+	if !strings.Contains(err.Error(), "oldname") || !strings.Contains(err.Error(), "newname") {
+		t.Errorf("error = %v, want both registered and current names mentioned", err)
+	}
+}
+
+// TestBuildProfile_singleRepoNameMatch confirms the name-match path
+// succeeds and returns the synthesized profile.
+func TestBuildProfile_singleRepoNameMatch(t *testing.T) {
+	root := repoRoot(t)
+	wd, _ := os.Getwd()
+	os.Chdir(root)
+	defer os.Chdir(wd)
+
+	dir := t.TempDir()
+	repoYaml := filepath.Join(dir, RaidConfigFileName)
+	if err := os.WriteFile(repoYaml, []byte("name: match\nbranch: main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := buildProfile(Profile{Name: "match", Path: repoYaml})
+	if err != nil {
+		t.Fatalf("buildProfile: %v", err)
+	}
+	if p.Name != "match" {
+		t.Errorf("Name = %q, want match", p.Name)
+	}
+}
+
 // TestWriteProfileFile_error tests the error path when the save path is invalid.
 func TestWriteProfileFile_error(t *testing.T) {
 	if runtime.GOOS == "windows" {

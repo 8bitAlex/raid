@@ -256,7 +256,18 @@ environments:
 
 ```bash
 raid profile add ./my-profile.yaml   # register a profile file
+raid profile add ./raid.yaml          # register a repo config as a single-repo profile
 raid profile list                     # list all registered profiles
 raid my-team                          # switch to the 'my-team' profile
 raid profile remove my-team          # remove a profile
 ```
+
+## Single-repo profiles
+
+For projects that ship only a `raid.yaml` (no wrapping profile file), point `raid profile add` straight at the repo config:
+
+```bash
+raid profile add ./raid.yaml
+```
+
+Raid detects the repo schema and registers it as a single-repo profile named after the raid.yaml's `name` field. Switch to it with `raid profile <name>` like any other profile. The commands, environments, and install tasks declared in the raid.yaml become available at the top level.

@@ -59,6 +59,20 @@ func Validate(path string) error {
 	return lib.ValidateProfile(path)
 }
 
+// ValidateRepoConfig validates a raid.yaml file against the repo JSON schema.
+// Used by `raid profile add` to detect repo configs and adopt them as
+// single-repo profiles.
+func ValidateRepoConfig(path string) error {
+	return lib.ValidateRepo(path)
+}
+
+// SynthesizeFromRepoConfig builds a single-repo profile from a raid.yaml at
+// path. The returned profile's Path is the raid.yaml itself; lib.IsSingleRepo
+// detects this and switches the load pipeline to repo-schema validation.
+func SynthesizeFromRepoConfig(path string) (Profile, error) {
+	return lib.BuildSingleRepoProfile(path)
+}
+
 // Checks if a profile exists
 func Contains(name string) bool {
 	return lib.ContainsProfile(name)

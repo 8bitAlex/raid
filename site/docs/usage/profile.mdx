@@ -36,6 +36,13 @@ Add a profile from a local file:
 raid profile add ./my-profile.yaml
 ```
 
+Add a repo config (`raid.yaml`) as a single-repo profile — useful for projects that ship only a `raid.yaml` without a wrapping profile file. The profile is named after the raid.yaml's `name` field:
+
+```bash
+raid profile add ./raid.yaml
+raid profile <name>   # activate using the raid.yaml's name
+```
+
 Add a profile from a git repository — raid shallow-clones it and imports `*.raid.yaml`, `*.raid.yml`, and `profile.json` files found at the root. If none of those match, raid falls back to any plain `.yaml` / `.yml` / `.json` at the root, so a single-file gist (or scratch repo) with `profile.yaml` or `myprofile.yml` works without renaming:
 
 ```bash

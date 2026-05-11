@@ -36,6 +36,16 @@ func (p Profile) IsZero() bool {
 	return p.Name == "" || p.Path == ""
 }
 
+// IsSingleRepo reports whether the profile is backed by a raid.yaml (repo
+// config) rather than a profile YAML. Detected by the registered path's
+// basename: when `raid profile add ./raid.yaml` records a path pointing at
+// a repo config, raid synthesizes a single-repo profile around it instead
+// of requiring a wrapping profile file. The buildProfile / doctor paths
+// branch on this check to switch schemas.
+func (p Profile) IsSingleRepo() bool {
+	return filepath.Base(p.Path) == RaidConfigFileName
+}
+
 func (p Profile) getEnv(name string) Env {
 	for _, env := range p.Environments {
 		if env.Name == name {
@@ -314,6 +324,24 @@ func buildProfile(profile Profile) (Profile, error) {
 	if !sys.FileExists(profile.Path) {
 		return Profile{}, fmt.Errorf("profile file not found at %s", profile.Path)
 	}
+	if profile.IsSingleRepo() {
+		built, err := BuildSingleRepoProfile(profile.Path)
+		if err != nil {
+			return Profile{}, err
+		}
+		// The registered profile name is the lookup key used by
+		// `raid profile <name>` and active-profile detection. If the
+		// raid.yaml's name field has drifted since registration, refuse
+		// to load rather than silently returning a profile whose Name
+		// differs from the registered key.
+		if profile.Name != "" && built.Name != profile.Name {
+			return Profile{}, fmt.Errorf(
+				"raid.yaml at %s now declares name %q but was registered as %q; re-run `raid profile add %s` to update",
+				profile.Path, built.Name, profile.Name, profile.Path,
+			)
+		}
+		return built, nil
+	}
 	if err := ValidateProfile(profile.Path); err != nil {
 		return Profile{}, fmt.Errorf("invalid profile: %w", err)
 	}
@@ -322,4 +350,36 @@ func buildProfile(profile Profile) (Profile, error) {
 		return Profile{}, fmt.Errorf("invalid profile: %w", err)
 	}
 	return profile, nil
+}
+
+// BuildSingleRepoProfile validates the raid.yaml at path and returns a
+// synthetic profile whose only repository points at the raid.yaml's
+// directory. The profile's Path is the raid.yaml itself, so IsSingleRepo
+// reports true on subsequent loads. The repository's full configuration
+// (commands, environments, install tasks) is merged in by buildRepo later
+// in the load pipeline.
+func BuildSingleRepoProfile(path string) (Profile, error) {
+	if filepath.Base(path) != RaidConfigFileName {
+		return Profile{}, fmt.Errorf("single-repo profile path must end in %s, got %s", RaidConfigFileName, path)
+	}
+	if err := ValidateRepo(path); err != nil {
+		return Profile{}, fmt.Errorf("invalid raid.yaml: %w", err)
+	}
+	repoDir := filepath.Dir(path)
+	repo, err := ExtractRepo(repoDir)
+	if err != nil {
+		return Profile{}, err
+	}
+	if repo.Name == "" {
+		return Profile{}, fmt.Errorf("raid.yaml at %s has missing or empty name field", path)
+	}
+	return Profile{
+		Name: repo.Name,
+		Path: path,
+		Repositories: []Repo{{
+			Name:   repo.Name,
+			Path:   repoDir,
+			Branch: repo.Branch,
+		}},
+	}, nil
 }

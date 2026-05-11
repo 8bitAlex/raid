@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.12.0 — upcoming
+
+**Repo-as-a-profile for single-repo projects.** `raid profile add ./raid.yaml` now accepts a repo config directly — no wrapping profile file required. Raid detects the repo schema, registers the file as a single-repo profile named after the raid.yaml's `name` field, and `raid profile <name>` activates it like any other profile. Commands, environments, and install tasks defined in the raid.yaml become available at the top level. Existing multi-repo profiles continue to work unchanged. Closes [#52](https://github.com/8bitAlex/raid/issues/52).
+
 ## 0.11.1 — upcoming
 
 **Schemas published at a stable URL.** The profile, repo, and shared-defs JSON Schemas are now served at `https://raidcli.dev/schema/v1/raid-profile.schema.json`, `…/raid-repo.schema.json`, and `…/raid-defs.schema.json`. Generated profile and repo templates point at these URLs out of the box, so YAML LSPs and agents get autocomplete and inline validation against the canonical contract. The `/v1/` path is a stability promise — additive changes only; breaking changes will publish to `/v2/`. The docsite build copies `schemas/` into `static/schema/v1/`, so the canonical source remains the single Go-embedded copy. Closes [#48](https://github.com/8bitAlex/raid/issues/48).
