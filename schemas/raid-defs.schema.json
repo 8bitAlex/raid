@@ -457,6 +457,90 @@
                         "type": "string",
                         "description": "Short description shown in 'raid --help'"
                     },
+                    "args": {
+                        "type": "array",
+                        "description": "Declared positional arguments. Required args must be supplied; declarations cap the total number of positional args cobra accepts. The supplied value is exported as an env var named after `name` (uppercased) for the duration of the command, available in tasks as $NAME.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                                    "description": "Argument name. Must be a valid env var identifier ([A-Za-z_][A-Za-z0-9_]*). Uppercased to form the variable name."
+                                },
+                                "usage": {
+                                    "type": "string",
+                                    "description": "Short description shown in '--help'."
+                                },
+                                "required": {
+                                    "type": "boolean",
+                                    "description": "If true the command fails when the positional value is omitted.",
+                                    "default": false
+                                }
+                            },
+                            "required": ["name"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "flags": {
+                        "type": "array",
+                        "description": "Declared flags / options. Long form is --<name>; an optional `short` adds a single-character -<x>. Values bind to an env var named after `name` (uppercased) for the duration of the command. Booleans bind as the literal strings 'true' or 'false'.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                                    "description": "Flag name. Must be a valid env var identifier ([A-Za-z_][A-Za-z0-9_]*). The long form is --<name> and the env var is the uppercased name."
+                                },
+                                "short": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1,
+                                    "description": "Single-character short form, e.g. 'v' to bind -v."
+                                },
+                                "usage": {
+                                    "type": "string",
+                                    "description": "Short description shown in '--help'."
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["string", "bool", "int"],
+                                    "description": "Value type. Defaults to 'string' when omitted.",
+                                    "default": "string"
+                                },
+                                "required": {
+                                    "type": "boolean",
+                                    "description": "If true cobra rejects the invocation when the flag is omitted.",
+                                    "default": false
+                                },
+                                "default": {
+                                    "description": "Value used when the flag is omitted. Must match `type` — the conditional `allOf` below enforces this so a string default on an int flag is rejected at config-load time."
+                                }
+                            },
+                            "required": ["name"],
+                            "additionalProperties": false,
+                            "allOf": [
+                                {
+                                    "if": {"properties": {"type": {"const": "bool"}}, "required": ["type"]},
+                                    "then": {"properties": {"default": {"type": "boolean"}}}
+                                },
+                                {
+                                    "if": {"properties": {"type": {"const": "int"}}, "required": ["type"]},
+                                    "then": {"properties": {"default": {"type": "integer"}}}
+                                },
+                                {
+                                    "if": {
+                                        "anyOf": [
+                                            {"not": {"required": ["type"]}},
+                                            {"properties": {"type": {"const": "string"}}, "required": ["type"]}
+                                        ]
+                                    },
+                                    "then": {"properties": {"default": {"type": "string"}}}
+                                }
+                            ]
+                        }
+                    },
                     "tasks": {
                         "$ref": "#/properties/tasks"
                     },

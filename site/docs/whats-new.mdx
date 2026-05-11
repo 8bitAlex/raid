@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.11.0 — upcoming
+
+**Declared arguments and flags on custom commands.** `commands[]` entries now accept an `args` list (named positional arguments) and a `flags` list (long/short options with optional default and type — `string`, `bool`, or `int`). Declared values are exported as env vars named after each entry (uppercased), so `args: [{name: ticket, required: true}]` makes `$TICKET` available in tasks for the duration of the command. Cobra enforces required values and validates positional cardinality before raid runs anything. `RAID_ARG_N` continues to work for unnamed positional arguments. Closes [#26](https://github.com/8bitAlex/raid/issues/26).
+
 ## 0.10.1 — upcoming
 
 **Plain-yaml profiles via `raid profile add <url>`.** When the URL points at a git repo (or a single-file gist) whose profile file isn't named with the `*.raid.yaml` convention — e.g. just `profile.yaml`, `myprofile.yml`, or `config.json` — raid now picks it up as a fallback after no `*.raid.yaml`/`profile.json` matches are found. Schema validation runs the same way, so non-profile YAML lying around in a repo root is still rejected with a clear "invalid profile" message. Makes ad-hoc gists usable without renaming the file.

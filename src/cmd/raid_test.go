@@ -214,6 +214,201 @@ func TestRegisterUserCommands_visibleForAllInvocationTypes(t *testing.T) {
 	}
 }
 
+// --- declared args / flags ---
+
+func TestBuildCommandUse(t *testing.T) {
+	tests := []struct {
+		name string
+		args []lib.Arg
+		want string
+	}{
+		{"no args", nil, "patch"},
+		{"single required", []lib.Arg{{Name: "ticket", Required: true}}, "patch <ticket>"},
+		{"single optional", []lib.Arg{{Name: "comment"}}, "patch [comment]"},
+		{"mixed", []lib.Arg{
+			{Name: "ticket", Required: true},
+			{Name: "comment"},
+		}, "patch <ticket> [comment]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildCommandUse("patch", tt.args); got != tt.want {
+				t.Errorf("buildCommandUse = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAttachCommandArgsAndFlags_argValidatorCardinality(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []lib.Arg
+		passed    []string
+		wantError bool
+	}{
+		{"no args declared accepts none", nil, []string{}, false},
+		{"all required exact match", []lib.Arg{{Name: "a", Required: true}, {Name: "b", Required: true}}, []string{"x", "y"}, false},
+		{"all required missing one", []lib.Arg{{Name: "a", Required: true}, {Name: "b", Required: true}}, []string{"x"}, true},
+		{"all optional accepts zero", []lib.Arg{{Name: "a"}, {Name: "b"}}, []string{}, false},
+		{"all optional caps at max", []lib.Arg{{Name: "a"}, {Name: "b"}}, []string{"x", "y", "z"}, true},
+		{"mixed below required", []lib.Arg{{Name: "a", Required: true}, {Name: "b"}}, []string{}, true},
+		{"mixed at min", []lib.Arg{{Name: "a", Required: true}, {Name: "b"}}, []string{"x"}, false},
+		{"mixed at max", []lib.Arg{{Name: "a", Required: true}, {Name: "b"}}, []string{"x", "y"}, false},
+		{"mixed above max", []lib.Arg{{Name: "a", Required: true}, {Name: "b"}}, []string{"x", "y", "z"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			co := &cobra.Command{Use: "cmd"}
+			attachCommandArgsAndFlags(co, lib.Command{Args: tt.args})
+			var err error
+			if co.Args != nil {
+				err = co.Args(co, tt.passed)
+			}
+			if (err != nil) != tt.wantError {
+				t.Errorf("validator err = %v, wantError = %v", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestAttachCommandArgsAndFlags_flagDefaultsAndTypes(t *testing.T) {
+	co := &cobra.Command{Use: "cmd"}
+	attachCommandArgsAndFlags(co, lib.Command{Flags: []lib.Flag{
+		{Name: "host", Type: "string", Default: "localhost"},
+		{Name: "verbose", Short: "v", Type: "bool", Default: true},
+		{Name: "count", Type: "int", Default: 5},
+		// Default supplied as float64 (YAML / JSON unmarshal path) must coerce to int.
+		{Name: "retries", Type: "int", Default: float64(3)},
+		// Type omitted defaults to string.
+		{Name: "label", Default: "x"},
+	}})
+
+	if got, _ := co.Flags().GetString("host"); got != "localhost" {
+		t.Errorf("host default = %q, want localhost", got)
+	}
+	if got, _ := co.Flags().GetBool("verbose"); !got {
+		t.Errorf("verbose default = false, want true")
+	}
+	if got, _ := co.Flags().GetInt("count"); got != 5 {
+		t.Errorf("count default = %d, want 5", got)
+	}
+	if got, _ := co.Flags().GetInt("retries"); got != 3 {
+		t.Errorf("retries (float64 default) = %d, want 3", got)
+	}
+	if got, _ := co.Flags().GetString("label"); got != "x" {
+		t.Errorf("label default = %q, want x", got)
+	}
+	if co.Flags().ShorthandLookup("v") == nil {
+		t.Errorf("expected -v shorthand registered for --verbose")
+	}
+}
+
+func TestAttachCommandArgsAndFlags_requiredFlag(t *testing.T) {
+	co := &cobra.Command{
+		Use:  "cmd",
+		Run:  func(*cobra.Command, []string) {},
+		// Silence cobra's usage dump on error so the test output stays clean.
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+	attachCommandArgsAndFlags(co, lib.Command{Flags: []lib.Flag{
+		{Name: "host", Required: true},
+	}})
+
+	co.SetArgs([]string{})
+	if err := co.Execute(); err == nil {
+		t.Fatal("expected error when required flag is omitted")
+	}
+}
+
+func TestGatherCommandValues_returnsNilWhenNothingDeclared(t *testing.T) {
+	co := &cobra.Command{Use: "cmd"}
+	if got := gatherCommandValues(co, lib.Command{}, []string{"x"}); got != nil {
+		t.Errorf("gatherCommandValues with no args/flags = %v, want nil", got)
+	}
+}
+
+func TestGatherCommandValues_bindsArgsAndFlags(t *testing.T) {
+	cmd := lib.Command{
+		Args: []lib.Arg{{Name: "ticket", Required: true}, {Name: "comment"}},
+		Flags: []lib.Flag{
+			{Name: "host", Type: "string", Default: "localhost"},
+			{Name: "verbose", Type: "bool"},
+			{Name: "count", Type: "int"},
+		},
+	}
+	co := &cobra.Command{Use: "cmd", Run: func(*cobra.Command, []string) {}}
+	attachCommandArgsAndFlags(co, cmd)
+
+	co.SetArgs([]string{"--host", "remote", "--verbose", "--count", "9", "T-100", "fix it"})
+	if err := co.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	got := gatherCommandValues(co, cmd, []string{"T-100", "fix it"})
+	want := map[string]string{
+		"ticket":  "T-100",
+		"comment": "fix it",
+		"host":    "remote",
+		"verbose": "true",
+		"count":   "9",
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("gathered[%q] = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestGatherCommandValues_omittedOptionalArg(t *testing.T) {
+	cmd := lib.Command{
+		Args: []lib.Arg{{Name: "ticket", Required: true}, {Name: "comment"}},
+	}
+	co := &cobra.Command{Use: "cmd"}
+	attachCommandArgsAndFlags(co, cmd)
+
+	got := gatherCommandValues(co, cmd, []string{"T-1"})
+	if got["ticket"] != "T-1" {
+		t.Errorf("ticket = %q, want T-1", got["ticket"])
+	}
+	if _, set := got["comment"]; set {
+		t.Errorf("comment must not be set when omitted, got %q", got["comment"])
+	}
+}
+
+func TestGatherCommandValues_boolFalseWhenAbsent(t *testing.T) {
+	cmd := lib.Command{Flags: []lib.Flag{{Name: "verbose", Type: "bool"}}}
+	co := &cobra.Command{Use: "cmd", Run: func(*cobra.Command, []string) {}}
+	attachCommandArgsAndFlags(co, cmd)
+	co.SetArgs([]string{})
+	if err := co.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	got := gatherCommandValues(co, cmd, nil)
+	if got["verbose"] != "false" {
+		t.Errorf("absent bool flag = %q, want \"false\"", got["verbose"])
+	}
+}
+
+func TestRegisterUserCommands_useStringIncludesDeclaredArgs(t *testing.T) {
+	root := newTestRoot()
+	registerUserCommands(root, []lib.Command{
+		{Name: "patch", Args: []lib.Arg{
+			{Name: "ticket", Required: true},
+			{Name: "comment"},
+		}},
+	})
+	for _, c := range root.Commands() {
+		if c.Name() == "patch" {
+			if want := "patch <ticket> [comment]"; c.Use != want {
+				t.Errorf("Use = %q, want %q", c.Use, want)
+			}
+			return
+		}
+	}
+	t.Fatal("patch command not registered")
+}
+
 func TestApplyConfigFlag_shortFlagWithEquals(t *testing.T) {
 	old := *raid.ConfigPath
 	*raid.ConfigPath = ""

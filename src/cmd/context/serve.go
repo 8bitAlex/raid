@@ -451,7 +451,10 @@ func handleRunTask(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	lockErr := raid.WithMutationLock(func() error {
 		var runErr error
 		output, runErr = captureCommandOutput(func() error {
-			return raid.ExecuteCommand(command, args)
+			// MCP `raid_run_task` doesn't currently accept named args/flags;
+			// pass nil so cobra-side declared bindings stay unset (commands
+			// without declared args/flags are unaffected).
+			return raid.ExecuteCommand(command, args, nil)
 		})
 		if runErr == nil {
 			// ExecuteCommand mutates env vars and recent.json. ForceLoad

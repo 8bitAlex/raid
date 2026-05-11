@@ -64,6 +64,56 @@ commands:
 
 The variables are set for the duration of the command and cleared afterwards.
 
+### Declared arguments and flags
+
+Commands can also declare named positional arguments and flags. Declared values are bound to env vars named after the field's `name` (uppercased) and made available to tasks for the duration of the command — so `name: ticket` becomes `$TICKET`. Required values that aren't supplied cause raid to reject the invocation with a clear cobra error.
+
+```yaml title="profile.yaml"
+commands:
+  - name: "patch"
+    usage: "Apply a patch to a SUV host"
+    args:
+      - name: ticket
+        usage: "Ticket number"
+        required: true
+      - name: comment
+        usage: "Optional changelog note"
+    flags:
+      - name: suv
+        short: s
+        usage: "Target SUV hostname"
+        required: true
+      - name: verbose
+        short: v
+        type: bool
+      - name: retries
+        type: int
+        default: 3
+    tasks:
+      - type: Print
+        message: "Patching $TICKET on $SUV (retries=$RETRIES, verbose=$VERBOSE)"
+      - type: Shell
+        cmd: ./scripts/patch.sh "$TICKET" --host "$SUV" --retries "$RETRIES"
+```
+
+Invocation:
+
+```bash
+raid patch --suv host.example.com -v 12345 "rolling out the fix"
+raid patch -s host.example.com 67890         # comment optional
+```
+
+| Field on `args[]` / `flags[]` | Meaning |
+|---|---|
+| `name` | Long form (`--name`) and the env var (uppercased). |
+| `short` (flags only) | Single-character short form, e.g. `s` → `-s`. |
+| `usage` | Short description shown in `--help`. |
+| `type` (flags only) | `string` (default), `bool`, or `int`. Bool flags bind as the literal strings `"true"` / `"false"`. |
+| `required` | When true, cobra rejects the invocation if the value is omitted. |
+| `default` (flags only) | Used when the flag is omitted. Type must match `type`. |
+
+Once a command declares `args`, cobra rejects extra positional values beyond the declared list — the cap is `len(args)`. To accept an unbounded number of positional arguments, omit `args:` and read them from `$RAID_ARG_1`, `$RAID_ARG_2`, … as before. `RAID_ARG_N` remains populated for declared positional values too, so a task can reference either `$TICKET` (named) or `$RAID_ARG_1` interchangeably.
+
 ## Output configuration
 
 Use the `out` field to control what output a command shows and optionally write it to a file.

@@ -14,8 +14,33 @@ import (
 type Command struct {
 	Name  string   `json:"name"`
 	Usage string   `json:"usage"`
+	Args  []Arg    `json:"args,omitempty"`
+	Flags []Flag   `json:"flags,omitempty"`
 	Tasks []Task   `json:"tasks"`
 	Out   *Output  `json:"out,omitempty"`
+}
+
+// Arg declares a positional argument for a custom command. The supplied value
+// is bound to the env var named after Name (uppercased) for the duration of
+// the command, so tasks can reference it as `$NAME`. Required args without a
+// matching positional value cause cobra to reject the invocation.
+type Arg struct {
+	Name     string `json:"name"`
+	Usage    string `json:"usage,omitempty"`
+	Required bool   `json:"required,omitempty"`
+}
+
+// Flag declares a long-form (--name) and optional short-form (-x) flag for a
+// custom command. Type is one of "string" (default), "bool", or "int".
+// Required flags are enforced by cobra. Default supplies the value when the
+// flag is omitted; bool flags default to false unless overridden.
+type Flag struct {
+	Name     string `json:"name"`
+	Short    string `json:"short,omitempty"`
+	Usage    string `json:"usage,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Required bool   `json:"required,omitempty"`
+	Default  any    `json:"default,omitempty"`
 }
 
 // Output configures how a command's task output is handled.
@@ -49,9 +74,11 @@ func GetRepos() []Repo {
 }
 
 // ExecuteCommand runs the tasks for the named command, applying any output configuration.
-// Args are exposed as RAID_ARG_1, RAID_ARG_2, ... environment variables for the duration
-// of the command and are unset afterwards.
-func ExecuteCommand(name string, args []string) error {
+// Positional `args` are exposed as RAID_ARG_1, RAID_ARG_2, ... environment
+// variables. When `named` is non-nil, each entry is also exported as a env
+// var with the key uppercased — this is how cobra-parsed named arguments and
+// flags reach task scripts. All bindings are unset after the command exits.
+func ExecuteCommand(name string, args []string, named map[string]string) error {
 	var found Command
 	for _, cmd := range GetCommands() {
 		if cmd.Name == name {
@@ -63,11 +90,8 @@ func ExecuteCommand(name string, args []string) error {
 		return fmt.Errorf("command '%s' not found", name)
 	}
 
-	clearRaidArgs()
-	defer clearRaidArgs()
-	for i, arg := range args {
-		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
-	}
+	cleanup := setCommandArgs(args, named)
+	defer cleanup()
 
 	startSession()
 	defer endSession()
@@ -79,7 +103,8 @@ func ExecuteCommand(name string, args []string) error {
 }
 
 // ExecuteRepoCommand runs a command defined in a specific repository's raid.yaml.
-func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
+// See ExecuteCommand for how `args` and `named` are bound to env vars.
+func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[string]string) error {
 	repos := GetRepos()
 	var repo *Repo
 	for i := range repos {
@@ -103,11 +128,8 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
 		return fmt.Errorf("command '%s' not found in repository '%s'", cmdName, repoName)
 	}
 
-	clearRaidArgs()
-	defer clearRaidArgs()
-	for i, arg := range args {
-		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
-	}
+	cleanup := setCommandArgs(args, named)
+	defer cleanup()
 
 	startSession()
 	defer endSession()
@@ -117,6 +139,73 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string) error {
 	err := runCommand(found)
 	RecordRecentEnd(recentName, err, startedAt)
 	return err
+}
+
+// setCommandArgs binds positional args to RAID_ARG_N and named args/flags to
+// sanitised, uppercased env vars for the lifetime of a command run. Returns
+// a cleanup closure that restores any pre-existing values raid overwrote
+// (or unsets entries that didn't exist) so a command declaring e.g.
+// `name: PATH` doesn't permanently clobber the parent process's PATH.
+//
+// Names are normalised via sanitizeEnvName: lowercase → uppercase, anything
+// outside [A-Za-z0-9_] becomes '_'. Names that sanitise to a non-identifier
+// (empty / all-underscores) are skipped — the schema rejects these
+// up-front via the `pattern` constraint, this is defence-in-depth for
+// callers that construct lib.Command directly (tests, future MCP hooks).
+func setCommandArgs(args []string, named map[string]string) func() {
+	clearRaidArgs()
+	for i, arg := range args {
+		os.Setenv(fmt.Sprintf("RAID_ARG_%d", i+1), arg)
+	}
+	type prev struct {
+		key      string
+		oldValue string
+		hadValue bool
+	}
+	snapshots := make([]prev, 0, len(named))
+	for k, v := range named {
+		key := sanitizeEnvName(k)
+		if key == "" {
+			continue
+		}
+		old, had := os.LookupEnv(key)
+		snapshots = append(snapshots, prev{key, old, had})
+		os.Setenv(key, v)
+	}
+	return func() {
+		clearRaidArgs()
+		for _, p := range snapshots {
+			if p.hadValue {
+				os.Setenv(p.key, p.oldValue)
+			} else {
+				os.Unsetenv(p.key)
+			}
+		}
+	}
+}
+
+// sanitizeEnvName normalises an arg/flag name to a valid env var identifier.
+// Mirrors sanitizeRepoVarName so RAID_REPO_* and command-arg/flag names use
+// the same scheme. Returns "" for inputs that produce only underscores
+// (which would expand to a meaningless empty/underscore env var).
+func sanitizeEnvName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	out := b.String()
+	if strings.Trim(out, "_") == "" {
+		return ""
+	}
+	return out
 }
 
 // clearRaidArgs unsets all RAID_ARG_* environment variables.

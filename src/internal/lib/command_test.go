@@ -70,7 +70,7 @@ func TestExecuteCommand_notFound(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("nonexistent", nil); err == nil {
+	if err := ExecuteCommand("nonexistent", nil, nil); err == nil {
 		t.Fatal("ExecuteCommand() expected error for unknown command, got nil")
 	}
 }
@@ -87,7 +87,7 @@ func TestExecuteCommand_success(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("noop", nil); err != nil {
+	if err := ExecuteCommand("noop", nil, nil); err != nil {
 		t.Errorf("ExecuteCommand() error: %v", err)
 	}
 }
@@ -100,7 +100,7 @@ func TestExecuteCommand_taskFailure(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("fail", nil); err == nil {
+	if err := ExecuteCommand("fail", nil, nil); err == nil {
 		t.Fatal("ExecuteCommand() expected error from failing task, got nil")
 	}
 }
@@ -126,7 +126,7 @@ func TestExecuteCommand_argsSetAsEnvVars(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteCommand("capture", []string{"foo", "bar"}); err != nil {
+	if err := ExecuteCommand("capture", []string{"foo", "bar"}, nil); err != nil {
 		t.Fatalf("ExecuteCommand() error: %v", err)
 	}
 
@@ -178,10 +178,10 @@ func TestExecuteCommand_staleArgsCleared(t *testing.T) {
 	}
 
 	// First call with two args, second call with one — RAID_ARG_2 must not bleed through.
-	if err := ExecuteCommand("capture", []string{"first", "stale"}); err != nil {
+	if err := ExecuteCommand("capture", []string{"first", "stale"}, nil); err != nil {
 		t.Fatalf("first ExecuteCommand() error: %v", err)
 	}
-	if err := ExecuteCommand("capture", []string{"second"}); err != nil {
+	if err := ExecuteCommand("capture", []string{"second"}, nil); err != nil {
 		t.Fatalf("second ExecuteCommand() error: %v", err)
 	}
 
@@ -191,6 +191,154 @@ func TestExecuteCommand_staleArgsCleared(t *testing.T) {
 	}
 	if got := string(data); got != "" {
 		t.Errorf("RAID_ARG_2 on second call = %q, want empty (stale value leaked)", got)
+	}
+}
+
+func TestSanitizeEnvName(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"ticket", "TICKET"},
+		{"dry-run", "DRY_RUN"},
+		{"foo.bar", "FOO_BAR"},
+		{"already_VALID", "ALREADY_VALID"},
+		{"with spaces", "WITH_SPACES"},
+		{"123abc", "123ABC"}, // permissive — schema is the primary gate
+		{"", ""},
+		{"___", ""}, // all-underscore sanitises to empty (rejected)
+		{"!@#", ""}, // only non-identifier characters
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			if got := sanitizeEnvName(tt.in); got != tt.want {
+				t.Errorf("sanitizeEnvName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExecuteCommand_namedBindings_restoresPreviousEnv(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	// Deliberately collide with a name a real user might declare ("PATH"-like
+	// scenarios). The cleanup must restore the original value, not leave the
+	// process with an unset / stale env after the command exits.
+	const key = "RAID_NAMED_TEST_KEY"
+	t.Setenv(key, "original")
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
+		},
+	}
+
+	if err := ExecuteCommand("noop", nil, map[string]string{key: "overwritten"}); err != nil {
+		t.Fatalf("ExecuteCommand: %v", err)
+	}
+
+	if got := os.Getenv(key); got != "original" {
+		t.Errorf("env after exec = %q, want \"original\" (cleanup must restore)", got)
+	}
+}
+
+func TestExecuteCommand_namedBindings_unsetsAddedKeys(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	// Key must NOT exist in env at start so cleanup can verify the unset path.
+	const key = "RAID_NAMED_UNSET_TEST"
+	os.Unsetenv(key)
+	t.Cleanup(func() { os.Unsetenv(key) })
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
+		},
+	}
+
+	if err := ExecuteCommand("noop", nil, map[string]string{key: "value"}); err != nil {
+		t.Fatalf("ExecuteCommand: %v", err)
+	}
+
+	if _, set := os.LookupEnv(key); set {
+		t.Errorf("env still set after exec, want unset (had no prior value)")
+	}
+}
+
+func TestExecuteCommand_namedBindings_skipsInvalidKeys(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
+		},
+	}
+
+	// Empty keys and all-underscore keys must not call os.Setenv (which would
+	// either error on the empty key or set a useless `_=value`).
+	if err := ExecuteCommand("noop", nil, map[string]string{
+		"":    "skipme",
+		"___": "skipme",
+	}); err != nil {
+		t.Fatalf("ExecuteCommand: %v", err)
+	}
+	if got := os.Getenv("___"); got != "" {
+		t.Errorf("invalid key was set: %q", got)
+	}
+}
+
+func TestExecuteCommand_namedBindings(t *testing.T) {
+	setupTestConfig(t)
+	origOut, origErr := commandStdout, commandStderr
+	commandStdout, commandStderr = io.Discard, io.Discard
+	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
+
+	dir := t.TempDir()
+	srcFile := filepath.Join(dir, "named.tmpl")
+	outFile := filepath.Join(dir, "named.txt")
+	if err := os.WriteFile(srcFile, []byte("$TICKET|$VERBOSE|$COUNT"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	context = &Context{
+		Profile: Profile{
+			Commands: []Command{{Name: "patch", Tasks: []Task{
+				{Type: Template, Src: srcFile, Dest: outFile},
+			}}},
+		},
+	}
+
+	named := map[string]string{
+		"TICKET":  "12345",
+		"verbose": "true", // lowercase here exercises the uppercase normalisation
+		"count":   "7",
+	}
+	if err := ExecuteCommand("patch", nil, named); err != nil {
+		t.Fatalf("ExecuteCommand() error: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if got, want := string(data), "12345|true|7"; got != want {
+		t.Errorf("named bindings during exec = %q, want %q", got, want)
+	}
+
+	// Bindings must be cleared after the command exits — second call without
+	// `named` must see empty values.
+	for _, k := range []string{"TICKET", "VERBOSE", "COUNT"} {
+		if got := os.Getenv(k); got != "" {
+			t.Errorf("%s after exec = %q, want cleared", k, got)
+		}
 	}
 }
 
@@ -205,7 +353,7 @@ func TestExecuteCommand_notFoundDoesNotSetArgs(t *testing.T) {
 		},
 	}
 
-	_ = ExecuteCommand("nonexistent", []string{"should-not-be-set"})
+	_ = ExecuteCommand("nonexistent", []string{"should-not-be-set"}, nil)
 	if got := os.Getenv("RAID_ARG_1"); got != "" {
 		t.Errorf("RAID_ARG_1 set to %q after not-found error, want empty", got)
 	}
@@ -415,7 +563,7 @@ func TestExecuteRepoCommand_repoNotFound(t *testing.T) {
 		},
 	}
 
-	err := ExecuteRepoCommand("nonexistent", "test", nil)
+	err := ExecuteRepoCommand("nonexistent", "test", nil, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown repo, got nil")
 	}
@@ -435,7 +583,7 @@ func TestExecuteRepoCommand_cmdNotFound(t *testing.T) {
 		},
 	}
 
-	err := ExecuteRepoCommand("backend", "nonexistent", nil)
+	err := ExecuteRepoCommand("backend", "nonexistent", nil, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown command, got nil")
 	}
@@ -459,7 +607,7 @@ func TestExecuteRepoCommand_success(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteRepoCommand("backend", "noop", nil); err != nil {
+	if err := ExecuteRepoCommand("backend", "noop", nil, nil); err != nil {
 		t.Errorf("ExecuteRepoCommand() error: %v", err)
 	}
 }
@@ -475,7 +623,7 @@ func TestExecuteRepoCommand_taskFailure(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteRepoCommand("backend", "fail", nil); err == nil {
+	if err := ExecuteRepoCommand("backend", "fail", nil, nil); err == nil {
 		t.Fatal("expected error from failing task, got nil")
 	}
 }
@@ -505,7 +653,7 @@ func TestExecuteRepoCommand_setsArgs(t *testing.T) {
 		},
 	}
 
-	if err := ExecuteRepoCommand("backend", "tmpl", []string{"hello", "world"}); err != nil {
+	if err := ExecuteRepoCommand("backend", "tmpl", []string{"hello", "world"}, nil); err != nil {
 		t.Fatalf("ExecuteRepoCommand() error: %v", err)
 	}
 	data, err := os.ReadFile(outFile)
@@ -522,7 +670,7 @@ func TestExecuteRepoCommand_nilContext(t *testing.T) {
 	context = nil
 	defer func() { context = old }()
 
-	if err := ExecuteRepoCommand("any", "any", nil); err == nil {
+	if err := ExecuteRepoCommand("any", "any", nil, nil); err == nil {
 		t.Fatal("expected error with nil context, got nil")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -185,16 +186,20 @@ func registerUserCommands(root *cobra.Command, cmds []lib.Command) {
 			continue
 		}
 		name := cmd.Name
-		root.AddCommand(&cobra.Command{
-			Use:         name,
+		def := cmd
+		coCmd := &cobra.Command{
+			Use:         buildCommandUse(name, def.Args),
 			Short:       cmd.Usage,
 			Annotations: map[string]string{CommandSourceAnnotation: CommandSourceUser},
-			RunE: func(c *cobra.Command, args []string) error {
-				return raid.WithMutationLock(func() error {
-					return raid.ExecuteCommand(name, args)
-				})
-			},
-		})
+		}
+		attachCommandArgsAndFlags(coCmd, def)
+		coCmd.RunE = func(c *cobra.Command, args []string) error {
+			named := gatherCommandValues(c, def, args)
+			return raid.WithMutationLock(func() error {
+				return raid.ExecuteCommand(name, args, named)
+			})
+		}
+		root.AddCommand(coCmd)
 	}
 }
 
@@ -222,18 +227,127 @@ func registerRepoCommands(root *cobra.Command, repos []lib.Repo) {
 		}
 		for _, cmd := range repo.Commands {
 			cmdName := cmd.Name
-			repoCmd.AddCommand(&cobra.Command{
-				Use:   cmdName,
+			def := cmd
+			subCmd := &cobra.Command{
+				Use:   buildCommandUse(cmdName, def.Args),
 				Short: cmd.Usage,
-				RunE: func(c *cobra.Command, args []string) error {
-					return raid.WithMutationLock(func() error {
-						return raid.ExecuteRepoCommand(repoName, cmdName, args)
-					})
-				},
-			})
+			}
+			attachCommandArgsAndFlags(subCmd, def)
+			subCmd.RunE = func(c *cobra.Command, args []string) error {
+				named := gatherCommandValues(c, def, args)
+				return raid.WithMutationLock(func() error {
+					return raid.ExecuteRepoCommand(repoName, cmdName, args, named)
+				})
+			}
+			repoCmd.AddCommand(subCmd)
 		}
 		root.AddCommand(repoCmd)
 	}
+}
+
+// buildCommandUse renders the cobra Use string with declared positional
+// args so `--help` shows the expected invocation shape, e.g.
+// `patch <ticket> [comment]`.
+func buildCommandUse(name string, args []lib.Arg) string {
+	if len(args) == 0 {
+		return name
+	}
+	var b strings.Builder
+	b.WriteString(name)
+	for _, a := range args {
+		b.WriteByte(' ')
+		if a.Required {
+			b.WriteString("<")
+			b.WriteString(a.Name)
+			b.WriteString(">")
+		} else {
+			b.WriteString("[")
+			b.WriteString(a.Name)
+			b.WriteString("]")
+		}
+	}
+	return b.String()
+}
+
+// attachCommandArgsAndFlags configures a cobra subcommand from the lib.Command
+// definition: positional-arg cardinality validators and declared flags. Type
+// defaults to "string" when unset; "bool" / "int" are also recognised. A
+// missing or wrong-typed Default falls back to the zero value rather than
+// failing — the schema's `oneOf` already guards the YAML side.
+func attachCommandArgsAndFlags(co *cobra.Command, cmd lib.Command) {
+	if n := len(cmd.Args); n > 0 {
+		req := 0
+		for _, a := range cmd.Args {
+			if a.Required {
+				req++
+			}
+		}
+		switch {
+		case req == n:
+			co.Args = cobra.ExactArgs(n)
+		case req == 0:
+			co.Args = cobra.MaximumNArgs(n)
+		default:
+			co.Args = cobra.RangeArgs(req, n)
+		}
+	}
+
+	for _, f := range cmd.Flags {
+		switch f.Type {
+		case "bool":
+			d, _ := f.Default.(bool)
+			co.Flags().BoolP(f.Name, f.Short, d, f.Usage)
+		case "int":
+			d := 0
+			switch v := f.Default.(type) {
+			case int:
+				d = v
+			case float64:
+				// YAML numbers unmarshal into float64 through interface{}.
+				d = int(v)
+			}
+			co.Flags().IntP(f.Name, f.Short, d, f.Usage)
+		default:
+			d, _ := f.Default.(string)
+			co.Flags().StringP(f.Name, f.Short, d, f.Usage)
+		}
+		if f.Required {
+			_ = co.MarkFlagRequired(f.Name)
+		}
+	}
+}
+
+// gatherCommandValues builds the name → value map that ExecuteCommand binds
+// to env vars. Returns nil when the command has no declared args/flags so
+// the legacy positional-only path stays untouched.
+func gatherCommandValues(co *cobra.Command, cmd lib.Command, posArgs []string) map[string]string {
+	if len(cmd.Args) == 0 && len(cmd.Flags) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(cmd.Args)+len(cmd.Flags))
+	for i, a := range cmd.Args {
+		if i < len(posArgs) {
+			out[a.Name] = posArgs[i]
+		}
+	}
+	for _, f := range cmd.Flags {
+		switch f.Type {
+		case "bool":
+			v, _ := co.Flags().GetBool(f.Name)
+			if v {
+				out[f.Name] = "true"
+			} else {
+				out[f.Name] = "false"
+			}
+		case "int":
+			v, _ := co.Flags().GetInt(f.Name)
+			out[f.Name] = strconv.Itoa(v)
+		default:
+			v, _ := co.Flags().GetString(f.Name)
+			out[f.Name] = v
+		}
+	}
+	return out
 }
 
 func hasCommand(root *cobra.Command, name string) bool {
