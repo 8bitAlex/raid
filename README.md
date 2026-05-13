@@ -210,6 +210,21 @@ raid frontend build   # run the "build" command from the frontend repo
 
 Each repository that defines commands appears as a subcommand in `raid --help`. Run `raid <repo> --help` to see available commands for that repo.
 
+### Exit codes
+
+Raid emits categorical exit codes so scripts and agents can branch on the failure class without parsing prose:
+
+| Code | Category | Meaning |
+|---|---|---|
+| `0` | _success_ | The command completed successfully. |
+| `1` | generic | Unclassified failure. |
+| `2` | config | Invalid profile / repo / schema. |
+| `3` | task | A user task failed. |
+| `4` | network | Clone or HTTP failure. |
+| `5` | not-found | Profile, repo, env, or command missing. |
+
+Pass `--json` (a persistent flag, works on any subcommand) to receive a structured `{"error": {"code": "...", "category": "...", "message": "...", "hint": "..."}}` document on stderr. See the [errors reference](https://raidcli.dev/docs/references/errors) for the full code table and stability contract.
+
 ---
 
 ## Configuration

@@ -15,6 +15,113 @@ import (
 	"github.com/8bitalex/raid/src/raid"
 )
 
+// TestExecuteRoot_structuredErrorRouting drives the central error handler
+// through a real subcommand (`raid env <name>`) that returns a structured
+// errs.EnvNotFound. The handler must:
+//   - emit the message + hint line in text mode,
+//   - emit a single line of JSON in --json mode,
+//   - exit with the category's numeric code (5 for not-found).
+func TestExecuteRoot_structuredErrorRouting(t *testing.T) {
+	dir := t.TempDir()
+	oldCfg := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = oldCfg
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+	profilePath := filepath.Join(dir, "p.raid.yaml")
+	if err := os.WriteFile(profilePath, []byte("name: p\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "p", Path: profilePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("p"); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.ForceLoad(); err != nil {
+		t.Fatalf("ForceLoad: %v", err)
+	}
+
+	oldFn := latestReleaseFn
+	latestReleaseFn = func(string) string { return "" }
+	t.Cleanup(func() { latestReleaseFn = oldFn })
+
+	// The persistent --json flag on rootCmd is package-global state.
+	// Cobra doesn't reset Changed between Execute calls, so a test that
+	// passes --json leaves the flag set for subsequent tests. Snapshot
+	// here and restore on cleanup so we don't leak.
+	t.Cleanup(func() {
+		if f := rootCmd.PersistentFlags().Lookup("json"); f != nil {
+			_ = f.Value.Set("false")
+			f.Changed = false
+		}
+	})
+
+	cases := []struct {
+		name   string
+		args   []string
+		want   int
+		expect string
+	}{
+		// Text mode: raid env <unknown> returns ENV_NOT_FOUND (category
+		// not-found → exit 5). Stderr carries the message + hint line.
+		{"text mode", []string{"raid", "env", "noenv"}, 5, "environment 'noenv' not found"},
+		// JSON mode: raid --json profile <unknown> returns PROFILE_NOT_FOUND.
+		// Using profile here rather than env because env rejects the
+		// --json + arg combination at the cobra layer; profile doesn't.
+		{"json mode", []string{"raid", "--json", "profile", "noprofile"}, 5, `"code":"PROFILE_NOT_FOUND"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, w, _ := os.Pipe()
+			oldStderr := os.Stderr
+			os.Stderr = w
+			t.Cleanup(func() { os.Stderr = oldStderr })
+
+			code := executeRoot(tc.args)
+			w.Close()
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(r)
+
+			if code != tc.want {
+				t.Errorf("exit code = %d, want %d", code, tc.want)
+			}
+			if !strings.Contains(buf.String(), tc.expect) {
+				t.Errorf("stderr %q missing %q", buf.String(), tc.expect)
+			}
+		})
+	}
+}
+
+func TestJsonModeFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no flag", []string{"raid", "install"}, false},
+		{"long form", []string{"raid", "--json", "install"}, true},
+		{"long form equals true", []string{"raid", "--json=true", "install"}, true},
+		{"long form equals false", []string{"raid", "--json=false", "install"}, false},
+		{"after --", []string{"raid", "--", "--json"}, false},
+		{"deep in args", []string{"raid", "-c", "/p", "install", "--json"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := jsonModeFromArgs(tt.args); got != tt.want {
+				t.Errorf("jsonModeFromArgs(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBaseVersion(t *testing.T) {
 	tests := []struct {
 		name    string

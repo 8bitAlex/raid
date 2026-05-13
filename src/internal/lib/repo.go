@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"gopkg.in/yaml.v3"
 )
@@ -53,7 +54,7 @@ func (r Repo) getEnv(name string) Env {
 
 func buildRepo(repo *Repo) error {
 	if repo.IsZero() {
-		return fmt.Errorf("invalid repository: %v", repo)
+		return liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "invalid repository: %v", *repo)
 	}
 
 	raidFile := filepath.Join(sys.ExpandPath(repo.Path), RaidConfigFileName)
@@ -62,12 +63,12 @@ func buildRepo(repo *Repo) error {
 	}
 
 	if err := ValidateRepo(raidFile); err != nil {
-		return fmt.Errorf("invalid raid configuration for '%s': %w", repo.Name, err)
+		return liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "invalid raid configuration for '%s': %v", repo.Name, err)
 	}
 
 	repoConfig, err := ExtractRepo(repo.Path)
 	if err != nil {
-		return fmt.Errorf("failed to read config for '%s': %w", repo.Name, err)
+		return liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "failed to read config for '%s': %v", repo.Name, err)
 	}
 
 	repo.Environments = append(repo.Environments, repoConfig.Environments...)
@@ -87,7 +88,9 @@ func CloneRepository(repo Repo) error {
 
 	if repo.IsLocalOnly() {
 		if !sys.FileExists(path) {
-			return fmt.Errorf("repository '%s' has no url and path '%s' does not exist; create the directory or add a url to clone", repo.Name, path)
+			return liberrs.Newf(liberrs.CodeRepoNotCloned, liberrs.CategoryNotFound,
+				"repository '%s' has no url and path '%s' does not exist; create the directory or add a url to clone",
+				repo.Name, path)
 		}
 		fmt.Fprintf(commandStdout, "Repository '%s' is local-only at %s, skipping clone\n", repo.Name, path)
 		return nil
@@ -99,15 +102,15 @@ func CloneRepository(repo Repo) error {
 	}
 
 	if !isGitInstalled() {
-		return fmt.Errorf("git is not installed or not in the PATH")
+		return liberrs.GitNotInstalled()
 	}
 
 	if err := os.MkdirAll(path, 0755); err != nil {
-		return fmt.Errorf("failed to create directory '%s': %w", path, err)
+		return liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "failed to create directory '%s': %v", path, err)
 	}
 
 	if err := clone(path, strings.TrimSpace(repo.URL), repo.Branch); err != nil {
-		return fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
+		return liberrs.CloneFailed(repo.Name, strings.TrimSpace(repo.URL), err)
 	}
 
 	return nil
@@ -145,12 +148,12 @@ func ExtractRepo(path string) (Repo, error) {
 	filePath := filepath.Join(sys.ExpandPath(path), RaidConfigFileName)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return Repo{}, fmt.Errorf("failed to read %s: %w", filePath, err)
+		return Repo{}, liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "failed to read %s: %v", filePath, err)
 	}
 
 	var repo Repo
 	if err := yaml.Unmarshal(data, &repo); err != nil {
-		return Repo{}, fmt.Errorf("failed to parse %s: %w", filePath, err)
+		return Repo{}, liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "failed to parse %s: %v", filePath, err)
 	}
 
 	return repo, nil

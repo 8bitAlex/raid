@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -32,7 +33,7 @@ type EnvVar struct {
 // SetEnv sets the named environment as the active environment.
 func SetEnv(name string) error {
 	if name == "" || !ContainsEnv(name) {
-		return fmt.Errorf("environment '%s' not found", name)
+		return liberrs.EnvNotFound(name)
 	}
 
 	return Set(activeEnvKey, name)
@@ -69,13 +70,13 @@ func ContainsEnv(name string) bool {
 // ExecuteEnv writes environment variables to each repo's .env file and runs the environment's tasks.
 func ExecuteEnv(name string) error {
 	if context == nil {
-		return fmt.Errorf("raid context is not initialized")
+		return liberrs.Internal("raid context is not initialized")
 	}
 	if err := setEnvVariablesForRepos(name); err != nil {
-		return fmt.Errorf("failed to set env variables: %w", err)
+		return liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "failed to set env variables: %v", err)
 	}
 	if err := runTasksForEnv(name); err != nil {
-		return fmt.Errorf("failed to run env tasks: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to run env tasks: %v", err)
 	}
 	return nil
 }
@@ -86,11 +87,11 @@ func setEnvVariablesForRepos(name string) error {
 
 		path, err := buildEnvPath(repo.Path)
 		if err != nil {
-			return fmt.Errorf("invalid path for repo '%s': %w", repo.Name, err)
+			return liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "invalid path for repo '%s': %v", repo.Name, err)
 		}
 
 		if err := setEnvVariables(context.Profile.getEnv(name).Variables, repo.getEnv(name).Variables, path); err != nil {
-			return fmt.Errorf("failed to set env variables for repo '%s': %w", repo.Name, err)
+			return liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "failed to set env variables for repo '%s': %v", repo.Name, err)
 		}
 	}
 	return nil
@@ -133,7 +134,7 @@ func runTasksForEnv(name string) error {
 // LoadEnv loads .env files from all repositories in the active profile into the process environment.
 func LoadEnv() error {
 	if context == nil {
-		return fmt.Errorf("context not initialized")
+		return liberrs.Internal("context not initialized")
 	}
 
 	var paths []string
@@ -149,7 +150,7 @@ func LoadEnv() error {
 	}
 
 	if err := godotenv.Load(paths...); err != nil {
-		return fmt.Errorf("failed to load env files: %w", err)
+		return liberrs.Newf(liberrs.CodeConfigLoadFailed, liberrs.CategoryConfig, "failed to load env files: %v", err)
 	}
 	return nil
 }

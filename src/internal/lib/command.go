@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	"github.com/8bitalex/raid/src/internal/sys"
 )
 
@@ -87,7 +88,7 @@ func ExecuteCommand(name string, args []string, named map[string]string) error {
 		}
 	}
 	if found.IsZero() {
-		return fmt.Errorf("command '%s' not found", name)
+		return liberrs.CommandNotFound(name)
 	}
 
 	cleanup := setCommandArgs(args, named)
@@ -114,7 +115,7 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[strin
 		}
 	}
 	if repo == nil {
-		return fmt.Errorf("repository '%s' not found", repoName)
+		return liberrs.RepoNotFound(repoName)
 	}
 
 	var found Command
@@ -125,7 +126,7 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[strin
 		}
 	}
 	if found.IsZero() {
-		return fmt.Errorf("command '%s' not found in repository '%s'", cmdName, repoName)
+		return liberrs.Newf(liberrs.CodeCommandNotFound, liberrs.CategoryNotFound, "command '%s' not found in repository '%s'", cmdName, repoName)
 	}
 
 	cleanup := setCommandArgs(args, named)
@@ -239,11 +240,11 @@ func runCommand(cmd Command) error {
 	if cmd.Out.File != "" {
 		expanded := sys.ExpandPath(cmd.Out.File)
 		if err := os.MkdirAll(filepath.Dir(expanded), 0755); err != nil {
-			return fmt.Errorf("failed to create output directory for '%s': %w", cmd.Out.File, err)
+			return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to create output directory for '%s': %v", cmd.Out.File, err)
 		}
 		f, err := os.Create(expanded)
 		if err != nil {
-			return fmt.Errorf("failed to open output file '%s': %w", cmd.Out.File, err)
+			return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to open output file '%s': %v", cmd.Out.File, err)
 		}
 		defer f.Close()
 		commandStdout = io.MultiWriter(commandStdout, f)

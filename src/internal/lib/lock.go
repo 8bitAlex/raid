@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/gofrs/flock"
 )
@@ -39,11 +40,14 @@ func lockPath() string {
 func AcquireMutationLock() (func(), error) {
 	path := lockPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, fmt.Errorf("create raid config dir: %w", err)
+		// Route through LockFailed so the user-visible hint about
+		// ~/.raid/.lock is included consistently across every lock
+		// acquisition failure.
+		return nil, liberrs.LockFailed(fmt.Errorf("create raid config dir: %w", err))
 	}
 	lk := flock.New(path)
 	if err := lk.Lock(); err != nil {
-		return nil, fmt.Errorf("acquire raid mutation lock at %s: %w", path, err)
+		return nil, liberrs.LockFailed(err)
 	}
 	// Stamp the PID into the lock file so a curious user can `cat
 	// ~/.raid/.lock` to identify the holder. This write is advisory: flock

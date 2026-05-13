@@ -8,12 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var listJSON bool
-
-func init() {
-	ListEnvCmd.Flags().BoolVar(&listJSON, "json", false, "Emit machine-readable JSON output")
-}
-
 // envEntry is the stable JSON shape for a single environment in `env list --json`.
 type envEntry struct {
 	Name   string `json:"name"`
@@ -27,7 +21,8 @@ var ListEnvCmd = &cobra.Command{
 		envs := env.ListAll()
 		active := env.Get()
 
-		if listJSON {
+		jsonOutput := jsonMode(cmd)
+		if jsonOutput {
 			out := make([]envEntry, 0, len(envs))
 			for _, name := range envs {
 				out = append(out, envEntry{Name: name, Active: name == active})

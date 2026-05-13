@@ -17,6 +17,7 @@ import (
 	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -48,6 +49,7 @@ func init() {
 	rootCmd.Long = "Raid v" + version + "\n\nRaid is a configurable command-line application that orchestrates common development tasks, environments, and dependencies across distributed code repositories."
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(raid.ConfigPath, raid.ConfigPathFlag, raid.ConfigPathFlagShort, "", raid.ConfigPathFlagDesc)
+	rootCmd.PersistentFlags().Bool("json", false, "Emit JSON output for scriptable / agent consumption (where supported)")
 	// Subcommands
 	rootCmd.AddCommand(profile.Command)
 	rootCmd.AddCommand(install.Command)
@@ -158,14 +160,56 @@ func executeRoot(args []string) int {
 	rootCmd.SetArgs(args[1:])
 
 	if err := rootCmd.Execute(); err != nil {
+		rErr, isStructured := errs.AsError(err)
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		hasExit := errors.As(err, &exitErr)
+
+		// A plain exec.ExitError (no structured wrapping) means the
+		// subprocess already printed its own stderr — don't double-report,
+		// just propagate the subprocess exit status so $? matches.
+		if hasExit && !isStructured {
 			return exitErr.ExitCode()
 		}
-		fmt.Fprintln(os.Stderr, "raid:", err)
-		return 1
+
+		// Structured errors (including ones that wrap exec.ExitError, e.g.
+		// TASK_SHELL_FAILED) should still surface their code/hint/JSON so
+		// --json consumers see the error shape. After emitting, preserve
+		// the subprocess exit code when one is available so shell pipelines
+		// keep working.
+		if jsonModeFromArgs(args) {
+			errs.EmitJSON(os.Stderr, err)
+		} else {
+			fmt.Fprintln(os.Stderr, "raid:", err)
+			if isStructured && rErr.Hint() != "" {
+				fmt.Fprintln(os.Stderr, "hint:", rErr.Hint())
+			}
+		}
+		if hasExit {
+			return exitErr.ExitCode()
+		}
+		return errs.ExitCode(err)
 	}
 	return 0
+}
+
+// jsonModeFromArgs reports whether the user passed `--json` (or
+// `--json=true`) anywhere in args. Cobra resolves persistent flags
+// during Execute, but on the error path we need to know before falling
+// out of the dispatch loop — and we want JSON even when the failure
+// happens before flag parsing completes.
+func jsonModeFromArgs(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		switch {
+		case a == "--json", a == "--json=true":
+			return true
+		case a == "--json=false":
+			return false
+		}
+	}
+	return false
 }
 
 // CommandSourceAnnotation tags a cobra.Command with how it was registered:

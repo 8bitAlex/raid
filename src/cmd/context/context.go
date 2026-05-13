@@ -13,16 +13,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var jsonOutput bool
-
-func init() {
-	Command.Flags().BoolVar(&jsonOutput, "json", false, "Emit machine-readable JSON output")
-}
-
 // Command is the `raid context` subcommand. It prints a condensed snapshot of
 // the active workspace — profile, environment, and per-repo branch / dirty
 // state — for human or agent consumption, and hosts the `serve` subcommand
 // that runs the same data live as an MCP server over stdio.
+//
+// JSON output is controlled by the persistent --json flag on rootCmd.
 var Command = &cobra.Command{
 	Use:   "context",
 	Short: "Print a condensed summary of the active workspace, or run as an MCP server",
@@ -31,6 +27,9 @@ var Command = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ws := context.Get()
 		ws.Tools = collectTools(cmd.Root())
+		// GetBool returns false (zero value) when the flag isn't
+		// registered, so this also Just Works for bare test cmds.
+		jsonOutput, _ := cmd.Root().PersistentFlags().GetBool("json")
 		if jsonOutput {
 			return writeJSON(cmd.OutOrStdout(), ws)
 		}

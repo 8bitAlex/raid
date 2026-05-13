@@ -2,11 +2,14 @@ package lib
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 )
 
 func setupLockTempPath(t *testing.T) string {
@@ -17,6 +20,38 @@ func setupLockTempPath(t *testing.T) string {
 	t.Cleanup(func() { LockPathOverride = old })
 	LockPathOverride = path
 	return path
+}
+
+// TestAcquireMutationLock_mkdirAllFails covers the LockFailed-wrap path
+// when the parent directory cannot be created (parent path is a regular
+// file). Verifies the returned error is a structured LOCK_FAILED with
+// the user-facing hint.
+func TestAcquireMutationLock_mkdirAllFails(t *testing.T) {
+	tmpDir := t.TempDir()
+	blocker := filepath.Join(tmpDir, "blocker-file")
+	if err := os.WriteFile(blocker, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := LockPathOverride
+	t.Cleanup(func() { LockPathOverride = old })
+	// LockPathOverride parent is a regular file — MkdirAll can't create
+	// the intermediate dir under it.
+	LockPathOverride = filepath.Join(blocker, "child", ".lock")
+
+	release, err := AcquireMutationLock()
+	if release != nil {
+		release()
+	}
+	if err == nil {
+		t.Fatal("expected error when lock parent dir cannot be created")
+	}
+	rErr, ok := liberrs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != liberrs.CodeLockFailed {
+		t.Errorf("code = %q, want LOCK_FAILED", rErr.Code())
+	}
 }
 
 func TestAcquireMutationLock_returnsRelease(t *testing.T) {
