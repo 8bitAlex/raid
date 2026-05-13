@@ -66,6 +66,7 @@ task_groups:
 | [`install`](#install) | object | No | Install configuration |
 | [`commands`](#command) | list | No | Custom commands available via `raid <name>` |
 | [`task_groups`](#task-groups) | map | No | Reusable named task sequences |
+| [`verify`](#verify) | list | No | Declarative preconditions surfaced by `raid doctor` |
 
 ---
 
@@ -203,6 +204,33 @@ install:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | [`tasks`](#task) | list | No | Task sequence to run |
+
+---
+
+## Verify
+
+Declarative precondition checks. Each entry runs `tasks:` to assert that a dependency or environmental requirement is in place. An optional `onFail:` remediation gets exactly one chance to fix things — if remediation succeeds, raid re-runs `tasks:` once; if that pass succeeds the verify is reported as remediated, otherwise it fails.
+
+Verify entries are accepted on both profiles and per-repo `raid.yaml` files. They share execution context with `install:` — the active environment, raid vars, and task options all apply. Today verify entries are surfaced by `raid doctor`; future releases will add a dedicated `raid verify` command.
+
+```yaml
+verify:
+  - name: "Node installed"
+    tasks:
+      - type: Shell
+        cmd: "node --version"
+    onFail:
+      - type: Shell
+        cmd: "nvm install --lts"
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-readable label for the precondition. Surfaced in doctor output and structured errors. |
+| [`tasks`](#task) | list | Yes | Task sequence asserting the precondition. A non-zero exit anywhere in the sequence marks the verify as failed. |
+| [`onFail`](#task) | list | No | Remediation task sequence. Runs once when `tasks:` fails; if it succeeds, `tasks:` is re-run a single time. |
+
+Keep verify checks small and fast — they're meant to be run frequently as part of health diagnostics. Heavy bootstrap work belongs in `install:`.
 
 ---
 
@@ -471,3 +499,4 @@ environments:
 | [`install`](#install) | object | No | Install configuration for this repo |
 | [`commands`](#command) | list | No | Repo-scoped custom commands |
 | [`environments`](#environment) | list | No | Repo-scoped environment variables and tasks |
+| [`verify`](#verify) | list | No | Declarative preconditions surfaced by `raid doctor` |

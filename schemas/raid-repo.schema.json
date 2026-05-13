@@ -22,6 +22,9 @@
         },
         "commands": {
             "$ref": "https://raidcli.dev/schema/v1/raid-defs.schema.json#/properties/commands"
+        },
+        "verify": {
+            "$ref": "https://raidcli.dev/schema/v1/raid-defs.schema.json#/$defs/verifyArray"
         }
     },
     "required": ["name","branch"]

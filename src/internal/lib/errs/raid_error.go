@@ -95,6 +95,7 @@ const (
 	CodeRepoNotCloned          = "REPO_NOT_CLONED"
 	CodeEnvNotFound            = "ENV_NOT_FOUND"
 	CodeCommandNotFound        = "COMMAND_NOT_FOUND"
+	CodeVerifyFailed           = "VERIFY_FAILED"
 )
 
 // RaidError is the canonical implementation of raid's Error interface.

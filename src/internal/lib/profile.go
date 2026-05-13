@@ -30,6 +30,7 @@ type Profile struct {
 	Install      OnInstall         `json:"install"`
 	Groups       map[string][]Task `json:"task_groups" yaml:"task_groups"`
 	Commands     []Command         `json:"commands"`
+	Verify       []Verify          `json:"verify,omitempty"`
 }
 
 // IsZero reports whether the profile is uninitialized.

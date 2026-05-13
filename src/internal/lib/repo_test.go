@@ -243,3 +243,62 @@ func TestValidateRepo_schemaViolation(t *testing.T) {
 		t.Fatal("ValidateRepo() expected error for schema violation")
 	}
 }
+
+// TestValidateRepo_verify exercises the repo schema's top-level
+// `verify:` block: that valid entries pass, and that entries missing
+// `name` or `tasks` are rejected.
+func TestValidateRepo_verify(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{
+			name: "verify accepted with name, tasks, and onFail",
+			body: `name: r
+branch: main
+verify:
+  - name: Go installed
+    tasks:
+      - type: Shell
+        cmd: go version
+    onFail:
+      - type: Shell
+        cmd: brew install go
+`,
+		},
+		{
+			name: "verify rejected when name is missing",
+			body: `name: r
+branch: main
+verify:
+  - tasks:
+      - type: Shell
+        cmd: go version
+`,
+			wantErr: true,
+		},
+		{
+			name: "verify rejected when tasks is missing",
+			body: `name: r
+branch: main
+verify:
+  - name: Go installed
+`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "raid.yaml")
+			if err := os.WriteFile(path, []byte(tt.body), 0644); err != nil {
+				t.Fatalf("write repo: %v", err)
+			}
+			err := ValidateRepo(path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateRepo() err = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}

@@ -23,6 +23,7 @@ type Repo struct {
 	Environments []Env     `json:"environments"`
 	Install      OnInstall `json:"install"`
 	Commands     []Command `json:"commands"`
+	Verify       []Verify  `json:"verify,omitempty"`
 }
 
 // IsZero reports whether the repo is uninitialized. URL is intentionally
@@ -74,6 +75,7 @@ func buildRepo(repo *Repo) error {
 	repo.Environments = append(repo.Environments, repoConfig.Environments...)
 	repo.Install.Tasks = append(repo.Install.Tasks, repoConfig.Install.Tasks...)
 	repo.Commands = append(repo.Commands, repoConfig.Commands...)
+	repo.Verify = append(repo.Verify, repoConfig.Verify...)
 
 	return nil
 }

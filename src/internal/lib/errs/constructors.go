@@ -281,3 +281,18 @@ func TaskHTTPFailed(url string, cause error) *RaidError {
 	return newRaidError(CodeTaskHTTPFailed, CategoryNetwork, msg, "",
 		map[string]any{"task": "HTTP", "url": url}, cause)
 }
+
+// VerifyFailed — a `verify:` entry failed after the (optional) onFail
+// remediation didn't bring it back. CategoryConfig because the user's
+// config asserts a precondition that isn't actually true. The verify
+// name is surfaced as a detail so JSON consumers can pivot on it
+// without parsing the message.
+func VerifyFailed(name string, cause error) *RaidError {
+	msg := formatMsg("verify %q failed", name)
+	if cause != nil {
+		msg = formatMsg("verify %q failed: %v", name, cause)
+	}
+	return newRaidError(CodeVerifyFailed, CategoryConfig, msg,
+		"Fix the underlying dependency or update the verify block to match reality.",
+		map[string]any{"verify": name}, cause)
+}

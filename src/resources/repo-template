@@ -91,6 +91,22 @@
 #         cmd: npm run db:seed
 
 # ---------------------------------------------------------------------------
+# Verify  (declarative preconditions; keep checks small and fast)
+# ---------------------------------------------------------------------------
+# Each entry asserts a dependency or environmental precondition. raid doctor
+# runs every verify and reports pass/fail. An optional `onFail:` remediation
+# gets exactly one chance to fix things before the entry is reported as failed.
+#
+# verify:
+#   - name: Node installed
+#     tasks:
+#       - type: Shell
+#         cmd: node --version
+#     onFail:
+#       - type: Shell
+#         cmd: nvm install --lts
+
+# ---------------------------------------------------------------------------
 # Task Reference
 # ---------------------------------------------------------------------------
 # Task types:
