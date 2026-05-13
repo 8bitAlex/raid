@@ -148,8 +148,8 @@ func TestExecuteTask_showExeTime_emitsLine(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !strings.Contains(out, "→ say-hi (1.5s)") {
-		t.Errorf("stderr %q missing '→ say-hi (1.5s)'", out)
+	if !strings.Contains(out, "say-hi complete in 1.5s") {
+		t.Errorf("stderr %q missing 'say-hi complete in 1.5s'", out)
 	}
 	if !strings.Contains(out, "\033[2m") || !strings.Contains(out, "\033[0m") {
 		t.Errorf("stderr %q missing dim ANSI styling", out)
@@ -171,8 +171,8 @@ func TestExecuteTask_showExeTime_fallsBackToTaskType(t *testing.T) {
 		Cmd:       "exit 0",
 	}
 	_ = ExecuteTask(task)
-	if !strings.Contains(buf.String(), "→ shell (500ms)") {
-		t.Errorf("stderr %q missing '→ shell (500ms)'", buf.String())
+	if !strings.Contains(buf.String(), "shell complete in 500ms") {
+		t.Errorf("stderr %q missing 'shell complete in 500ms'", buf.String())
 	}
 }
 
@@ -191,7 +191,7 @@ func TestExecuteTask_showExeTime_firesOnFailureToo(t *testing.T) {
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error from `exit 1`")
 	}
-	if !strings.Contains(buf.String(), "→ fails (2.0s)") {
+	if !strings.Contains(buf.String(), "fails complete in 2.0s") {
 		t.Errorf("stderr %q should still carry the exe-time line on failure", buf.String())
 	}
 }

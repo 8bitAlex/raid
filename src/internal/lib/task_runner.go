@@ -200,15 +200,15 @@ func dispatchTask(task Task) error {
 // sleeping.
 var timeNowFn = time.Now
 
-// emitExeTime writes the "→ <label> (Xs)" line to commandStderr using
-// dim-grey ANSI styling. Label falls back to the task type when no
+// emitExeTime writes the "<label> complete in <Xs>" line to commandStderr
+// using dim-grey ANSI styling. Label falls back to the task type when no
 // `name:` was given so the output is still recognisable.
 func emitExeTime(label string, d time.Duration) {
 	const (
 		dim   = "\033[2m"
 		reset = "\033[0m"
 	)
-	fmt.Fprintf(commandStderr, "%s→ %s (%s)%s\n", dim, label, formatExeDuration(d), reset)
+	fmt.Fprintf(commandStderr, "%s%s complete in %s%s\n", dim, label, formatExeDuration(d), reset)
 }
 
 // formatExeDuration renders a duration as a short, human-readable string

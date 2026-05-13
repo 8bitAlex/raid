@@ -623,7 +623,7 @@
             "properties": {
                 "showExeTime": {
                     "type": "boolean",
-                    "description": "When true, print a dim line to stderr after the task (or command) completes showing the elapsed time, e.g. `→ task-name (1.2s)`.",
+                    "description": "When true, print a dim line to stderr after the task (or command) completes showing the elapsed time, e.g. `task-name complete in 1.2s`.",
                     "default": false
                 }
             },

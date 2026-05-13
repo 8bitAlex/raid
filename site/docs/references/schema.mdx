@@ -245,7 +245,7 @@ The `options:` block is shared by every task type and by user-defined commands. 
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `showExeTime` | bool | `false` | When true, raid prints a dim line to stderr after the task (or command) completes: `→ <name> (1.2s)`. Fires for both success and failure. On a command this fires once for the whole command's elapsed time; on a task it fires for that single task. The two are independent — set both to time the command end-to-end *and* see per-task breakdowns. |
+| `showExeTime` | bool | `false` | When true, raid prints a dim line to stderr after the task (or command) completes: `<name> complete in 1.2s`. Fires for both success and failure. On a command this fires once for the whole command's elapsed time; on a task it fires for that single task. The two are independent — set both to time the command end-to-end *and* see per-task breakdowns. |
 
 ```yaml
 commands:
@@ -268,9 +268,9 @@ commands:
 Output:
 
 ```
-→ server-build (164.1s)
-→ client-install (0.9s)
-→ build (165.0s)
+server-build complete in 164.1s
+client-install complete in 0.9s
+build complete in 165.0s
 ```
 
 ### Condition

@@ -11,7 +11,7 @@ User-visible changes per release, latest first. For full commit history see the 
 
 ## 0.14.0 — upcoming
 
-**Shared `options:` block on every task type.** A new `options:` block on the base task definition composes uniformly across every task type (and on user-defined commands) so cross-cutting fields don't have to be re-declared per type. The initial field, `showExeTime: bool`, prints a dim line to stderr after a task or command completes with the elapsed time: `→ task-name (1.2s)`. Omitting `options` (or any field within it) leaves current behavior unchanged, so the addition is fully backwards compatible. Additional fields (`quiet`, `timeout`, …) will ship additively. Closes [#54](https://github.com/8bitAlex/raid/issues/54).
+**Shared `options:` block on every task type.** A new `options:` block on the base task definition composes uniformly across every task type (and on user-defined commands) so cross-cutting fields don't have to be re-declared per type. The initial field, `showExeTime: bool`, prints a dim line to stderr after a task or command completes with the elapsed time: `task-name complete in 1.2s`. Omitting `options` (or any field within it) leaves current behavior unchanged, so the addition is fully backwards compatible. Additional fields (`quiet`, `timeout`, …) will ship additively. Closes [#54](https://github.com/8bitAlex/raid/issues/54).
 
 ## 0.13.0 — upcoming
 

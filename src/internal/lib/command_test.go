@@ -321,7 +321,7 @@ func TestRunCommand_showExeTime_emitsLine(t *testing.T) {
 	if err := runCommand(cmd); err != nil {
 		t.Fatalf("runCommand: %v", err)
 	}
-	if !strings.Contains(buf.String(), "→ build (750ms)") {
+	if !strings.Contains(buf.String(), "build complete in 750ms") {
 		t.Errorf("stderr %q should carry command-level exe-time line", buf.String())
 	}
 }
