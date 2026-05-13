@@ -13,12 +13,13 @@ import (
 
 // Command is a named, user-defined CLI command that can be invoked via 'raid <name>'.
 type Command struct {
-	Name  string   `json:"name"`
-	Usage string   `json:"usage"`
-	Args  []Arg    `json:"args,omitempty"`
-	Flags []Flag   `json:"flags,omitempty"`
-	Tasks []Task   `json:"tasks"`
-	Out   *Output  `json:"out,omitempty"`
+	Name    string       `json:"name"`
+	Usage   string       `json:"usage"`
+	Args    []Arg        `json:"args,omitempty"`
+	Flags   []Flag       `json:"flags,omitempty"`
+	Tasks   []Task       `json:"tasks"`
+	Options *TaskOptions `json:"options,omitempty"`
+	Out     *Output      `json:"out,omitempty"`
 }
 
 // Arg declares a positional argument for a custom command. The supplied value
@@ -220,6 +221,23 @@ func clearRaidArgs() {
 }
 
 func runCommand(cmd Command) error {
+	// Command-level showExeTime is independent of per-task timing — both
+	// flags can be set together. The command line is emitted after the
+	// final task (and after any per-task lines) so the timeline reads
+	// top-down. Like the task variant, it fires for both success and
+	// failure so the elapsed time is always visible.
+	if cmd.Options != nil && cmd.Options.ShowExeTime {
+		start := timeNowFn()
+		err := runCommandTasks(cmd)
+		emitExeTime(cmd.Name, timeNowFn().Sub(start))
+		return err
+	}
+	return runCommandTasks(cmd)
+}
+
+// runCommandTasks applies the optional Out wrapping and runs the task
+// sequence. Split out so the showExeTime wrapper above stays focused.
+func runCommandTasks(cmd Command) error {
 	if cmd.Out == nil {
 		return ExecuteTasks(cmd.Tasks)
 	}

@@ -544,6 +544,9 @@
                     "tasks": {
                         "$ref": "#/properties/tasks"
                     },
+                    "options": {
+                        "$ref": "#/$defs/taskOptions"
+                    },
                     "out": {
                         "type": "object",
                         "description": "Output configuration for the command",
@@ -608,8 +611,23 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "options": {
+                    "$ref": "#/$defs/taskOptions"
                 }
             }
+        },
+        "taskOptions": {
+            "type": "object",
+            "description": "Shared task / command options. Compose cleanly across task types and on commands; omitting `options` (or any field within) leaves default behavior unchanged. Additional fields will be added in future releases.",
+            "properties": {
+                "showExeTime": {
+                    "type": "boolean",
+                    "description": "When true, print a dim line to stderr after the task (or command) completes showing the elapsed time, e.g. `→ task-name (1.2s)`.",
+                    "default": false
+                }
+            },
+            "additionalProperties": false
         }
     }
 }

@@ -552,6 +552,87 @@ install:
 	}
 }
 
+// TestValidateProfile_optionsAccepted_onEveryTaskType locks in the
+// taskCommon `options` block: every task variant must accept it so
+// schema authors don't have to re-declare per type. Also covers the
+// command-level options block.
+func TestValidateProfile_optionsAccepted_onEveryTaskType(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	body := `name: opts
+install:
+  tasks:
+    - type: Shell
+      cmd: 'true'
+      options: {showExeTime: true}
+    - type: Script
+      path: ./x.sh
+      options: {showExeTime: false}
+    - type: HTTP
+      url: 'https://example.com/a'
+      dest: /tmp/a
+      options: {showExeTime: true}
+    - type: Wait
+      url: 'https://example.com/ready'
+      options: {showExeTime: true}
+    - type: Template
+      src: ./t.tmpl
+      dest: /tmp/out
+      options: {showExeTime: true}
+    - type: Git
+      op: pull
+      options: {showExeTime: true}
+    - type: Prompt
+      var: NAME
+      options: {showExeTime: true}
+    - type: Confirm
+      message: ok?
+      options: {showExeTime: true}
+    - type: Print
+      message: hi
+      options: {showExeTime: true}
+    - type: Set
+      var: X
+      value: y
+      options: {showExeTime: true}
+commands:
+  - name: build
+    options: {showExeTime: true}
+    tasks:
+      - type: Shell
+        cmd: 'true'
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if err := ValidateProfile(path); err != nil {
+		t.Fatalf("ValidateProfile() unexpected error: %v", err)
+	}
+}
+
+func TestValidateProfile_optionsRejectsUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	// `quiet` is reserved for a future option (#54 mentions it explicitly
+	// as out of scope). Until it lands, the schema must reject it so
+	// authors get a clear error instead of silent acceptance.
+	body := `name: t
+install:
+  tasks:
+    - type: Shell
+      cmd: 'true'
+      options:
+        showExeTime: true
+        quiet: true
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() should reject unknown option fields")
+	}
+}
+
 // TestValidateProfile_taskRejectsUnknownField verifies that an unknown
 // property on a task is still rejected after the schema was refactored to use
 // allOf + unevaluatedProperties:false instead of additionalProperties:false on

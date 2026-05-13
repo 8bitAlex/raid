@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- getShell ---
@@ -95,6 +97,130 @@ func TestGetShell_powershell(t *testing.T) {
 				t.Errorf("getShell(%q)[1] = %q, want \"-Command\"", input, got[1])
 			}
 		})
+	}
+}
+
+// --- showExeTime ---
+
+// withStubbedTime swaps the package time source so duration output is
+// deterministic across runs. The first call returns the t0 sentinel, the
+// second returns t0 + delta. Restored on cleanup.
+func withStubbedTime(t *testing.T, delta time.Duration) {
+	t.Helper()
+	orig := timeNowFn
+	calls := 0
+	t0 := time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
+	timeNowFn = func() time.Time {
+		defer func() { calls++ }()
+		if calls == 0 {
+			return t0
+		}
+		return t0.Add(delta)
+	}
+	t.Cleanup(func() { timeNowFn = orig })
+}
+
+// withCapturedStderr redirects commandStderr to the returned buffer and
+// restores it on cleanup so test assertions can match the dim "→ name
+// (Xs)" line emitted by showExeTime.
+func withCapturedStderr(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	restore := SetCommandOutput(io.Discard, &buf)
+	t.Cleanup(restore)
+	return &buf
+}
+
+func TestExecuteTask_showExeTime_emitsLine(t *testing.T) {
+	withStubbedTime(t, 1500*time.Millisecond)
+	buf := withCapturedStderr(t)
+
+	task := Task{
+		TaskProps: TaskProps{
+			Name:    "say-hi",
+			Options: &TaskOptions{ShowExeTime: true},
+		},
+		Type: Shell,
+		Cmd:  "exit 0",
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("ExecuteTask: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "→ say-hi (1.5s)") {
+		t.Errorf("stderr %q missing '→ say-hi (1.5s)'", out)
+	}
+	if !strings.Contains(out, "\033[2m") || !strings.Contains(out, "\033[0m") {
+		t.Errorf("stderr %q missing dim ANSI styling", out)
+	}
+}
+
+func TestExecuteTask_showExeTime_fallsBackToTaskType(t *testing.T) {
+	withStubbedTime(t, 500*time.Millisecond)
+	buf := withCapturedStderr(t)
+
+	// No `name:` field — Label() falls back to the task type as-written.
+	// The Go constant `Shell` is lowercase ("shell"); a user writing
+	// `type: Shell` in YAML would see "Shell" here because Task.Type
+	// preserves the original case (ToLower() returns a normalized copy
+	// only for dispatch).
+	task := Task{
+		TaskProps: TaskProps{Options: &TaskOptions{ShowExeTime: true}},
+		Type:      Shell,
+		Cmd:       "exit 0",
+	}
+	_ = ExecuteTask(task)
+	if !strings.Contains(buf.String(), "→ shell (500ms)") {
+		t.Errorf("stderr %q missing '→ shell (500ms)'", buf.String())
+	}
+}
+
+func TestExecuteTask_showExeTime_firesOnFailureToo(t *testing.T) {
+	withStubbedTime(t, 2*time.Second)
+	buf := withCapturedStderr(t)
+
+	task := Task{
+		TaskProps: TaskProps{
+			Name:    "fails",
+			Options: &TaskOptions{ShowExeTime: true},
+		},
+		Type: Shell,
+		Cmd:  "exit 1",
+	}
+	if err := ExecuteTask(task); err == nil {
+		t.Fatal("expected error from `exit 1`")
+	}
+	if !strings.Contains(buf.String(), "→ fails (2.0s)") {
+		t.Errorf("stderr %q should still carry the exe-time line on failure", buf.String())
+	}
+}
+
+func TestExecuteTask_noOptionsLeavesOutputUntouched(t *testing.T) {
+	buf := withCapturedStderr(t)
+	task := Task{Type: Shell, Cmd: "exit 0"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("ExecuteTask: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("default behavior should not emit anything on stderr, got %q", buf.String())
+	}
+}
+
+func TestFormatExeDuration(t *testing.T) {
+	cases := []struct {
+		in   time.Duration
+		want string
+	}{
+		{250 * time.Millisecond, "250ms"},
+		{1500 * time.Millisecond, "1.5s"},
+		{75 * time.Second, "1m15s"},
+		{2 * time.Hour, "2h00m"},
+	}
+	for _, c := range cases {
+		if got := formatExeDuration(c.in); got != c.want {
+			t.Errorf("formatExeDuration(%v) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 
