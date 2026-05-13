@@ -357,7 +357,7 @@ func TestRunCommand_showExeTime_respectsOutSuppressionAndFile(t *testing.T) {
 		t.Fatalf("runCommand: %v", err)
 	}
 
-	if strings.Contains(stderrBuf.String(), "→ build") {
+	if strings.Contains(stderrBuf.String(), "build complete in") {
 		t.Errorf("exe-time line leaked to suppressed stderr: %q", stderrBuf.String())
 	}
 
@@ -365,7 +365,7 @@ func TestRunCommand_showExeTime_respectsOutSuppressionAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if !strings.Contains(string(data), "→ build (750ms)") {
+	if !strings.Contains(string(data), "build complete in 750ms") {
 		t.Errorf("exe-time line missing from out.file capture: %q", string(data))
 	}
 }
