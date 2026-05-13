@@ -127,6 +127,17 @@ func TestRunDoctor_jsonWithErrorFindings(t *testing.T) {
 	}
 }
 
+// TestJsonModeFromRoot_handlesDetachedCmd covers the bare-cmd case:
+// cmd.Root() on a detached command returns the command itself, and
+// GetBool on a FlagSet without a "json" flag returns false (the zero
+// value) without panicking.
+func TestJsonModeFromRoot_handlesDetachedCmd(t *testing.T) {
+	bare := &cobra.Command{}
+	if jsonModeFromRoot(bare) {
+		t.Error("bare cmd with no json flag should report false")
+	}
+}
+
 // TestCommand_isConfigured verifies the exported Command var.
 func TestCommand_isConfigured(t *testing.T) {
 	if Command.Use != "doctor" {

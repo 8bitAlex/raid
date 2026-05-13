@@ -50,6 +50,14 @@ func execCmd(t *testing.T, root *cobra.Command, sub *cobra.Command, args ...stri
 	return buf.String()
 }
 
+// TestJsonMode_handlesDetachedCmd defends the bare-cmd branch of jsonMode.
+func TestJsonMode_handlesDetachedCmd(t *testing.T) {
+	bare := &cobra.Command{}
+	if jsonMode(bare) {
+		t.Error("bare cmd with no root json flag should report false")
+	}
+}
+
 // resetEnvCmdState clears any cached cobra flag-merge state on the package
 // level Command vars so each test sees a fresh persistent-flag wiring. Cobra
 // caches `parentsPflags` on the command the first time merge runs, and

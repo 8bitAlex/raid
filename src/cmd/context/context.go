@@ -27,10 +27,9 @@ var Command = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ws := context.Get()
 		ws.Tools = collectTools(cmd.Root())
-		jsonOutput := false
-		if root := cmd.Root(); root != nil {
-			jsonOutput, _ = root.PersistentFlags().GetBool("json")
-		}
+		// GetBool returns false (zero value) when the flag isn't
+		// registered, so this also Just Works for bare test cmds.
+		jsonOutput, _ := cmd.Root().PersistentFlags().GetBool("json")
 		if jsonOutput {
 			return writeJSON(cmd.OutOrStdout(), ws)
 		}

@@ -15,13 +15,11 @@ func init() {
 
 // jsonMode resolves --json by walking up to the root's persistent flag, so
 // the read always reflects the current invocation's args even when the
-// package-level Command var is reused across tests.
+// package-level Command var is reused across tests. GetBool returns false
+// (and an ignored error) when the flag isn't registered, so a bare cmd
+// without parents yields false naturally.
 func jsonMode(cmd *cobra.Command) bool {
-	root := cmd.Root()
-	if root == nil {
-		return false
-	}
-	v, _ := root.PersistentFlags().GetBool("json")
+	v, _ := cmd.Root().PersistentFlags().GetBool("json")
 	return v
 }
 

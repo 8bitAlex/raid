@@ -23,10 +23,9 @@ var ListProfileCmd = &cobra.Command{
 		profiles := pro.ListAll()
 		activeProfile := pro.Get()
 
-		jsonOutput := false
-		if root := cmd.Root(); root != nil {
-			jsonOutput, _ = root.PersistentFlags().GetBool("json")
-		}
+		// GetBool returns false (zero value) when the flag isn't
+		// registered, so this also Just Works for bare test cmds.
+		jsonOutput, _ := cmd.Root().PersistentFlags().GetBool("json")
 		if jsonOutput {
 			out := make([]profileEntry, 0, len(profiles))
 			for _, p := range profiles {
