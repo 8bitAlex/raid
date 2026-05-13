@@ -151,6 +151,22 @@ func ExecuteTask(task Task) error {
 		return nil
 	}
 
+	// Wrap the per-type dispatch with showExeTime timing so the emitted
+	// line covers both happy and failure paths (the user still wants to
+	// know how long the task ran when it errors).
+	if task.Options != nil && task.Options.ShowExeTime {
+		start := timeNowFn()
+		err := dispatchTask(task)
+		emitExeTime(task.Label(), timeNowFn().Sub(start))
+		return err
+	}
+	return dispatchTask(task)
+}
+
+// dispatchTask is the inner switch separated from ExecuteTask so the
+// timing wrapper above stays readable and so tests can target it
+// directly when needed.
+func dispatchTask(task Task) error {
 	switch task.Type.ToLower() {
 	case Shell:
 		return execShell(task)
@@ -176,6 +192,37 @@ func ExecuteTask(task Task) error {
 		return execSetVar(task)
 	default:
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "invalid task type: %s", task.Type)
+	}
+}
+
+// timeNowFn is the time source used by the showExeTime wrapper. Tests
+// override it to assert deterministic elapsed-time output without
+// sleeping.
+var timeNowFn = time.Now
+
+// emitExeTime writes the "<label> complete in <Xs>" line to commandStderr
+// using dim-grey ANSI styling. Label falls back to the task type when no
+// `name:` was given so the output is still recognisable.
+func emitExeTime(label string, d time.Duration) {
+	const (
+		dim   = "\033[2m"
+		reset = "\033[0m"
+	)
+	fmt.Fprintf(commandStderr, "%s%s complete in %s%s\n", dim, label, formatExeDuration(d), reset)
+}
+
+// formatExeDuration renders a duration as a short, human-readable string
+// matching the recent-runs formatting in src/cmd/context.
+func formatExeDuration(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	case d < time.Minute:
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	case d < time.Hour:
+		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	default:
+		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 	}
 }
 

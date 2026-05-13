@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.14.0 — upcoming
+
+**Shared `options:` block on every task type.** A new `options:` block on the base task definition composes uniformly across every task type (and on user-defined commands) so cross-cutting fields don't have to be re-declared per type. The initial field, `showExeTime: bool`, prints a dim line to stderr after a task or command completes with the elapsed time: `task-name complete in 1.2s`. Omitting `options` (or any field within it) leaves current behavior unchanged, so the addition is fully backwards compatible. Additional fields (`quiet`, `timeout`, …) will ship additively. Closes [#54](https://github.com/8bitAlex/raid/issues/54).
+
 ## 0.13.0 — upcoming
 
 **Structured error output.** Every raid failure now carries a stable `code` (e.g. `PROFILE_NOT_FOUND`, `REPO_NOT_CLONED`, `CLONE_FAILED`, `TASK_SHELL_FAILED`), a category that maps directly to one of five exit codes (`1` generic / `2` config / `3` task / `4` network / `5` not-found), and an optional `hint` explaining what the user can do next. Pass `--json` to any command (including `raid install`, `raid profile add`, custom commands) and errors come back as a single line of `{"error": {"code": "...", "category": "...", "message": "...", "hint": "..."}}` — agents can pivot on the code instead of parsing prose. The `--json` flag itself moved from per-command to a persistent flag on `rootCmd`, so it now works on every command. Error codes are treated as semver-stable: new codes ship additively; existing codes never change name or category across minor versions. See the new [Errors reference](/docs/references/errors) for the full table and JSON shape. Closes [#47](https://github.com/8bitAlex/raid/issues/47).

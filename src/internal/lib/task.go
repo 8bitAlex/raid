@@ -25,6 +25,30 @@ type TaskProps struct {
 	// Name is an optional human-readable label for the task, surfaced in logs
 	// and agent-facing output. It does not affect execution.
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// Options is the shared options block — see TaskOptions. Composes across
+	// every task type and is also accepted on user-defined commands. Omitting
+	// the block (or any field within) leaves default behavior unchanged.
+	Options *TaskOptions `json:"options,omitempty" yaml:"options,omitempty"`
+}
+
+// TaskOptions is the shared `options:` block applied uniformly across all
+// task types and to user-defined commands. New fields ship additively; old
+// fields keep their semantics across minor versions.
+type TaskOptions struct {
+	// ShowExeTime, when true, prints a dim "→ <label> (1.2s)" line to
+	// stderr after the task (or command) completes — for both success and
+	// failure, so the elapsed time is always visible.
+	ShowExeTime bool `json:"showExeTime,omitempty" yaml:"showExeTime,omitempty"`
+}
+
+// Label returns the human-readable identifier for a task: its `name:`
+// field when set, otherwise the task type. Used by showExeTime so a task
+// without a name still prints something meaningful (e.g. "Shell").
+func (t Task) Label() string {
+	if t.Name != "" {
+		return t.Name
+	}
+	return string(t.Type)
 }
 
 // Task represents a single unit of work in a task sequence.

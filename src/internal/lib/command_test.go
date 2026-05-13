@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- Command.IsZero ---
@@ -292,6 +293,94 @@ func TestExecuteCommand_namedBindings_skipsInvalidKeys(t *testing.T) {
 	}
 	if got := os.Getenv("___"); got != "" {
 		t.Errorf("invalid key was set: %q", got)
+	}
+}
+
+func TestRunCommand_showExeTime_emitsLine(t *testing.T) {
+	origNow := timeNowFn
+	calls := 0
+	t0 := time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
+	timeNowFn = func() time.Time {
+		defer func() { calls++ }()
+		if calls == 0 {
+			return t0
+		}
+		return t0.Add(750 * time.Millisecond)
+	}
+	t.Cleanup(func() { timeNowFn = origNow })
+
+	var buf bytes.Buffer
+	restore := SetCommandOutput(io.Discard, &buf)
+	t.Cleanup(restore)
+
+	cmd := Command{
+		Name:    "build",
+		Options: &TaskOptions{ShowExeTime: true},
+		Tasks:   []Task{{Type: Shell, Cmd: "exit 0"}},
+	}
+	if err := runCommand(cmd); err != nil {
+		t.Fatalf("runCommand: %v", err)
+	}
+	if !strings.Contains(buf.String(), "build complete in 750ms") {
+		t.Errorf("stderr %q should carry command-level exe-time line", buf.String())
+	}
+}
+
+func TestRunCommand_showExeTime_respectsOutSuppressionAndFile(t *testing.T) {
+	// When `out.stderr: false` and `out.file: ...` are both set, the
+	// exe-time line must (a) NOT appear on the original stderr, and
+	// (b) BE captured in the output file — same rules as task output.
+	origNow := timeNowFn
+	calls := 0
+	t0 := time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
+	timeNowFn = func() time.Time {
+		defer func() { calls++ }()
+		if calls == 0 {
+			return t0
+		}
+		return t0.Add(750 * time.Millisecond)
+	}
+	t.Cleanup(func() { timeNowFn = origNow })
+
+	var stderrBuf bytes.Buffer
+	restore := SetCommandOutput(io.Discard, &stderrBuf)
+	t.Cleanup(restore)
+
+	outFile := filepath.Join(t.TempDir(), "captured.txt")
+	cmd := Command{
+		Name:    "build",
+		Options: &TaskOptions{ShowExeTime: true},
+		Tasks:   []Task{{Type: Shell, Cmd: "exit 0"}},
+		Out:     &Output{Stdout: true, Stderr: false, File: outFile},
+	}
+	if err := runCommand(cmd); err != nil {
+		t.Fatalf("runCommand: %v", err)
+	}
+
+	if strings.Contains(stderrBuf.String(), "build complete in") {
+		t.Errorf("exe-time line leaked to suppressed stderr: %q", stderrBuf.String())
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "build complete in 750ms") {
+		t.Errorf("exe-time line missing from out.file capture: %q", string(data))
+	}
+}
+
+func TestRunCommand_showExeTime_off_byDefault(t *testing.T) {
+	var buf bytes.Buffer
+	restore := SetCommandOutput(io.Discard, &buf)
+	t.Cleanup(restore)
+
+	cmd := Command{Name: "noop", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}
+	if err := runCommand(cmd); err != nil {
+		t.Fatalf("runCommand: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("default runCommand must not emit on stderr, got %q", buf.String())
 	}
 }
 

@@ -149,6 +149,7 @@ commands:
 | `args` | list | No | Declared positional arguments. See [Args](#command-args). |
 | `flags` | list | No | Declared flags / options. See [Flags](#command-flags). |
 | [`tasks`](#task) | list | Yes | Task sequence to run |
+| [`options`](#options) | object | No | Shared options block. Same shape as on tasks. Fires once per command — independent of per-task `options`. |
 | [`out`](#output) | object | No | Output configuration |
 
 Command names cannot shadow built-in names: `install`, `env`, `profile`, `doctor`.
@@ -236,6 +237,41 @@ All tasks share these common fields:
 | `name` | string | No | Human-readable label, surfaced in logs and agent output. Does not affect execution. |
 | `concurrent` | bool | No | Run in parallel with adjacent concurrent tasks |
 | [`condition`](#condition) | object | No | Conditions that must all pass for the task to run |
+| [`options`](#options) | object | No | Shared options block. Composes across every task type and is also accepted on commands. |
+
+### Options
+
+The `options:` block is shared by every task type and by user-defined commands. Omitting it (or any field within) leaves default behavior unchanged. New fields ship additively.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `showExeTime` | bool | `false` | When true, raid prints a dim line to stderr after the task (or command) completes: `<name> complete in 1.2s`. Fires for both success and failure. On a command this fires once for the whole command's elapsed time; on a task it fires for that single task. The two are independent — set both to time the command end-to-end *and* see per-task breakdowns. |
+
+```yaml
+commands:
+  - name: build
+    options:
+      showExeTime: true     # one final line after the whole command
+    tasks:
+      - type: Shell
+        name: server-build
+        cmd: swift build
+        options:
+          showExeTime: true # per-task line too
+      - type: Shell
+        name: client-install
+        cmd: npm install
+        options:
+          showExeTime: true
+```
+
+Output:
+
+```
+server-build complete in 164.1s
+client-install complete in 0.9s
+build complete in 165.0s
+```
 
 ### Condition
 

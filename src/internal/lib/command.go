@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	"github.com/8bitalex/raid/src/internal/sys"
@@ -13,12 +14,13 @@ import (
 
 // Command is a named, user-defined CLI command that can be invoked via 'raid <name>'.
 type Command struct {
-	Name  string   `json:"name"`
-	Usage string   `json:"usage"`
-	Args  []Arg    `json:"args,omitempty"`
-	Flags []Flag   `json:"flags,omitempty"`
-	Tasks []Task   `json:"tasks"`
-	Out   *Output  `json:"out,omitempty"`
+	Name    string       `json:"name"`
+	Usage   string       `json:"usage"`
+	Args    []Arg        `json:"args,omitempty"`
+	Flags   []Flag       `json:"flags,omitempty"`
+	Tasks   []Task       `json:"tasks"`
+	Options *TaskOptions `json:"options,omitempty"`
+	Out     *Output      `json:"out,omitempty"`
 }
 
 // Arg declares a positional argument for a custom command. The supplied value
@@ -219,13 +221,44 @@ func clearRaidArgs() {
 	}
 }
 
+// runCommand applies the optional Out wrapping and runs the task
+// sequence. Command-level showExeTime is independent of per-task timing —
+// both flags can be set together. The command line is emitted after the
+// final task (and after any per-task lines) so the timeline reads
+// top-down. Like the task variant, it fires for both success and failure
+// so the elapsed time is always visible.
+//
+// The exe-time line is emitted *inside* the Out wrapping so it respects
+// `out.stderr: false` (suppression) and `out.file` (capture) the same way
+// task output does. Emitting it after the wrappers unwound would bypass
+// both, so we keep all emission ordered against the Out lifecycle here.
 func runCommand(cmd Command) error {
+	showExeTime := cmd.Options != nil && cmd.Options.ShowExeTime
+	var start time.Time
+	if showExeTime {
+		start = timeNowFn()
+	}
+
 	if cmd.Out == nil {
-		return ExecuteTasks(cmd.Tasks)
+		err := ExecuteTasks(cmd.Tasks)
+		if showExeTime {
+			emitExeTime(cmd.Name, timeNowFn().Sub(start))
+		}
+		return err
 	}
 
 	origOut, origErr := commandStdout, commandStderr
+	var outFile *os.File
 	defer func() {
+		// Emit the exe-time line BEFORE the file is closed and the
+		// original writers are restored, so it lands in the same place
+		// as the task output (file capture, stderr suppression).
+		if showExeTime {
+			emitExeTime(cmd.Name, timeNowFn().Sub(start))
+		}
+		if outFile != nil {
+			outFile.Close()
+		}
 		commandStdout = origOut
 		commandStderr = origErr
 	}()
@@ -246,7 +279,7 @@ func runCommand(cmd Command) error {
 		if err != nil {
 			return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to open output file '%s': %v", cmd.Out.File, err)
 		}
-		defer f.Close()
+		outFile = f
 		commandStdout = io.MultiWriter(commandStdout, f)
 		commandStderr = io.MultiWriter(commandStderr, f)
 	}
