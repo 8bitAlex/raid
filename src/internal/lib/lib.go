@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/8bitalex/raid/schemas"
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/fsnotify/fsnotify"
 	"github.com/joho/godotenv"
@@ -144,7 +145,7 @@ var newVarsWatcherFn = newVarsWatcher
 // cross-process mutation lock.
 func WatchRaidVars(ctx stdctx.Context, onChange func()) error {
 	if onChange == nil {
-		return fmt.Errorf("WatchRaidVars: onChange must not be nil")
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "WatchRaidVars: onChange must not be nil")
 	}
 	return newVarsWatcherFn(ctx, raidVarsPath(), onChange)
 }
@@ -152,16 +153,16 @@ func WatchRaidVars(ctx stdctx.Context, onChange func()) error {
 func newVarsWatcher(ctx stdctx.Context, varsPath string, onChange func()) error {
 	dir := filepath.Dir(varsPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("ensure vars watch dir %s: %w", dir, err)
+		return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "ensure vars watch dir %s: %v", dir, err)
 	}
 
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
-		return fmt.Errorf("create fsnotify watcher: %w", err)
+		return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "create fsnotify watcher: %v", err)
 	}
 	if err := w.Add(dir); err != nil {
 		_ = w.Close()
-		return fmt.Errorf("watch %s: %w", dir, err)
+		return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "watch %s: %v", dir, err)
 	}
 
 	go runVarsWatcher(ctx, w, varsPath, onChange)
@@ -436,10 +437,10 @@ func sanitizeRepoVarName(name string) string {
 // installRepo clones a single repository and runs its install tasks.
 func installRepo(repo Repo) error {
 	if err := CloneRepository(repo); err != nil {
-		return fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
+		return liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "failed to clone repository '%s': %v", repo.Name, err)
 	}
 	if err := ExecuteTasks(withDefaultDir(repo.Install.Tasks, sys.ExpandPath(repo.Path))); err != nil {
-		return fmt.Errorf("failed to execute install tasks for '%s': %w", repo.Name, err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to execute install tasks for '%s': %v", repo.Name, err)
 	}
 	return nil
 }
@@ -448,11 +449,11 @@ func installRepo(repo Repo) error {
 // The profile-level install tasks are not run.
 func InstallRepo(name string) error {
 	if context == nil {
-		return fmt.Errorf("raid context is not initialized")
+		return liberrs.Internal("raid context is not initialized")
 	}
 	profile := context.Profile
 	if profile.IsZero() {
-		return fmt.Errorf("profile not found")
+		return liberrs.Newf(liberrs.CodeProfileNotActive, liberrs.CategoryNotFound, "profile not found")
 	}
 
 	var repo *Repo
@@ -463,7 +464,7 @@ func InstallRepo(name string) error {
 		}
 	}
 	if repo == nil {
-		return fmt.Errorf("repository '%s' not found in active profile", name)
+		return liberrs.Newf(liberrs.CodeRepoNotFound, liberrs.CategoryNotFound, "repository '%s' not found in active profile", name)
 	}
 
 	return installRepo(*repo)
@@ -472,11 +473,11 @@ func InstallRepo(name string) error {
 // Install clones all repositories in the active profile and runs install tasks.
 func Install(maxThreads int) error {
 	if context == nil {
-		return fmt.Errorf("raid context is not initialized")
+		return liberrs.Internal("raid context is not initialized")
 	}
 	profile := context.Profile
 	if profile.IsZero() {
-		return fmt.Errorf("profile not found")
+		return liberrs.Newf(liberrs.CodeProfileNotActive, liberrs.CategoryNotFound, "profile not found")
 	}
 
 	var semaphore chan struct{}
@@ -500,7 +501,7 @@ func Install(maxThreads int) error {
 				<-semaphore
 			}
 			if err != nil {
-				cloneErrs <- fmt.Errorf("failed to clone repository '%s': %w", repo.Name, err)
+				cloneErrs <- liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "failed to clone repository '%s': %v", repo.Name, err)
 			}
 		}(repo)
 	}
@@ -508,23 +509,23 @@ func Install(maxThreads int) error {
 	wg.Wait()
 	close(cloneErrs)
 
-	var errs []error
+	var collected []error
 	for err := range cloneErrs {
-		errs = append(errs, err)
+		collected = append(collected, err)
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("some repositories failed to clone: %v", errs)
+	if len(collected) > 0 {
+		return liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "some repositories failed to clone: %v", collected)
 	}
 
 	// Phase 2: run profile-level install tasks before any repo tasks.
 	if err := ExecuteTasks(withDefaultDir(profile.Install.Tasks, sys.GetHomeDir())); err != nil {
-		return fmt.Errorf("failed to execute install tasks: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to execute install tasks: %v", err)
 	}
 
 	// Phase 3: run each repo's install tasks sequentially in profile order.
 	for _, repo := range profile.Repositories {
 		if err := ExecuteTasks(withDefaultDir(repo.Install.Tasks, sys.ExpandPath(repo.Path))); err != nil {
-			return fmt.Errorf("failed to execute install tasks for '%s': %w", repo.Name, err)
+			return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to execute install tasks for '%s': %v", repo.Name, err)
 		}
 	}
 
@@ -538,10 +539,10 @@ func ValidateSchema(path string, schemaPath string) error {
 	schemaPath = sys.ExpandPath(schemaPath)
 
 	if path == "" || !sys.FileExists(path) {
-		return fmt.Errorf("file not found at %s", path)
+		return liberrs.Newf(liberrs.CodeProfileFileMissing, liberrs.CategoryNotFound, "file not found at %s", path)
 	}
 	if schemaPath == "" || !sys.FileExists(schemaPath) {
-		return fmt.Errorf("file not found at %s", schemaPath)
+		return liberrs.Newf(liberrs.CodeProfileFileMissing, liberrs.CategoryNotFound, "file not found at %s", schemaPath)
 	}
 
 	c := jsonschema.NewCompiler()
@@ -561,13 +562,13 @@ func ValidateSchema(path string, schemaPath string) error {
 func validateWithEmbeddedSchema(path, schemaID string) error {
 	path = sys.ExpandPath(path)
 	if path == "" || !sys.FileExists(path) {
-		return fmt.Errorf("file not found at %s", path)
+		return liberrs.Newf(liberrs.CodeProfileFileMissing, liberrs.CategoryNotFound, "file not found at %s", path)
 	}
 
 	c := jsonschema.NewCompiler()
 	entries, err := schemas.FS.ReadDir(".")
 	if err != nil {
-		return fmt.Errorf("failed to read embedded schemas: %w", err)
+		return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "failed to read embedded schemas: %v", err)
 	}
 	for _, entry := range entries {
 		name := entry.Name()
@@ -576,18 +577,18 @@ func validateWithEmbeddedSchema(path, schemaID string) error {
 		}
 		data, err := schemas.FS.ReadFile(name)
 		if err != nil {
-			return fmt.Errorf("failed to read embedded schema %s: %w", name, err)
+			return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "failed to read embedded schema %s: %v", name, err)
 		}
 		var doc map[string]any
 		if err := json.Unmarshal(data, &doc); err != nil {
-			return fmt.Errorf("failed to parse embedded schema %s: %w", name, err)
+			return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "failed to parse embedded schema %s: %v", name, err)
 		}
 		id, _ := doc["$id"].(string)
 		if id == "" {
-			return fmt.Errorf("embedded schema %s is missing $id", name)
+			return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "embedded schema %s is missing $id", name)
 		}
 		if err := c.AddResource(id, doc); err != nil {
-			return fmt.Errorf("failed to register embedded schema %s: %w", name, err)
+			return liberrs.Newf(liberrs.CodeInternal, liberrs.CategoryGeneric, "failed to register embedded schema %s: %v", name, err)
 		}
 	}
 
@@ -630,11 +631,11 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 				return err
 			}
 			if err := sch.Validate(doc); err != nil {
-				return fmt.Errorf("invalid format: %w", err)
+				return liberrs.Newf(liberrs.CodeSchemaValidationFailed, liberrs.CategoryConfig, "invalid format: %v", err)
 			}
 		}
 		if count == 0 {
-			return fmt.Errorf("invalid format: file contains no YAML documents")
+			return liberrs.Newf(liberrs.CodeSchemaValidationFailed, liberrs.CategoryConfig, "invalid format: file contains no YAML documents")
 		}
 		return nil
 	}
@@ -659,7 +660,7 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 				return err
 			}
 			if err := sch.Validate(doc); err != nil {
-				return fmt.Errorf("invalid format: %w", err)
+				return liberrs.Newf(liberrs.CodeSchemaValidationFailed, liberrs.CategoryConfig, "invalid format: %v", err)
 			}
 		}
 		return nil
@@ -670,7 +671,7 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 		return err
 	}
 	if err := sch.Validate(doc); err != nil {
-		return fmt.Errorf("invalid format: %w", err)
+		return liberrs.Newf(liberrs.CodeSchemaValidationFailed, liberrs.CategoryConfig, "invalid format: %v", err)
 	}
 	return nil
 }

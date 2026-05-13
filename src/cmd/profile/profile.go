@@ -2,10 +2,10 @@ package profile
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/8bitalex/raid/src/raid"
 	pro "github.com/8bitalex/raid/src/raid/profile"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ var Command = &cobra.Command{
 	Aliases: []string{"p"},
 	Short:   "Manage raid profiles",
 	Args:    cobra.RangeArgs(0, 1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			profile := pro.Get()
 			if !profile.IsZero() {
@@ -29,18 +29,16 @@ var Command = &cobra.Command{
 			} else {
 				fmt.Println("No active profile found. Use 'raid profile use <profile>' to set one.")
 			}
-		} else if len(args) == 1 {
-			name := args[0]
-			err := raid.WithMutationLock(func() error {
-				return pro.Set(name)
-			})
-			if err != nil {
-				fmt.Printf("Profile '%s' not found. Use 'raid profile list' to see available profiles.\n", name)
-				os.Exit(1)
-			}
-			fmt.Printf("Profile '%s' is now active.\n", name)
-		} else {
-			cmd.PrintErrln("Invalid number of arguments.")
+			return nil
 		}
+		name := args[0]
+		err := raid.WithMutationLock(func() error {
+			return pro.Set(name)
+		})
+		if err != nil {
+			return errs.Wrap(err)
+		}
+		fmt.Printf("Profile '%s' is now active.\n", name)
+		return nil
 	},
 }

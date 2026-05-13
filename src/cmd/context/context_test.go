@@ -531,7 +531,7 @@ func TestCommand_isWired(t *testing.T) {
 	if Command.Use != "context" {
 		t.Errorf("Use = %q, want %q", Command.Use, "context")
 	}
-	if Command.Flags().Lookup("json") == nil {
-		t.Error("--json flag not registered")
-	}
+	// --json moved from a local flag on Command to a persistent flag on
+	// rootCmd; this command now consults cmd.Root().PersistentFlags() at
+	// runtime instead of defining its own flag.
 }

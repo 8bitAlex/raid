@@ -668,8 +668,14 @@ func TestHandleInstall_propagatesError(t *testing.T) {
 	if !res.IsError {
 		t.Fatalf("expected isError=true (clone of fake URL must fail), got: %s", toolResultText(res))
 	}
-	if !strings.Contains(toolResultText(res), "raid_install:") {
-		t.Errorf("error should be tagged with the tool name, got: %q", toolResultText(res))
+	// Tool errors are now structured JSON containing a `tool` field, plus
+	// the structured code/category/message from errs.RaidError.
+	out := toolResultText(res)
+	if !strings.Contains(out, `"tool":"raid_install"`) {
+		t.Errorf("error should be tagged with the tool name, got: %q", out)
+	}
+	if !strings.Contains(out, `"code":"CLONE_FAILED"`) {
+		t.Errorf("expected CLONE_FAILED code, got: %q", out)
 	}
 }
 

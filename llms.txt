@@ -38,6 +38,7 @@ Raid is written in Go, distributed as a single self-contained binary, and publis
 
 - [Commands reference](https://raidcli.dev/docs/references/commands): Every built-in and user-defined command with flags and behavior
 - [Schema reference](https://raidcli.dev/docs/references/schema): Profile and per-repo YAML schemas — every field, type, and default
+- [Errors reference](https://raidcli.dev/docs/references/errors): Stable error-code table, exit-code categories (1 generic / 2 config / 3 task / 4 network / 5 not-found), JSON error shape under `--json`
 
 ## Schemas
 

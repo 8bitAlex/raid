@@ -137,9 +137,10 @@ func TestListProfileCmd_withProfiles(t *testing.T) {
 
 func TestListProfileCmd_jsonEmpty(t *testing.T) {
 	setupConfig(t)
-	t.Cleanup(func() { listJSON = false })
 	out := captureStdout(t, func() {
 		root := &cobra.Command{Use: "raid"}
+		ListProfileCmd.ResetFlags()
+		root.PersistentFlags().Bool("json", false, "")
 		root.AddCommand(ListProfileCmd)
 		root.SetArgs([]string{"list", "--json"})
 		_ = root.Execute()
@@ -155,7 +156,6 @@ func TestListProfileCmd_jsonEmpty(t *testing.T) {
 
 func TestListProfileCmd_jsonWithProfiles(t *testing.T) {
 	setupConfig(t)
-	t.Cleanup(func() { listJSON = false })
 	if err := lib.AddProfile(lib.Profile{Name: "alpha", Path: "/a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -167,6 +167,8 @@ func TestListProfileCmd_jsonWithProfiles(t *testing.T) {
 	}
 	out := captureStdout(t, func() {
 		root := &cobra.Command{Use: "raid"}
+		ListProfileCmd.ResetFlags()
+		root.PersistentFlags().Bool("json", false, "")
 		root.AddCommand(ListProfileCmd)
 		root.SetArgs([]string{"list", "--json"})
 		_ = root.Execute()
@@ -494,25 +496,19 @@ func TestAddProfileCmd_allDuplicates_subprocess(t *testing.T) {
 	}
 }
 
-func TestCommand_setProfileNotFound_subprocess(t *testing.T) {
-	if os.Getenv(subprocSetNotFound) == "1" {
-		setupConfig(t)
-		root := &cobra.Command{Use: "raid"}
-		root.AddCommand(Command)
-		root.SetArgs([]string{"profile", "nonexistent"})
-		_ = root.Execute()
-		return
-	}
-
-	proc := exec.Command(os.Args[0], "-test.run=^TestCommand_setProfileNotFound_subprocess$", "-test.v")
-	proc.Env = append(os.Environ(), subprocSetNotFound+"=1")
-	err := proc.Run()
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Errorf("exit code = %d, want 1", exitErr.ExitCode())
+// TestCommand_setProfileNotFound covers the path where `raid profile <name>`
+// is invoked with an unknown name. Previously this os.Exit'd; now it
+// returns a structured PROFILE_NOT_FOUND error (CategoryNotFound → exit 5).
+func TestCommand_setProfileNotFound(t *testing.T) {
+	setupConfig(t)
+	root := &cobra.Command{Use: "raid"}
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile", "nonexistent"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for unknown profile")
 	}
 }
 

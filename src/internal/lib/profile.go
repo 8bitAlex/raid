@@ -8,8 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/8bitalex/raid/src/resources"
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	sys "github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/resources"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -58,7 +59,7 @@ func (p Profile) getEnv(name string) Env {
 // SetProfile sets the named profile as the active profile.
 func SetProfile(name string) error {
 	if !ContainsProfile(name) {
-		return fmt.Errorf("profile '%s' not found", name)
+		return liberrs.ProfileNotFound(name)
 	}
 	return Set(activeProfileKey, name)
 }
@@ -119,10 +120,10 @@ func getProfilePaths() map[string]string {
 func RemoveProfile(name string) error {
 	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
-		return fmt.Errorf("no profiles found")
+		return liberrs.Newf(liberrs.CodeProfileNotFound, liberrs.CategoryNotFound, "no profiles found")
 	}
 	if _, exists := profiles[name]; !exists {
-		return fmt.Errorf("profile '%s' not found", name)
+		return liberrs.ProfileNotFound(name)
 	}
 	delete(profiles, name)
 	return Set(allProfilesKey, profiles)
@@ -139,14 +140,14 @@ func ExtractProfile(name, path string) (Profile, error) {
 			return profile, nil
 		}
 	}
-	return Profile{}, fmt.Errorf("profile '%s' not found in %s", name, path)
+	return Profile{}, liberrs.Newf(liberrs.CodeProfileNotFound, liberrs.CategoryNotFound, "profile '%s' not found in %s", name, path)
 }
 
 // ExtractProfiles reads all profiles from a YAML or JSON file.
 func ExtractProfiles(path string) ([]Profile, error) {
 	profileData, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read profile from file %s: %w", path, err)
+		return nil, liberrs.ProfileFileRead(path, err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
@@ -158,7 +159,7 @@ func ExtractProfiles(path string) ([]Profile, error) {
 	case ".json":
 		profiles, err = extractProfilesFromJSON(profileData, path)
 	default:
-		return nil, fmt.Errorf("unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
+		return nil, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig, "unsupported file format: %s. Supported formats are .yaml, .yml, and .json", ext)
 	}
 
 	if err != nil {
@@ -166,7 +167,7 @@ func ExtractProfiles(path string) ([]Profile, error) {
 	}
 
 	if len(profiles) == 0 {
-		return nil, fmt.Errorf("no profiles found in file %s", path)
+		return nil, liberrs.Newf(liberrs.CodeProfileNotFound, liberrs.CategoryNotFound, "no profiles found in file %s", path)
 	}
 
 	return profiles, nil
@@ -185,7 +186,7 @@ func extractProfilesFromYAML(data []byte, path string) ([]Profile, error) {
 
 		var profile Profile
 		if err := yaml.Unmarshal([]byte(doc), &profile); err != nil {
-			return nil, fmt.Errorf("invalid YAML document in %s: %w", path, err)
+			return nil, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig, "invalid YAML document in %s: %v", path, err)
 		}
 		profile.Path = path
 
@@ -204,7 +205,7 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 
 	var profiles []Profile
 	if err := json.Unmarshal(data, &profiles); err != nil {
-		return nil, fmt.Errorf("invalid JSON format in %s: %w", path, err)
+		return nil, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig, "invalid JSON format in %s: %v", path, err)
 	}
 
 	results := make([]Profile, 0, len(profiles))
@@ -250,11 +251,11 @@ type RepoDraft struct {
 func WriteProfileFile(draft ProfileDraft, path string) error {
 	data, err := yaml.Marshal(draft)
 	if err != nil {
-		return fmt.Errorf("serializing profile: %w", err)
+		return liberrs.Newf(liberrs.CodeProfileFileRead, liberrs.CategoryConfig, "serializing profile: %v", err)
 	}
 	content := resources.ProfileTemplate() + "\n" + string(data)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating directory: %w", err)
+		return liberrs.Newf(liberrs.CodeProfileFileRead, liberrs.CategoryConfig, "creating directory: %v", err)
 	}
 	return os.WriteFile(path, []byte(content), 0644)
 }
@@ -319,10 +320,10 @@ func CreateRepoConfigs(repos []RepoDraft) {
 
 func buildProfile(profile Profile) (Profile, error) {
 	if profile.IsZero() {
-		return Profile{}, fmt.Errorf("invalid profile: %v", profile)
+		return Profile{}, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig, "invalid profile: %v", profile)
 	}
 	if !sys.FileExists(profile.Path) {
-		return Profile{}, fmt.Errorf("profile file not found at %s", profile.Path)
+		return Profile{}, liberrs.ProfileFileMissing(profile.Path)
 	}
 	if profile.IsSingleRepo() {
 		built, err := BuildSingleRepoProfile(profile.Path)
@@ -335,7 +336,7 @@ func buildProfile(profile Profile) (Profile, error) {
 		// to load rather than silently returning a profile whose Name
 		// differs from the registered key.
 		if profile.Name != "" && built.Name != profile.Name {
-			return Profile{}, fmt.Errorf(
+			return Profile{}, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig,
 				"raid.yaml at %s now declares name %q but was registered as %q; re-run `raid profile add %s` to update",
 				profile.Path, built.Name, profile.Name, profile.Path,
 			)
@@ -343,11 +344,11 @@ func buildProfile(profile Profile) (Profile, error) {
 		return built, nil
 	}
 	if err := ValidateProfile(profile.Path); err != nil {
-		return Profile{}, fmt.Errorf("invalid profile: %w", err)
+		return Profile{}, liberrs.ProfileInvalid(profile.Path, err)
 	}
 	profile, err := ExtractProfile(profile.Name, profile.Path)
 	if err != nil {
-		return Profile{}, fmt.Errorf("invalid profile: %w", err)
+		return Profile{}, liberrs.ProfileInvalid(profile.Path, err)
 	}
 	return profile, nil
 }
@@ -360,10 +361,10 @@ func buildProfile(profile Profile) (Profile, error) {
 // in the load pipeline.
 func BuildSingleRepoProfile(path string) (Profile, error) {
 	if filepath.Base(path) != RaidConfigFileName {
-		return Profile{}, fmt.Errorf("single-repo profile path must end in %s, got %s", RaidConfigFileName, path)
+		return Profile{}, liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "single-repo profile path must end in %s, got %s", RaidConfigFileName, path)
 	}
 	if err := ValidateRepo(path); err != nil {
-		return Profile{}, fmt.Errorf("invalid raid.yaml: %w", err)
+		return Profile{}, liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "invalid raid.yaml: %v", err)
 	}
 	repoDir := filepath.Dir(path)
 	repo, err := ExtractRepo(repoDir)
@@ -371,7 +372,7 @@ func BuildSingleRepoProfile(path string) (Profile, error) {
 		return Profile{}, err
 	}
 	if repo.Name == "" {
-		return Profile{}, fmt.Errorf("raid.yaml at %s has missing or empty name field", path)
+		return Profile{}, liberrs.Newf(liberrs.CodeRepoInvalid, liberrs.CategoryConfig, "raid.yaml at %s has missing or empty name field", path)
 	}
 	return Profile{
 		Name: repo.Name,

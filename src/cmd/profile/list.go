@@ -8,12 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var listJSON bool
-
-func init() {
-	ListProfileCmd.Flags().BoolVar(&listJSON, "json", false, "Emit machine-readable JSON output")
-}
-
 // profileEntry is the stable JSON shape for a single profile in `--json` mode.
 // Field names and types are part of the public CLI contract.
 type profileEntry struct {
@@ -29,7 +23,11 @@ var ListProfileCmd = &cobra.Command{
 		profiles := pro.ListAll()
 		activeProfile := pro.Get()
 
-		if listJSON {
+		jsonOutput := false
+		if root := cmd.Root(); root != nil {
+			jsonOutput, _ = root.PersistentFlags().GetBool("json")
+		}
+		if jsonOutput {
 			out := make([]profileEntry, 0, len(profiles))
 			for _, p := range profiles {
 				out = append(out, profileEntry{

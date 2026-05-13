@@ -1,9 +1,8 @@
 package install
 
 import (
-	"log"
-
 	"github.com/8bitalex/raid/src/raid"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +17,10 @@ var Command = &cobra.Command{
 	Short: "Install the active profile",
 	Long:  "Clones all repositories defined in the active profile to their specified paths. If a repository already exists, it will be skipped. Repositories are cloned concurrently for better performance. Pass a repository name to install only that repository.",
 	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Drop the previous log.Fatalf in favour of returning the error to
+		// the cobra root, which routes the categorical exit code via
+		// errs.ExitCode and emits JSON when --json is set.
 		err := raid.WithMutationLock(func() error {
 			if len(args) == 1 {
 				return raid.InstallRepo(args[0])
@@ -26,7 +28,8 @@ var Command = &cobra.Command{
 			return raid.Install(maxThreads)
 		})
 		if err != nil {
-			log.Fatalf("Installation failed: %v", err)
+			return errs.Wrap(err)
 		}
+		return nil
 	},
 }

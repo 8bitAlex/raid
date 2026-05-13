@@ -15,6 +15,28 @@ import (
 	"github.com/8bitalex/raid/src/raid"
 )
 
+func TestJsonModeFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no flag", []string{"raid", "install"}, false},
+		{"long form", []string{"raid", "--json", "install"}, true},
+		{"long form equals true", []string{"raid", "--json=true", "install"}, true},
+		{"long form equals false", []string{"raid", "--json=false", "install"}, false},
+		{"after --", []string{"raid", "--", "--json"}, false},
+		{"deep in args", []string{"raid", "-c", "/p", "install", "--json"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := jsonModeFromArgs(tt.args); got != tt.want {
+				t.Errorf("jsonModeFromArgs(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBaseVersion(t *testing.T) {
 	tests := []struct {
 		name    string

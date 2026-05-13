@@ -50,7 +50,19 @@ func execCmd(t *testing.T, root *cobra.Command, sub *cobra.Command, args ...stri
 	return buf.String()
 }
 
+// resetEnvCmdState clears any cached cobra flag-merge state on the package
+// level Command vars so each test sees a fresh persistent-flag wiring. Cobra
+// caches `parentsPflags` on the command the first time merge runs, and
+// never refreshes — without this, a --json persistent flag from a previous
+// test's root stays attached and a fresh root's flag is silently ignored.
+func resetEnvCmdState(t *testing.T) {
+	t.Helper()
+	Command.ResetFlags()
+	ListEnvCmd.ResetFlags()
+}
+
 func TestListEnvCmd_noEnvironments(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
 
 	// Redirect stdout since ListEnvCmd uses fmt.Println.
@@ -59,6 +71,7 @@ func TestListEnvCmd_noEnvironments(t *testing.T) {
 	os.Stdout = w
 
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(ListEnvCmd)
 	root.SetArgs([]string{"list"})
 	_ = root.Execute()
@@ -76,10 +89,12 @@ func TestListEnvCmd_noEnvironments(t *testing.T) {
 }
 
 func TestCommand_noArgs_noActiveEnv(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(Command)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -93,11 +108,12 @@ func TestCommand_noArgs_noActiveEnv(t *testing.T) {
 }
 
 func TestCommand_noArgs_jsonNoActive(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
-	t.Cleanup(func() { showJSON = false })
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(Command)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -114,12 +130,13 @@ func TestCommand_noArgs_jsonNoActive(t *testing.T) {
 }
 
 func TestCommand_noArgs_jsonWithActive(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
-	t.Cleanup(func() { showJSON = false })
 	viper.Set("env", "staging")
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(Command)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -136,11 +153,12 @@ func TestCommand_noArgs_jsonWithActive(t *testing.T) {
 }
 
 func TestListEnvCmd_jsonEmpty(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
-	t.Cleanup(func() { listJSON = false })
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(ListEnvCmd)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -157,11 +175,12 @@ func TestListEnvCmd_jsonEmpty(t *testing.T) {
 }
 
 func TestCommand_jsonWithArgument_isError(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
-	t.Cleanup(func() { showJSON = false })
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.AddCommand(Command)
@@ -176,23 +195,30 @@ func TestCommand_jsonWithArgument_isError(t *testing.T) {
 }
 
 func TestCommand_envNotFound(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(Command)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
 	root.SetArgs([]string{"env", "nonexistent-env"})
-	_ = root.Execute()
+	err := root.Execute()
 
-	got := buf.String()
-	if !strings.Contains(got, "Environment not found") {
-		t.Errorf("Command with missing env: got %q, want 'Environment not found'", got)
+	if err == nil {
+		t.Fatal("expected error for missing env")
+	}
+	if !strings.Contains(err.Error(), "nonexistent-env") {
+		t.Errorf("Command with missing env: error %q should mention name", err.Error())
 	}
 }
 
 func TestCommand_noArgs_withActiveEnv(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfig(t)
 	// Set an active env directly in viper (bypasses ContainsEnv check).
 	viper.Set("env", "staging")
@@ -282,10 +308,12 @@ func repoRootForEnv(t *testing.T) string {
 }
 
 func TestCommand_envFound_executes(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfigWithEnv(t, "exec-profile", "dev")
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(Command)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -299,6 +327,7 @@ func TestCommand_envFound_executes(t *testing.T) {
 }
 
 func TestListEnvCmd_withEnvironments(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfigWithEnv(t, "list-env-profile", "staging")
 
 	r, w, _ := os.Pipe()
@@ -306,6 +335,7 @@ func TestListEnvCmd_withEnvironments(t *testing.T) {
 	os.Stdout = w
 
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(ListEnvCmd)
 	root.SetArgs([]string{"list"})
 	_ = root.Execute()
@@ -323,11 +353,12 @@ func TestListEnvCmd_withEnvironments(t *testing.T) {
 }
 
 func TestListEnvCmd_jsonWithEnvironments(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfigWithEnv(t, "list-json-profile", "staging")
-	t.Cleanup(func() { listJSON = false })
 
 	var buf bytes.Buffer
 	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", false, "")
 	root.AddCommand(ListEnvCmd)
 	root.SetOut(&buf)
 	root.SetErr(&buf)
@@ -356,6 +387,7 @@ func TestListEnvCmd_jsonWithEnvironments(t *testing.T) {
 }
 
 func TestCommand_envFound_fullSuccess(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfigWithEnv(t, "success-profile", "prod")
 
 	var buf bytes.Buffer
@@ -371,6 +403,7 @@ func TestCommand_envFound_fullSuccess(t *testing.T) {
 }
 
 func TestCommand_envFound_forceLoadError(t *testing.T) {
+	resetEnvCmdState(t)
 	setupConfigWithEnv(t, "exec-err-profile", "failing")
 
 	// Delete the profile file so that ForceLoad (which re-reads it) fails,
@@ -384,11 +417,10 @@ func TestCommand_envFound_forceLoadError(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	_ = Command.RunE(fakeCmd, []string{"failing"})
+	err := Command.RunE(fakeCmd, []string{"failing"})
 
-	got := buf.String()
-	if !strings.Contains(got, "Failed to reload profile") {
-		t.Errorf("Command env forceLoad error: got %q, want 'Failed to reload profile'", got)
+	if err == nil {
+		t.Fatal("expected error when ForceLoad fails")
 	}
 }
 
@@ -396,6 +428,7 @@ func TestCommand_envFound_forceLoadError(t *testing.T) {
 // with an env name that doesn't exist in the config but passes Contains
 // via a direct context manipulation.
 func TestCommand_envFound_executeError(t *testing.T) {
+	resetEnvCmdState(t)
 	// Set up an env with a task that will fail.
 	repoRoot := repoRootForEnv(t)
 
@@ -445,17 +478,17 @@ func TestCommand_envFound_executeError(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	_ = Command.RunE(fakeCmd, []string{"badenv"})
+	err := Command.RunE(fakeCmd, []string{"badenv"})
 
-	got := buf.String()
-	if !strings.Contains(got, "Failed to execute environment") {
-		t.Errorf("Command env execute error: got %q, want 'Failed to execute environment'", got)
+	if err == nil {
+		t.Fatal("expected error when env task fails")
 	}
 }
 
 // TestCommand_envSetError covers the env.Set error path by making the config
 // file read-only after setup so viper.WriteConfig fails.
 func TestCommand_envSetError(t *testing.T) {
+	resetEnvCmdState(t)
 	if os.Getuid() == 0 {
 		t.Skip("file permissions not enforced as root")
 	}
@@ -474,10 +507,9 @@ func TestCommand_envSetError(t *testing.T) {
 	fakeCmd := &cobra.Command{}
 	fakeCmd.SetOut(&buf)
 	fakeCmd.SetErr(&buf)
-	_ = Command.RunE(fakeCmd, []string{"dev"})
+	err := Command.RunE(fakeCmd, []string{"dev"})
 
-	got := buf.String()
-	if !strings.Contains(got, "Failed to switch environment") {
-		t.Errorf("Command env setError: got %q, want 'Failed to switch environment'", got)
+	if err == nil {
+		t.Fatal("expected error when env.Set fails")
 	}
 }

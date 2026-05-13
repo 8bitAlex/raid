@@ -1,9 +1,9 @@
 package lib
 
 import (
-	"fmt"
 	"path/filepath"
 
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/spf13/viper"
 )
@@ -50,7 +50,7 @@ func getOrCreateConfigFile() (string, error) {
 	if !sys.FileExists(path) {
 		f, err := sys.CreateFile(path)
 		if err != nil {
-			return "", fmt.Errorf("failed to create config file at %s: %w", path, err)
+			return "", liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "failed to create config file at %s: %v", path, err)
 		}
 		f.Close()
 	}

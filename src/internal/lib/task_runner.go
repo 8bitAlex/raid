@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	"github.com/8bitalex/raid/src/internal/sys"
 	"github.com/joho/godotenv"
 )
@@ -174,7 +175,7 @@ func ExecuteTask(task Task) error {
 	case SetVar:
 		return execSetVar(task)
 	default:
-		return fmt.Errorf("invalid task type: %s", task.Type)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "invalid task type: %s", task.Type)
 	}
 }
 
@@ -190,7 +191,7 @@ func execShell(task Task) error {
 		task.Cmd = expandRaidForShell(task.Cmd)
 	}
 	if task.Cmd == "" {
-		return fmt.Errorf("cmd is required for Shell task")
+		return liberrs.ArgInvalid("cmd is required for Shell task")
 	}
 
 	shell := getShell(task.Shell)
@@ -233,7 +234,7 @@ func execShell(task Task) error {
 	}
 
 	if runErr != nil {
-		return fmt.Errorf("failed to execute shell command '%s': %w", task.Cmd, runErr)
+		return liberrs.Newf(liberrs.CodeTaskShellFailed, liberrs.CategoryTask, "failed to execute shell command '%s': %v", task.Cmd, runErr)
 	}
 	return nil
 }
@@ -310,7 +311,7 @@ func execScript(task Task) error {
 	task = task.Expand()
 
 	if !sys.FileExists(task.Path) {
-		return fmt.Errorf("file does not exist: %s", task.Path)
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "file does not exist: %s", task.Path)
 	}
 
 	var cmd *exec.Cmd
@@ -325,7 +326,7 @@ func execScript(task Task) error {
 
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to execute script '%s': %w", task.Path, err)
+		return liberrs.Newf(liberrs.CodeTaskScriptFailed, liberrs.CategoryTask, "failed to execute script '%s': %v", task.Path, err)
 	}
 
 	return nil
@@ -395,37 +396,37 @@ func execHTTP(task Task) error {
 	task = task.Expand()
 
 	if task.URL == "" {
-		return fmt.Errorf("url is required for HTTP task")
+		return liberrs.ArgInvalid("url is required for HTTP task")
 	}
 	if task.Dest == "" {
-		return fmt.Errorf("dest is required for HTTP task")
+		return liberrs.ArgInvalid("dest is required for HTTP task")
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(task.URL)
 	if err != nil {
-		return fmt.Errorf("failed to fetch '%s': %w", task.URL, err)
+		return liberrs.Newf(liberrs.CodeTaskHTTPFailed, liberrs.CategoryNetwork, "failed to fetch '%s': %v", task.URL, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP request to '%s' returned status %d", task.URL, resp.StatusCode)
+		return liberrs.Newf(liberrs.CodeTaskHTTPFailed, liberrs.CategoryNetwork, "HTTP request to '%s' returned status %d", task.URL, resp.StatusCode)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(task.Dest), 0755); err != nil {
-		return fmt.Errorf("failed to create directory for '%s': %w", task.Dest, err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to create directory for '%s': %v", task.Dest, err)
 	}
 
 	f, err := os.Create(task.Dest)
 	if err != nil {
-		return fmt.Errorf("failed to create file '%s': %w", task.Dest, err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to create file '%s': %v", task.Dest, err)
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		f.Close()
 		os.Remove(task.Dest)
-		return fmt.Errorf("failed to write to '%s': %w", task.Dest, err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to write to '%s': %v", task.Dest, err)
 	}
 
 	return nil
@@ -435,14 +436,14 @@ func execWait(task Task) error {
 	task = task.Expand()
 
 	if task.URL == "" {
-		return fmt.Errorf("url is required for Wait task")
+		return liberrs.ArgInvalid("url is required for Wait task")
 	}
 
 	timeout := 30 * time.Second
 	if task.Timeout != "" {
 		d, err := time.ParseDuration(task.Timeout)
 		if err != nil {
-			return fmt.Errorf("invalid timeout '%s': %w", task.Timeout, err)
+			return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "invalid timeout '%s': %v", task.Timeout, err)
 		}
 		timeout = d
 	}
@@ -462,7 +463,7 @@ func execWait(task Task) error {
 		time.Sleep(1 * time.Second)
 	}
 
-	return fmt.Errorf("timed out waiting for '%s' after %s", task.URL, timeout)
+	return liberrs.Newf(liberrs.CodeTaskWaitTimeout, liberrs.CategoryTask, "timed out waiting for '%s' after %s", task.URL, timeout)
 }
 
 func checkHTTP(url string) error {
@@ -473,7 +474,7 @@ func checkHTTP(url string) error {
 	}
 	resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
+		return liberrs.Newf(liberrs.CodeTaskHTTPFailed, liberrs.CategoryNetwork, "HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -491,29 +492,29 @@ func execTemplate(task Task) error {
 	task = task.Expand()
 
 	if task.Src == "" {
-		return fmt.Errorf("src is required for Template task")
+		return liberrs.ArgInvalid("src is required for Template task")
 	}
 	if task.Dest == "" {
-		return fmt.Errorf("dest is required for Template task")
+		return liberrs.ArgInvalid("dest is required for Template task")
 	}
 
 	if !sys.FileExists(task.Src) {
-		return fmt.Errorf("template file does not exist: %s", task.Src)
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "template file does not exist: %s", task.Src)
 	}
 
 	data, err := os.ReadFile(task.Src)
 	if err != nil {
-		return fmt.Errorf("failed to read template '%s': %w", task.Src, err)
+		return liberrs.Newf(liberrs.CodeTaskTemplateFailed, liberrs.CategoryTask, "failed to read template '%s': %v", task.Src, err)
 	}
 
 	rendered := expandRaid(string(data))
 
 	if err := os.MkdirAll(filepath.Dir(task.Dest), 0755); err != nil {
-		return fmt.Errorf("failed to create directory for '%s': %w", task.Dest, err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to create directory for '%s': %v", task.Dest, err)
 	}
 
 	if err := os.WriteFile(task.Dest, []byte(rendered), 0644); err != nil {
-		return fmt.Errorf("failed to write output file '%s': %w", task.Dest, err)
+		return liberrs.Newf(liberrs.CodeTaskTemplateFailed, liberrs.CategoryTask, "failed to write output file '%s': %v", task.Dest, err)
 	}
 
 	return nil
@@ -521,15 +522,15 @@ func execTemplate(task Task) error {
 
 func execGroup(task Task) error {
 	if task.Ref == "" {
-		return fmt.Errorf("ref is required for Group task")
+		return liberrs.ArgInvalid("ref is required for Group task")
 	}
 	if context == nil || context.Profile.Groups == nil {
-		return fmt.Errorf("no task_groups defined in the active profile")
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "no task_groups defined in the active profile")
 	}
 
 	tasks, ok := context.Profile.Groups[task.Ref]
 	if !ok {
-		return fmt.Errorf("task group '%s' not found in profile", task.Ref)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "task group '%s' not found in profile", task.Ref)
 	}
 
 	if task.Parallel {
@@ -553,7 +554,7 @@ func execGroupWithRetry(tasks []Task, attempts int, delayStr string) error {
 	if delayStr != "" {
 		d, err := time.ParseDuration(delayStr)
 		if err != nil {
-			return fmt.Errorf("invalid delay '%s': %w", delayStr, err)
+			return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "invalid delay '%s': %v", delayStr, err)
 		}
 		delay = d
 	}
@@ -571,14 +572,14 @@ func execGroupWithRetry(tasks []Task, attempts int, delayStr string) error {
 		return nil
 	}
 
-	return fmt.Errorf("all %d attempts failed: %w", attempts, lastErr)
+	return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "all %d attempts failed: %v", attempts, lastErr)
 }
 
 func execGit(task Task) error {
 	task = task.Expand()
 
 	if task.Op == "" {
-		return fmt.Errorf("op is required for Git task")
+		return liberrs.ArgInvalid("op is required for Git task")
 	}
 
 	dir := task.Path
@@ -586,13 +587,13 @@ func execGit(task Task) error {
 		var err error
 		dir, err = os.Getwd()
 		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
+			return liberrs.Newf(liberrs.CodeTaskGitFailed, liberrs.CategoryTask, "failed to get working directory: %v", err)
 		}
 	}
 
 	info, statErr := os.Stat(dir)
 	if statErr != nil || !info.IsDir() {
-		return fmt.Errorf("path is not a directory: %s", dir)
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "path is not a directory: %s", dir)
 	}
 
 	var args []string
@@ -604,7 +605,7 @@ func execGit(task Task) error {
 		}
 	case "checkout":
 		if task.Branch == "" {
-			return fmt.Errorf("branch is required for git checkout")
+			return liberrs.ArgInvalid("branch is required for git checkout")
 		}
 		args = []string{"checkout", task.Branch}
 	case "fetch":
@@ -618,7 +619,7 @@ func execGit(task Task) error {
 			args = append(args, task.Branch)
 		}
 	default:
-		return fmt.Errorf("invalid git operation '%s' (supported: pull, checkout, fetch, reset)", task.Op)
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "invalid git operation '%s' (supported: pull, checkout, fetch, reset)", task.Op)
 	}
 
 	cmd := exec.Command("git", args...)
@@ -626,7 +627,7 @@ func execGit(task Task) error {
 	setCmdOutput(cmd)
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git %s failed in '%s': %w", task.Op, dir, err)
+		return liberrs.Newf(liberrs.CodeTaskGitFailed, liberrs.CategoryTask, "git %s failed in '%s': %v", task.Op, dir, err)
 	}
 
 	return nil
@@ -634,7 +635,7 @@ func execGit(task Task) error {
 
 func execPrompt(task Task) error {
 	if task.Var == "" {
-		return fmt.Errorf("var is required for Prompt task")
+		return liberrs.ArgInvalid("var is required for Prompt task")
 	}
 
 	message := task.Message
@@ -649,7 +650,7 @@ func execPrompt(task Task) error {
 
 	value, err := getStdinReader().ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("failed to read input: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to read input: %v", err)
 	}
 	value = strings.TrimRight(value, "\r\n")
 
@@ -674,12 +675,12 @@ func execConfirm(task Task) error {
 
 	answer, err := getStdinReader().ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("failed to read input: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to read input: %v", err)
 	}
 	answer = strings.TrimSpace(strings.ToLower(answer))
 
 	if answer != "y" && answer != "yes" {
-		return fmt.Errorf("aborted by user")
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "aborted by user")
 	}
 	return nil
 }
@@ -703,7 +704,7 @@ func execPrint(task Task) error {
 
 func execSetVar(task Task) error {
 	if task.Var == "" {
-		return fmt.Errorf("var is required for Set task")
+		return liberrs.ArgInvalid("var is required for Set task")
 	}
 	task = task.Expand()
 	task.Var = strings.ToUpper(task.Var)
@@ -717,15 +718,15 @@ func execSetVar(task Task) error {
 
 	f, err := sys.CreateFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to create vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to create vars file: %v", err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to close vars file: %v", err)
 	}
 
 	m, err := godotenv.Read(path)
 	if err != nil {
-		return fmt.Errorf("failed to read vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to read vars file: %v", err)
 	}
 	m[task.Var] = task.Value
 
@@ -734,22 +735,22 @@ func execSetVar(task Task) error {
 	dir := filepath.Dir(path)
 	tmpFile, err := os.CreateTemp(dir, ".raid-vars-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to create temp vars file: %v", err)
 	}
 	tmpName := tmpFile.Name()
 	// Ensure the temp file is removed if we hit an error before a successful rename.
 	defer os.Remove(tmpName)
 
 	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to close temp vars file: %v", err)
 	}
 
 	if err := godotenv.Write(m, tmpName); err != nil {
-		return fmt.Errorf("failed to write temp vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to write temp vars file: %v", err)
 	}
 
 	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("failed to replace vars file: %w", err)
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to replace vars file: %v", err)
 	}
 
 	raidVars[task.Var] = task.Value

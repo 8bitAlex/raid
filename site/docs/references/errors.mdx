@@ -1,0 +1,121 @@
+---
+sidebar_position: 6
+---
+
+# Errors
+
+Every raid failure carries a stable error code, a category that maps to an
+exit code, and an optional hint. Codes are part of raid's CLI contract:
+new codes ship additively; **existing codes never change name or category
+across minor versions**.
+
+## Exit codes
+
+| Code | Category | Meaning |
+|---|---|---|
+| `0` | _success_ | The command completed successfully. |
+| `1` | `generic` | An unclassified failure. Used for raid internal bugs and uncategorised errors. |
+| `2` | `config` | A profile, repo, or schema was invalid, missing required fields, or failed validation. |
+| `3` | `task` | A user task failed during execution (Shell exit, Script error, …). |
+| `4` | `network` | A clone, HTTP download, or other network-bound operation failed. |
+| `5` | `not-found` | A referenced profile, repo, environment, or command does not exist. |
+
+Subprocess exits (e.g. a `Shell` task's `cmd: exit 7`) preserve the
+subprocess's own exit code rather than mapping into the categories
+above. This matches the prior behaviour and means `$?` for `raid <cmd>`
+still reflects what the user's script returned.
+
+## Code table
+
+| Code | Category | When you'll see it |
+|---|---|---|
+| `UNKNOWN` | generic | Any error raid couldn't classify. |
+| `INTERNAL` | generic | A raid logic error — file an issue. |
+| `GIT_NOT_INSTALLED` | generic | `git` not on PATH. |
+| `LOCK_FAILED` | generic | Couldn't acquire `~/.raid/.lock` (another raid process is holding it). |
+| `PROFILE_INVALID` | config | A profile failed schema validation. |
+| `PROFILE_FILE_READ` | config | Couldn't read or parse a profile file. |
+| `PROFILE_ALREADY_EXISTS` | config | `raid profile add` collided with a registered profile. |
+| `REPO_INVALID` | config | A repo entry or repo `raid.yaml` is malformed. |
+| `CONFIG_INVALID` | config | The root config (`~/.raid/config.toml`) is malformed. |
+| `CONFIG_LOAD_FAILED` | config | Couldn't load the root config. |
+| `SCHEMA_VALIDATION_FAILED` | config | A JSON Schema check failed. |
+| `ARG_INVALID` | config | A CLI argument failed validation. |
+| `TASK_FAILED` | task | A task failed during execution (generic). |
+| `TASK_SHELL_FAILED` | task | A `Shell` task exited non-zero. |
+| `TASK_SCRIPT_FAILED` | task | A `Script` task exited non-zero. |
+| `TASK_WAIT_TIMEOUT` | task | A `Wait` task exceeded its timeout. |
+| `TASK_TEMPLATE_FAILED` | task | A `Template` task couldn't render or write. |
+| `TASK_GIT_FAILED` | task | A `Git` task (non-clone) failed. |
+| `CLONE_FAILED` | network | `git clone` returned non-zero. |
+| `TASK_HTTP_FAILED` | network | An `HTTP` task failed. |
+| `PROFILE_NOT_FOUND` | not-found | The referenced profile is not registered. |
+| `PROFILE_NOT_ACTIVE` | not-found | No active profile is set. |
+| `PROFILE_FILE_MISSING` | not-found | A registered profile's file is missing on disk. |
+| `REPO_NOT_FOUND` | not-found | A repo name isn't in the active profile. |
+| `REPO_NOT_CLONED` | not-found | A repo path doesn't exist on disk (run `raid install`). |
+| `ENV_NOT_FOUND` | not-found | An environment name isn't declared. |
+| `COMMAND_NOT_FOUND` | not-found | `raid <cmd>` referenced an unknown command. |
+
+## JSON shape
+
+`--json` is a persistent flag on `rootCmd`, so it works on any
+subcommand. When set, raid emits errors as a single line to stderr in
+this shape:
+
+```json
+{
+  "error": {
+    "code": "REPO_NOT_CLONED",
+    "category": "not-found",
+    "message": "repository 'api-gateway' is not cloned at /Users/me/dev/api",
+    "hint": "Run `raid install` to clone all repos in the active profile.",
+    "repo": "api-gateway",
+    "path": "/Users/me/dev/api"
+  }
+}
+```
+
+- `code` and `category` are stable contracts. Use them for branching.
+- `message` is the same human-readable string that's printed to stderr
+  in non-JSON mode. Treat it as informational, not stable.
+- `hint` is optional. When present it suggests what to try next.
+- Additional fields (`repo`, `path`, `task`, …) are code-specific
+  structured details. They're additive — new fields may appear on a code
+  in future minor versions without breaking parsers that ignore them.
+
+## MCP integration
+
+When a mutating tool (`raid_install`, `raid_env_switch`, `raid_run_task`)
+fails, the MCP server emits the same structured payload as the
+`{"error": {...}}` shape above, wrapped with the tool name and any
+captured stdout/stderr:
+
+```json
+{
+  "tool": "raid_install",
+  "code": "CLONE_FAILED",
+  "category": "network",
+  "message": "failed to clone repository 'api': exit status 128",
+  "output": "fatal: Could not read from remote repository.\n",
+  "repo": "api",
+  "url": "git@example.com:my-org/api.git"
+}
+```
+
+This is returned via `mcp.NewToolResultError(...)` so MCP-aware clients
+see `isError: true` alongside the parseable payload.
+
+## Stability promise
+
+Error codes are part of raid's public CLI contract:
+
+- A code's **name and category** never change across minor versions.
+- Codes are added additively. New codes can appear without breaking
+  parsers, but existing codes are never repurposed.
+- The `message` text is informational and may be reworded.
+- New `details` fields can appear on existing codes; old fields are
+  preserved.
+- Breaking changes (renames, category shifts, removals) require a major
+  version bump and a deprecation period announced in
+  [What's New](/docs/whats-new).

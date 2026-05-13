@@ -3,20 +3,18 @@ package doctor
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-const subprocEnv = "RAID_TEST_DOCTOR_SUBPROCESS"
-const subprocJSONEnv = "RAID_TEST_DOCTOR_JSON_SUBPROCESS"
 
 func setupConfig(t *testing.T) {
 	t.Helper()
@@ -40,34 +38,47 @@ func setupConfig(t *testing.T) {
 	}
 }
 
-// TestRunDoctor_subprocess exercises runDoctor in a subprocess so that the
-// os.Exit(1) it emits (when no profile is configured) does not kill the test
-// process itself.
-func TestRunDoctor_subprocess(t *testing.T) {
-	if os.Getenv(subprocEnv) == "1" {
-		// We're in the subprocess: run the command and let os.Exit happen.
-		setupConfig(t)
-		cmd := &cobra.Command{}
-		cmd.SetOut(os.Stdout)
-		cmd.SetErr(os.Stderr)
-		runDoctor(cmd, nil)
-		return
+// newDoctorCmd returns a child cobra.Command wired into a parent root
+// whose persistent --json flag is set as requested. runDoctor reads
+// jsonMode via cmd.Root().PersistentFlags() so the parent setup is the
+// load-bearing piece.
+func newDoctorCmd(jsonMode bool) *cobra.Command {
+	cmd := &cobra.Command{}
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", jsonMode, "")
+	if jsonMode {
+		_ = root.PersistentFlags().Set("json", "true")
 	}
-
-	proc := exec.Command(os.Args[0], "-test.run=TestRunDoctor_subprocess", "-test.v")
-	proc.Env = append(os.Environ(), subprocEnv+"=1")
-	err := proc.Run()
-	// With no profile configured, Doctor returns error findings → os.Exit(1).
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Errorf("runDoctor exit code = %d, want 1", exitErr.ExitCode())
-	}
+	root.AddCommand(cmd)
+	return cmd
 }
 
-const subprocEncodeErrEnv = "RAID_TEST_DOCTOR_ENCODE_ERR"
+// TestRunDoctor_returnsConfigError covers the path where the doctor finds
+// errors (e.g. no profile configured). It used to os.Exit(1); now it
+// returns a structured error in CategoryConfig (exit code 2) so the
+// central handler routes the categorical exit code without aborting from
+// inside the subcommand.
+func TestRunDoctor_returnsConfigError(t *testing.T) {
+	setupConfig(t)
+	cmd := newDoctorCmd(false)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := runDoctor(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error from runDoctor with no profile configured")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Category() != errs.CategoryConfig {
+		t.Errorf("category = %v, want CategoryConfig", rErr.Category())
+	}
+	if errs.ExitCode(err) != 2 {
+		t.Errorf("exit code = %d, want 2", errs.ExitCode(err))
+	}
+}
 
 // failingWriter implements io.Writer and always returns an error, used to
 // force enc.Encode to fail and exercise the broken-pipe branch.
@@ -75,80 +86,57 @@ type failingWriter struct{}
 
 func (failingWriter) Write(p []byte) (int, error) { return 0, fmt.Errorf("simulated write failure") }
 
-// TestRunDoctor_jsonEncodeError exercises the os.Exit(1) branch when the
-// JSON encoder fails to write (e.g. broken pipe). Runs in a subprocess so
-// os.Exit doesn't terminate the test runner.
+// TestRunDoctor_jsonEncodeError covers the branch where json.Encode fails
+// (e.g. broken pipe). The old behavior was os.Exit(1); now it returns an
+// Unknown-wrapped error so the central handler can route it. The
+// "simulated write failure" message comes through verbatim via Error().
 func TestRunDoctor_jsonEncodeError(t *testing.T) {
-	if os.Getenv(subprocEncodeErrEnv) == "1" {
-		setupConfig(t)
-		jsonOutput = true
-		cmd := &cobra.Command{}
-		cmd.SetOut(failingWriter{})
-		cmd.SetErr(os.Stderr)
-		runDoctor(cmd, nil)
-		return
-	}
+	setupConfig(t)
+	cmd := newDoctorCmd(true)
+	cmd.SetOut(failingWriter{})
+	cmd.SetErr(&bytes.Buffer{})
 
-	proc := exec.Command(os.Args[0], "-test.run=TestRunDoctor_jsonEncodeError", "-test.v")
-	proc.Env = append(os.Environ(), subprocEncodeErrEnv+"=1")
-	out, err := proc.CombinedOutput()
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected *exec.ExitError, got: %T %v\noutput: %s", err, err, out)
+	err := runDoctor(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error from runDoctor when encode fails")
 	}
-	if exitErr.ExitCode() != 1 {
-		t.Errorf("runDoctor encode-error exit code = %d, want 1", exitErr.ExitCode())
-	}
-	if !strings.Contains(string(out), "simulated write failure") {
-		t.Errorf("subprocess stderr missing simulated failure message; got: %s", out)
+	if !strings.Contains(err.Error(), "simulated write failure") {
+		t.Errorf("error %q does not contain 'simulated write failure'", err.Error())
 	}
 }
 
-// TestRunDoctor_jsonSubprocess exercises the os.Exit(1) branch in --json mode
-// when error findings are present. Runs in a subprocess so os.Exit doesn't
-// terminate the test runner.
-func TestRunDoctor_jsonSubprocess(t *testing.T) {
-	if os.Getenv(subprocJSONEnv) == "1" {
-		setupConfig(t)
-		jsonOutput = true
-		cmd := &cobra.Command{}
-		cmd.SetOut(os.Stdout)
-		cmd.SetErr(os.Stderr)
-		runDoctor(cmd, nil)
-		return
-	}
+// TestRunDoctor_jsonWithErrorFindings covers --json mode when error
+// findings are present: still emits the JSON, returns a config-category
+// error so the central handler exits non-zero.
+func TestRunDoctor_jsonWithErrorFindings(t *testing.T) {
+	setupConfig(t)
+	var stdout bytes.Buffer
+	cmd := newDoctorCmd(true)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&bytes.Buffer{})
 
-	proc := exec.Command(os.Args[0], "-test.run=TestRunDoctor_jsonSubprocess", "-test.v")
-	proc.Env = append(os.Environ(), subprocJSONEnv+"=1")
-	out, err := proc.CombinedOutput()
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected *exec.ExitError, got: %T %v\noutput: %s", err, err, out)
+	err := runDoctor(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error when doctor findings include errors")
 	}
-	if exitErr.ExitCode() != 1 {
-		t.Errorf("runDoctor --json exit code = %d, want 1", exitErr.ExitCode())
+	if errs.ExitCode(err) != 2 {
+		t.Errorf("exit code = %d, want 2", errs.ExitCode(err))
 	}
-	// Subprocess output is test runner noise + the JSON object; just confirm
-	// we got the JSON shape with a non-zero error count (proving the JSON
-	// branch was taken before os.Exit).
-	if !strings.Contains(string(out), "\"errors\"") {
-		t.Errorf("subprocess output missing JSON 'errors' field; got: %s", out)
+	if !strings.Contains(stdout.String(), "\"errors\"") {
+		t.Errorf("--json output missing 'errors' field: %q", stdout.String())
 	}
 }
 
-// TestCommand_isConfigured just verifies the exported Command var is properly
-// set up; it does not invoke the Run handler.
+// TestCommand_isConfigured verifies the exported Command var.
 func TestCommand_isConfigured(t *testing.T) {
 	if Command.Use != "doctor" {
 		t.Errorf("Command.Use = %q, want %q", Command.Use, "doctor")
 	}
-	if Command.Run == nil {
-		t.Error("Command.Run is nil")
+	if Command.RunE == nil {
+		t.Error("Command.RunE is nil")
 	}
 }
 
-// TestRunDoctor_allOK exercises the code path where every finding is SeverityOK,
-// which prints "No issues found." and exits normally (no os.Exit).
 func TestRunDoctor_allOK(t *testing.T) {
 	dir := t.TempDir()
 	old := lib.CfgPath
@@ -163,10 +151,7 @@ func TestRunDoctor_allOK(t *testing.T) {
 		t.Fatalf("InitConfig: %v", err)
 	}
 
-	// Create a valid profile with a repo pointing to an existing directory
-	// (so the doctor doesn't report any warnings or errors).
 	repoDir := t.TempDir()
-	// Make it look like a git repo by creating .git dir
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -187,16 +172,17 @@ func TestRunDoctor_allOK(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	// Capture stdout (runDoctor uses fmt.Printf → os.Stdout)
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
 	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
-	cmd := &cobra.Command{}
-	runDoctor(cmd, nil)
+	cmd := newDoctorCmd(false)
+	if err := runDoctor(cmd, nil); err != nil {
+		t.Errorf("runDoctor allOK returned error: %v", err)
+	}
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -213,8 +199,6 @@ func TestRunDoctor_allOK(t *testing.T) {
 	}
 }
 
-// TestRunDoctor_warningsOnly exercises the path where warnings exist but no errors,
-// which prints the warning count and does NOT call os.Exit.
 func TestRunDoctor_warningsOnly(t *testing.T) {
 	dir := t.TempDir()
 	old := lib.CfgPath
@@ -229,9 +213,6 @@ func TestRunDoctor_warningsOnly(t *testing.T) {
 		t.Fatalf("InitConfig: %v", err)
 	}
 
-	// Create a profile with repos pointing to non-existent paths.
-	// Doctor will report: git OK, profile OK, profile file OK, schema OK,
-	// but repos not cloned → Warn findings only.
 	profilePath := filepath.Join(dir, "warn.raid.yaml")
 	content := "name: warn\nrepositories:\n  - name: missing-repo\n    url: https://example.com/repo.git\n    path: /tmp/nonexistent-path-raid-test-12345\n"
 	if err := os.WriteFile(profilePath, []byte(content), 0644); err != nil {
@@ -248,15 +229,17 @@ func TestRunDoctor_warningsOnly(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
 	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
-	cmd := &cobra.Command{}
-	runDoctor(cmd, nil)
+	cmd := newDoctorCmd(false)
+	if err := runDoctor(cmd, nil); err != nil {
+		t.Errorf("runDoctor warningsOnly returned unexpected error: %v", err)
+	}
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -271,14 +254,11 @@ func TestRunDoctor_warningsOnly(t *testing.T) {
 	if !strings.Contains(got, "warning(s)") {
 		t.Errorf("runDoctor warnings: expected 'warning(s)' in output, got %q", got)
 	}
-	// Should show the suggestion arrow
 	if !strings.Contains(got, "→") {
 		t.Errorf("runDoctor warnings: expected suggestion arrow '→' in output, got %q", got)
 	}
 }
 
-// TestRunDoctor_jsonAllOK exercises --json output on a clean profile so no
-// os.Exit fires; asserts the encoded shape matches the documented contract.
 func TestRunDoctor_jsonAllOK(t *testing.T) {
 	dir := t.TempDir()
 	old := lib.CfgPath
@@ -286,7 +266,6 @@ func TestRunDoctor_jsonAllOK(t *testing.T) {
 		lib.CfgPath = old
 		lib.ResetContext()
 		viper.Reset()
-		jsonOutput = false
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
 	lib.ResetContext()
@@ -313,11 +292,12 @@ func TestRunDoctor_jsonAllOK(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	jsonOutput = true
 	var buf bytes.Buffer
-	cmd := &cobra.Command{}
+	cmd := newDoctorCmd(true)
 	cmd.SetOut(&buf)
-	runDoctor(cmd, nil)
+	if err := runDoctor(cmd, nil); err != nil {
+		t.Errorf("runDoctor allOK --json returned error: %v", err)
+	}
 
 	var got doctorOutput
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
@@ -341,8 +321,6 @@ func TestRunDoctor_jsonAllOK(t *testing.T) {
 	}
 }
 
-// TestRunDoctor_jsonWarningSurfacesSuggestion ensures warning findings carry
-// their suggestion field through to the JSON encoding.
 func TestRunDoctor_jsonWarningSurfacesSuggestion(t *testing.T) {
 	dir := t.TempDir()
 	old := lib.CfgPath
@@ -350,7 +328,6 @@ func TestRunDoctor_jsonWarningSurfacesSuggestion(t *testing.T) {
 		lib.CfgPath = old
 		lib.ResetContext()
 		viper.Reset()
-		jsonOutput = false
 	})
 	lib.CfgPath = filepath.Join(dir, "config.toml")
 	lib.ResetContext()
@@ -373,11 +350,12 @@ func TestRunDoctor_jsonWarningSurfacesSuggestion(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	jsonOutput = true
 	var buf bytes.Buffer
-	cmd := &cobra.Command{}
+	cmd := newDoctorCmd(true)
 	cmd.SetOut(&buf)
-	runDoctor(cmd, nil)
+	if err := runDoctor(cmd, nil); err != nil {
+		t.Errorf("runDoctor warning --json returned unexpected error: %v", err)
+	}
 
 	var got doctorOutput
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
@@ -412,8 +390,6 @@ func TestSeverityString(t *testing.T) {
 	}
 }
 
-// TestRunDoctor_noReposWarning tests the path where the profile has no repositories
-// configured, which produces a warning finding.
 func TestRunDoctor_noReposWarning(t *testing.T) {
 	dir := t.TempDir()
 	old := lib.CfgPath
@@ -442,15 +418,17 @@ func TestRunDoctor_noReposWarning(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
 	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
-	cmd := &cobra.Command{}
-	runDoctor(cmd, nil)
+	cmd := newDoctorCmd(false)
+	if err := runDoctor(cmd, nil); err != nil {
+		t.Errorf("runDoctor noReposWarning returned unexpected error: %v", err)
+	}
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -464,5 +442,25 @@ func TestRunDoctor_noReposWarning(t *testing.T) {
 	}
 	if !strings.Contains(got, "none configured") {
 		t.Errorf("runDoctor no repos: expected 'none configured' in output, got %q", got)
+	}
+}
+
+// Belt-and-braces: errors.As goes through the interface and returns true.
+func TestRunDoctor_errorTypeIntegratesWithErrorsAs(t *testing.T) {
+	setupConfig(t)
+	cmd := newDoctorCmd(false)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := runDoctor(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var rErr errs.Error
+	if !errors.As(err, &rErr) {
+		t.Fatal("errors.As should resolve to errs.Error")
+	}
+	if rErr.Code() == "" {
+		t.Error("Code should be non-empty")
 	}
 }

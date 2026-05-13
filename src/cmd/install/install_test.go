@@ -55,49 +55,25 @@ func TestCommand_isConfigured(t *testing.T) {
 	}
 }
 
-// TestInstallCommand_noArgs_subprocess exercises the Run branch where no repo
-// arg is given.  With no profile configured, raid.Install returns an error and
-// log.Fatalf exits the process — so we run it in a subprocess.
-func TestInstallCommand_noArgs_subprocess(t *testing.T) {
-	if os.Getenv(subprocEnvNoArgs) == "1" {
-		setupConfig(t)
-		cmd := &cobra.Command{}
-		Command.Run(cmd, []string{})
-		return
-	}
-
-	proc := exec.Command(os.Args[0], "-test.run=TestInstallCommand_noArgs_subprocess", "-test.v")
-	proc.Env = append(os.Environ(), subprocEnvNoArgs+"=1")
-	err := proc.Run()
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Errorf("install no-args exit code = %d, want 1", exitErr.ExitCode())
+// TestInstallCommand_noArgs_returnsError covers the no-arg invocation when
+// no profile is configured. Previously this os.Exit'd via log.Fatalf; now
+// the handler returns a structured error to the cobra root, which routes
+// the categorical exit code at the top level.
+func TestInstallCommand_noArgs_returnsError(t *testing.T) {
+	setupConfig(t)
+	cmd := &cobra.Command{}
+	if err := Command.RunE(cmd, []string{}); err == nil {
+		t.Fatal("expected error when no profile configured")
 	}
 }
 
-// TestInstallCommand_oneArg_subprocess exercises the Run branch where a single
-// repo name is given.  With no profile configured, raid.InstallRepo returns an
-// error and log.Fatalf exits — so we run it in a subprocess.
-func TestInstallCommand_oneArg_subprocess(t *testing.T) {
-	if os.Getenv(subprocEnvOneArg) == "1" {
-		setupConfig(t)
-		cmd := &cobra.Command{}
-		Command.Run(cmd, []string{"some-repo"})
-		return
-	}
-
-	proc := exec.Command(os.Args[0], "-test.run=TestInstallCommand_oneArg_subprocess", "-test.v")
-	proc.Env = append(os.Environ(), subprocEnvOneArg+"=1")
-	err := proc.Run()
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected *exec.ExitError, got: %T %v", err, err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Errorf("install one-arg exit code = %d, want 1", exitErr.ExitCode())
+// TestInstallCommand_oneArg_returnsError covers the single-repo path with
+// the same setup.
+func TestInstallCommand_oneArg_returnsError(t *testing.T) {
+	setupConfig(t)
+	cmd := &cobra.Command{}
+	if err := Command.RunE(cmd, []string{"some-repo"}); err == nil {
+		t.Fatal("expected error when no profile configured")
 	}
 }
 
@@ -157,7 +133,7 @@ func TestInstallCommand_noArgs_success(t *testing.T) {
 
 	// Call the Run handler directly - on success it just returns without log.Fatalf
 	cmd := &cobra.Command{}
-	Command.Run(cmd, []string{})
+	_ = Command.RunE(cmd,[]string{})
 
 	// Verify the repo was cloned
 	if _, err := os.Stat(cloneDest); err != nil {
@@ -169,7 +145,7 @@ func TestInstallCommand_oneArg_success(t *testing.T) {
 	cloneDest := setupConfigWithProfile(t)
 
 	cmd := &cobra.Command{}
-	Command.Run(cmd, []string{"repo1"})
+	_ = Command.RunE(cmd,[]string{"repo1"})
 
 	if _, err := os.Stat(cloneDest); err != nil {
 		t.Errorf("install repo1: expected repo cloned at %s, got: %v", cloneDest, err)

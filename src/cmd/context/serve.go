@@ -12,6 +12,7 @@ import (
 	"github.com/8bitalex/raid/src/raid"
 	rctx "github.com/8bitalex/raid/src/raid/context"
 	"github.com/8bitalex/raid/src/raid/env"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/8bitalex/raid/src/raid/profile"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -395,7 +396,7 @@ func handleInstall(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 		return runErr
 	})
 	if lockErr != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("raid_install: %v\n%s", lockErr, output)), nil
+		return mcpStructuredError("raid_install", lockErr, output), nil
 	}
 
 	target := "all repos"
@@ -408,10 +409,10 @@ func handleInstall(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 func handleEnvSwitch(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	name, err := req.RequireString("env")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("raid_env_switch: %v", err)), nil
+		return mcpStructuredError("raid_env_switch", errs.ArgInvalid(err.Error()), ""), nil
 	}
 	if !env.Contains(name) {
-		return mcp.NewToolResultError(fmt.Sprintf("raid_env_switch: environment %q not found in active profile", name)), nil
+		return mcpStructuredError("raid_env_switch", errs.EnvNotFound(name), ""), nil
 	}
 
 	var output string
@@ -435,7 +436,7 @@ func handleEnvSwitch(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 		return runErr
 	})
 	if lockErr != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("raid_env_switch: %v\n%s", lockErr, output)), nil
+		return mcpStructuredError("raid_env_switch", lockErr, output), nil
 	}
 	return mcp.NewToolResultText(fmt.Sprintf("switched to env %q\n%s", name, output)), nil
 }
@@ -443,7 +444,7 @@ func handleEnvSwitch(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 func handleRunTask(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	command, err := req.RequireString("command")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("raid_run_task: %v", err)), nil
+		return mcpStructuredError("raid_run_task", errs.ArgInvalid(err.Error()), ""), nil
 	}
 	args := req.GetStringSlice("args", nil)
 
@@ -465,7 +466,7 @@ func handleRunTask(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 		return runErr
 	})
 	if lockErr != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("raid_run_task %q: %v\n%s", command, lockErr, output)), nil
+		return mcpStructuredError(fmt.Sprintf("raid_run_task %q", command), lockErr, output), nil
 	}
 	return mcp.NewToolResultText(fmt.Sprintf("ran %q\n%s", command, output)), nil
 }
@@ -576,6 +577,42 @@ func handleDescribeRepo(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToo
 // jsonToolResult marshals payload to indented JSON and wraps it as an MCP
 // text-content tool result. Marshal failures produce a tool error rather than
 // a protocol error so the model can surface them.
+// mcpStructuredError serializes err as JSON so agents can pivot on the
+// code / category fields instead of parsing prose. Captured output (stdout
+// + stderr from the underlying lib operation) is included as a separate
+// field rather than concatenated into the message, so a JSON-aware client
+// can split them cleanly while a fallback string view still has both.
+func mcpStructuredError(toolName string, err error, output string) *mcp.CallToolResult {
+	rErr := errs.Wrap(err)
+	payload := map[string]any{
+		"tool":     toolName,
+		"code":     rErr.Code(),
+		"category": rErr.Category().String(),
+		"message":  rErr.Error(),
+	}
+	if hint := rErr.Hint(); hint != "" {
+		payload["hint"] = hint
+	}
+	for k, v := range rErr.Details() {
+		switch k {
+		case "tool", "code", "message", "category", "hint", "output":
+			continue
+		}
+		payload[k] = v
+	}
+	if output != "" {
+		payload["output"] = output
+	}
+	data, mErr := json.Marshal(payload)
+	if mErr != nil {
+		// Fall back to a plain text result that still names the tool and
+		// the error — agents shouldn't see UNKNOWN-typed marshaling
+		// failures hide the real cause.
+		return mcp.NewToolResultError(fmt.Sprintf("%s: %v\n%s", toolName, err, output))
+	}
+	return mcp.NewToolResultError(string(data))
+}
+
 func jsonToolResult(payload any) (*mcp.CallToolResult, error) {
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

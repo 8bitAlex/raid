@@ -3,24 +3,31 @@ package doctor
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/8bitalex/raid/src/raid"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 )
 
-var jsonOutput bool
-
-func init() {
-	Command.Flags().BoolVar(&jsonOutput, "json", false, "Emit machine-readable JSON output")
-}
-
 // Command is the doctor subcommand that checks the raid configuration for issues.
+// JSON output is controlled by the persistent --json flag on rootCmd.
 var Command = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check the raid configuration and report any issues",
 	Args:  cobra.NoArgs,
-	Run:   runDoctor,
+	RunE:  runDoctor,
+}
+
+// jsonModeFromRoot resolves --json against the root's persistent flag so the
+// read always reflects the current invocation, even when the package-level
+// Command var is reused across tests.
+func jsonModeFromRoot(cmd *cobra.Command) bool {
+	root := cmd.Root()
+	if root == nil {
+		return false
+	}
+	v, _ := root.PersistentFlags().GetBool("json")
+	return v
 }
 
 // findingJSON is the stable JSON shape for a single doctor finding. Severity
@@ -57,10 +64,10 @@ func severityString(s raid.Severity) string {
 	}
 }
 
-func runDoctor(cmd *cobra.Command, _ []string) {
+func runDoctor(cmd *cobra.Command, _ []string) error {
 	findings := raid.Doctor()
 
-	oks, warnings, errors := 0, 0, 0
+	oks, warnings, errorCount := 0, 0, 0
 	for _, f := range findings {
 		switch f.Severity {
 		case raid.SeverityOK:
@@ -68,14 +75,15 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 		case raid.SeverityWarn:
 			warnings++
 		case raid.SeverityError:
-			errors++
+			errorCount++
 		}
 	}
 
+	jsonOutput := jsonModeFromRoot(cmd)
 	if jsonOutput {
 		out := doctorOutput{
 			Findings: make([]findingJSON, 0, len(findings)),
-			Summary:  doctorSummary{OK: oks, Warnings: warnings, Errors: errors},
+			Summary:  doctorSummary{OK: oks, Warnings: warnings, Errors: errorCount},
 		}
 		for _, f := range findings {
 			out.Findings = append(out.Findings, findingJSON{
@@ -88,13 +96,15 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(out); err != nil {
-			fmt.Fprintln(os.Stderr, "raid:", err)
-			os.Exit(1)
+			return errs.Unknown(err)
 		}
-		if errors > 0 {
-			os.Exit(1)
+		if errorCount > 0 {
+			// Return a structured error so the central handler sets exit
+			// code = CategoryConfig (2). Message is suppressed because the
+			// JSON findings already carry the detail.
+			return errs.ConfigInvalid(fmt.Errorf("%d doctor finding(s) at error severity", errorCount))
 		}
-		return
+		return nil
 	}
 
 	for _, f := range findings {
@@ -116,12 +126,13 @@ func runDoctor(cmd *cobra.Command, _ []string) {
 
 	fmt.Println()
 	switch {
-	case errors > 0:
-		fmt.Printf("%d error(s) detected.\n", errors)
-		os.Exit(1)
+	case errorCount > 0:
+		fmt.Printf("%d error(s) detected.\n", errorCount)
+		return errs.ConfigInvalid(fmt.Errorf("%d doctor finding(s) at error severity", errorCount))
 	case warnings > 0:
 		fmt.Printf("%d warning(s).\n", warnings)
 	default:
 		fmt.Println("No issues found.")
 	}
+	return nil
 }
