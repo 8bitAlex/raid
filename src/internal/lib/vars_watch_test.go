@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -202,6 +203,33 @@ func TestWatchRaidVars_StopsOnContextCancel(t *testing.T) {
 	defer mu.Unlock()
 	if calls != 0 {
 		t.Fatalf("watcher fired after cancel: %d calls", calls)
+	}
+}
+
+// TestNewVarsWatcher_mkdirFailureReturnsStructuredError covers the
+// liberrs.Newf wrap around os.MkdirAll. Forcing MkdirAll to fail
+// requires a path whose parent is a regular file (not a directory) so
+// the implicit mkdir-p chain can't make a directory of the same name.
+func TestNewVarsWatcher_mkdirFailureReturnsStructuredError(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a regular file, then aim varsPath at a path UNDER that
+	// file. MkdirAll then can't make varsPath's parent — it would have
+	// to turn the existing file into a directory.
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	varsPath := filepath.Join(blocker, "child", "vars")
+
+	ctx, cancel := stdctx.WithCancel(stdctx.Background())
+	t.Cleanup(cancel)
+
+	err := newVarsWatcher(ctx, varsPath, func() {})
+	if err == nil {
+		t.Fatal("expected error when parent path is a file")
+	}
+	if !strings.Contains(err.Error(), "ensure vars watch dir") {
+		t.Errorf("error %q should mention 'ensure vars watch dir'", err.Error())
 	}
 }
 

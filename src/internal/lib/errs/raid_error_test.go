@@ -9,6 +9,71 @@ import (
 	"testing"
 )
 
+func TestJoinErrors(t *testing.T) {
+	// Empty slice returns nil.
+	if joinErrors(nil) != nil {
+		t.Error("joinErrors(nil) should be nil")
+	}
+	if joinErrors([]error{}) != nil {
+		t.Error("joinErrors([]) should be nil")
+	}
+	// One element is returned verbatim so errors.Is can find it.
+	sentinel := errors.New("only")
+	if got := joinErrors([]error{sentinel}); got != sentinel {
+		t.Errorf("joinErrors(1) = %v, want sentinel", got)
+	}
+	// Many elements use errors.Join — both causes are reachable.
+	a := errors.New("a")
+	b := errors.New("b")
+	joined := joinErrors([]error{a, b})
+	if !errors.Is(joined, a) || !errors.Is(joined, b) {
+		t.Error("joinErrors should preserve both causes for errors.Is")
+	}
+}
+
+func TestCloneFailedMulti(t *testing.T) {
+	// Empty causes → message without the appended joined error, count 0.
+	empty := CloneFailedMulti(nil)
+	if empty.Code() != CodeCloneFailed {
+		t.Errorf("Code = %q, want %q", empty.Code(), CodeCloneFailed)
+	}
+	if empty.Category() != CategoryNetwork {
+		t.Errorf("Category = %v, want CategoryNetwork", empty.Category())
+	}
+	if empty.Details()["count"].(int) != 0 {
+		t.Errorf("count = %v, want 0", empty.Details()["count"])
+	}
+
+	// One typed cause: failures[] carries code/category and repo/url
+	// details propagated up.
+	first := CloneFailed("api", "git@example.com:api.git", errors.New("auth"))
+	plain := errors.New("network down")
+	got := CloneFailedMulti([]error{first, plain})
+	if got.Code() != CodeCloneFailed {
+		t.Errorf("Code = %q, want CLONE_FAILED", got.Code())
+	}
+	failures, ok := got.Details()["failures"].([]map[string]any)
+	if !ok {
+		t.Fatalf("failures detail missing or wrong type: %v", got.Details())
+	}
+	if len(failures) != 2 {
+		t.Fatalf("failures len = %d, want 2", len(failures))
+	}
+	if failures[0]["code"] != CodeCloneFailed {
+		t.Errorf("first failure code = %v", failures[0]["code"])
+	}
+	if failures[0]["repo"] != "api" {
+		t.Errorf("first failure should carry repo detail: %v", failures[0])
+	}
+	if _, has := failures[1]["code"]; has {
+		t.Errorf("plain error shouldn't get a code: %v", failures[1])
+	}
+	// The aggregate cause is reachable via errors.Is.
+	if !errors.Is(got, first) {
+		t.Error("CloneFailedMulti should preserve typed cause for errors.Is")
+	}
+}
+
 func TestNewf_capturesCauseFromTrailingErrorArg(t *testing.T) {
 	cause := errors.New("io broken")
 	e := Newf(CodeInternal, CategoryGeneric, "couldn't widget the %s: %v", "frobber", cause)
