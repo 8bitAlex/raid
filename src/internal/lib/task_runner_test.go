@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -121,14 +122,46 @@ func withStubbedTime(t *testing.T, delta time.Duration) {
 }
 
 // withCapturedStderr redirects commandStderr to the returned buffer and
-// restores it on cleanup so test assertions can match the dim "→ name
-// (Xs)" line emitted by showExeTime.
+// restores it on cleanup so test assertions can match the dim
+// "<label> complete in <Xs>" line emitted by showExeTime.
 func withCapturedStderr(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
 	restore := SetCommandOutput(io.Discard, &buf)
 	t.Cleanup(restore)
 	return &buf
+}
+
+// syncStderr is a goroutine-safe Writer + reader wrapping bytes.Buffer.
+// Tests that exercise concurrent task execution need this — a plain
+// bytes.Buffer races between the continueOnFailure warning goroutine
+// and any subprocess whose cmd.Stderr also points at commandStderr.
+type syncStderr struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncStderr) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncStderr) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+// withCapturedStderrSync is the goroutine-safe variant. Use this when
+// the test runs concurrent tasks that might write to commandStderr
+// (either via emitContinueOnFailureWarning or via subprocess stderr).
+func withCapturedStderrSync(t *testing.T) *syncStderr {
+	t.Helper()
+	s := &syncStderr{}
+	restore := SetCommandOutput(io.Discard, s)
+	t.Cleanup(restore)
+	return s
 }
 
 func TestExecuteTask_showExeTime_emitsLine(t *testing.T) {
@@ -507,6 +540,129 @@ func TestExecuteTasks_sequentialFailsFast(t *testing.T) {
 	}
 	if _, statErr := os.Stat(marker); statErr == nil {
 		t.Error("second task ran after sequential failure; expected fail-fast")
+	}
+}
+
+// --- continueOnFailure ---
+
+func TestExecuteTasks_continueOnFailure_sequentialSkipsAndKeepsGoing(t *testing.T) {
+	buf := withCapturedStderr(t)
+
+	marker := filepath.Join(t.TempDir(), "ran")
+	tasks := []Task{
+		{
+			TaskProps: TaskProps{
+				Name:    "cleanup",
+				Options: &TaskOptions{ContinueOnFailure: true},
+			},
+			Type: Shell,
+			Cmd:  "exit 7",
+		},
+		{Type: Shell, Cmd: "echo ok > " + marker},
+	}
+
+	if err := ExecuteTasks(tasks); err != nil {
+		t.Fatalf("ExecuteTasks should swallow ignored failure: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("subsequent task did not run after ignored failure: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "warning: cleanup failed (continueOnFailure)") {
+		t.Errorf("stderr should carry the warning, got %q", out)
+	}
+	if !strings.Contains(out, "\033[2m") {
+		t.Errorf("warning should be dim-styled, got %q", out)
+	}
+}
+
+func TestExecuteTasks_continueOnFailure_nonIgnoredStillFatal(t *testing.T) {
+	withCapturedStderr(t)
+	// First task is ignored, second isn't — the sequencer must surface
+	// the second failure and exit non-zero overall.
+	tasks := []Task{
+		{
+			TaskProps: TaskProps{
+				Name:    "best-effort",
+				Options: &TaskOptions{ContinueOnFailure: true},
+			},
+			Type: Shell, Cmd: "exit 1",
+		},
+		{
+			TaskProps: TaskProps{Name: "must-pass"},
+			Type:      Shell, Cmd: "exit 2",
+		},
+	}
+	err := ExecuteTasks(tasks)
+	if err == nil {
+		t.Fatal("expected error from the non-ignored failure")
+	}
+}
+
+func TestExecuteTasks_continueOnFailure_concurrent(t *testing.T) {
+	// Concurrent goroutines write the warning AND subprocesses' cmd.Stderr
+	// share commandStderr — a plain bytes.Buffer would race. Use the
+	// mutex-wrapped writer.
+	buf := withCapturedStderrSync(t)
+	marker := filepath.Join(t.TempDir(), "followed")
+	tasks := []Task{
+		{
+			TaskProps: TaskProps{
+				Name:    "flaky-probe",
+				Options: &TaskOptions{ContinueOnFailure: true},
+			},
+			Type: Shell, Cmd: "exit 1", Concurrent: true,
+		},
+		{Type: Shell, Cmd: "true", Concurrent: true},
+		{Type: Shell, Cmd: "echo ok > " + marker},
+	}
+	if err := ExecuteTasks(tasks); err != nil {
+		t.Fatalf("ignored concurrent failure should not surface: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("follow-up task did not run: %v", err)
+	}
+	if !strings.Contains(buf.String(), "flaky-probe failed (continueOnFailure)") {
+		t.Errorf("stderr should warn about flaky-probe, got %q", buf.String())
+	}
+}
+
+func TestExecuteTasks_continueOnFailure_concurrentNonIgnoredStillFatal(t *testing.T) {
+	withCapturedStderrSync(t)
+	tasks := []Task{
+		{
+			TaskProps: TaskProps{Options: &TaskOptions{ContinueOnFailure: true}},
+			Type:      Shell, Cmd: "exit 1", Concurrent: true,
+		},
+		{Type: Shell, Cmd: "exit 2", Concurrent: true},
+	}
+	err := ExecuteTasks(tasks)
+	if err == nil {
+		t.Fatal("non-ignored concurrent failure must still surface")
+	}
+}
+
+func TestExecuteTasks_continueOnFailure_disabledByDefault(t *testing.T) {
+	withCapturedStderr(t)
+	// Regression guard: a task without options must continue to fail
+	// the command exactly as before.
+	tasks := []Task{
+		{Type: Shell, Cmd: "exit 1"},
+	}
+	if err := ExecuteTasks(tasks); err == nil {
+		t.Fatal("default behavior must still abort on failure")
+	}
+}
+
+func TestIsContinueOnFailure(t *testing.T) {
+	if isContinueOnFailure(Task{}) {
+		t.Error("nil Options should report false")
+	}
+	if isContinueOnFailure(Task{TaskProps: TaskProps{Options: &TaskOptions{}}}) {
+		t.Error("Options with default ContinueOnFailure should report false")
+	}
+	if !isContinueOnFailure(Task{TaskProps: TaskProps{Options: &TaskOptions{ContinueOnFailure: true}}}) {
+		t.Error("Options{ContinueOnFailure:true} should report true")
 	}
 }
 
