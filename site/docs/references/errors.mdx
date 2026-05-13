@@ -38,6 +38,7 @@ still reflects what the user's script returned.
 | `PROFILE_ALREADY_EXISTS` | config | `raid profile add` collided with a registered profile. |
 | `REPO_INVALID` | config | A repo entry or repo `raid.yaml` is malformed. |
 | `CONFIG_INVALID` | config | The root config (`~/.raid/config.toml`) is malformed. |
+| `VERIFY_FAILED` | config | A `verify:` entry failed after its (optional) `onFail:` remediation ran. |
 | `CONFIG_LOAD_FAILED` | config | Couldn't load the root config. |
 | `SCHEMA_VALIDATION_FAILED` | config | A JSON Schema check failed. |
 | `ARG_INVALID` | config | A CLI argument failed validation. |

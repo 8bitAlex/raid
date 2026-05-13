@@ -17,14 +17,16 @@ import (
 type Verify struct {
 	// Name is the human-readable label surfaced in failure messages
 	// and (eventually) doctor's findings list. Required.
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
 	// Tasks is the precondition assertion. All tasks must exit 0 for
 	// the verify to pass on the first try.
-	Tasks []Task `json:"tasks"`
+	Tasks []Task `json:"tasks" yaml:"tasks"`
 	// OnFail is the optional one-shot remediation. When present, a
 	// first-pass failure triggers OnFail followed by exactly one
 	// re-run of Tasks. Empty OnFail means the first failure is final.
-	OnFail []Task `json:"onFail,omitempty"`
+	// The explicit yaml tag is required so YAML's default lowercasing
+	// doesn't turn `onFail:` into a silently ignored key.
+	OnFail []Task `json:"onFail,omitempty" yaml:"onFail,omitempty"`
 }
 
 // IsZero reports whether the verify is uninitialised — used to skip

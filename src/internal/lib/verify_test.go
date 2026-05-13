@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
+	"gopkg.in/yaml.v3"
 )
 
 func TestRunVerify_passes(t *testing.T) {
@@ -139,6 +140,26 @@ func TestRunVerify_emptyTasksIsNoop(t *testing.T) {
 	}
 	if _, err := os.Stat(retryMarker); err == nil {
 		t.Error("OnFail ran for a verify with no tasks")
+	}
+}
+
+func TestVerify_yamlRoundTrip(t *testing.T) {
+	// Documents the on-disk shape: `onFail` (camelCase) must populate
+	// OnFail. Without an explicit yaml tag, gopkg.in/yaml.v3 would
+	// silently treat the key as `onfail` and drop remediation tasks.
+	src := []byte("name: node\ntasks:\n  - type: Shell\n    cmd: node --version\nonFail:\n  - type: Shell\n    cmd: nvm install --lts\n")
+	var v Verify
+	if err := yaml.Unmarshal(src, &v); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if v.Name != "node" {
+		t.Errorf("Name = %q, want %q", v.Name, "node")
+	}
+	if len(v.Tasks) != 1 || v.Tasks[0].Cmd != "node --version" {
+		t.Errorf("Tasks not extracted: %+v", v.Tasks)
+	}
+	if len(v.OnFail) != 1 || v.OnFail[0].Cmd != "nvm install --lts" {
+		t.Errorf("OnFail not extracted from `onFail:` key: %+v", v.OnFail)
 	}
 }
 

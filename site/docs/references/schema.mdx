@@ -211,7 +211,7 @@ install:
 
 Declarative precondition checks. Each entry runs `tasks:` to assert that a dependency or environmental requirement is in place. An optional `onFail:` remediation gets exactly one chance to fix things — if remediation succeeds, raid re-runs `tasks:` once; if that pass succeeds the verify is reported as remediated, otherwise it fails.
 
-Verify entries are accepted on both profiles and per-repo `raid.yaml` files. They share execution context with `install:` — the active environment, raid vars, and task options all apply. Today verify entries are surfaced by `raid doctor`; future releases will add a dedicated `raid verify` command.
+Verify entries are accepted on both profiles and per-repo `raid.yaml` files. They share execution context with `install:` — the active environment, raid vars, and task options all apply. The schema accepts verify entries today; a future release will surface them through `raid doctor` (and, longer-term, a dedicated `raid verify` command).
 
 ```yaml
 verify:
