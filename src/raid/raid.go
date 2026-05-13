@@ -142,12 +142,21 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[strin
 // semantics.
 type Verify = lib.Verify
 
+// VerifyOutcome distinguishes a first-try pass from a successful
+// self-heal. See lib.VerifyOutcome.
+type VerifyOutcome = lib.VerifyOutcome
+
+const (
+	VerifyOutcomeOK         = lib.VerifyOutcomeOK
+	VerifyOutcomeRemediated = lib.VerifyOutcomeRemediated
+	VerifyOutcomeFailed     = lib.VerifyOutcomeFailed
+)
+
 // RunVerify executes a single verify entry: run Tasks; on failure, run
-// the optional OnFail remediation and re-run Tasks once. Returns nil
-// on success (including remediated success), or a structured
-// errs.VerifyFailed otherwise. Re-exported so cmd/doctor (#42) can call
-// it without reaching into internal/lib.
-func RunVerify(v Verify) error {
+// the optional OnFail remediation and re-run Tasks once. Returns the
+// outcome (passed / remediated / failed) and a non-nil structured
+// errs.VerifyFailed iff the outcome is VerifyOutcomeFailed.
+func RunVerify(v Verify) (VerifyOutcome, error) {
 	return lib.RunVerify(v)
 }
 

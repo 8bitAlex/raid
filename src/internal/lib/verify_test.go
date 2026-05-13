@@ -16,8 +16,12 @@ func TestRunVerify_passes(t *testing.T) {
 			{Type: Shell, Cmd: "exit 0"},
 		},
 	}
-	if err := RunVerify(v); err != nil {
+	outcome, err := RunVerify(v)
+	if err != nil {
 		t.Fatalf("RunVerify returned %v, want nil", err)
+	}
+	if outcome != VerifyOutcomeOK {
+		t.Errorf("outcome = %v, want VerifyOutcomeOK", outcome)
 	}
 }
 
@@ -28,9 +32,12 @@ func TestRunVerify_failsWithoutOnFail(t *testing.T) {
 			{Type: Shell, Cmd: "exit 1"},
 		},
 	}
-	err := RunVerify(v)
+	outcome, err := RunVerify(v)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if outcome != VerifyOutcomeFailed {
+		t.Errorf("outcome = %v, want VerifyOutcomeFailed", outcome)
 	}
 	rErr, ok := liberrs.AsError(err)
 	if !ok {
@@ -62,8 +69,12 @@ func TestRunVerify_remediationSucceeds(t *testing.T) {
 	// written by the retry pass (not lingering from setup).
 	_ = os.Remove(retryMarker)
 
-	if err := RunVerify(v); err != nil {
+	outcome, err := RunVerify(v)
+	if err != nil {
 		t.Fatalf("RunVerify returned %v, want nil after remediation", err)
+	}
+	if outcome != VerifyOutcomeRemediated {
+		t.Errorf("outcome = %v, want VerifyOutcomeRemediated", outcome)
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("OnFail did not create marker: %v", err)
@@ -87,9 +98,12 @@ func TestRunVerify_remediationFails(t *testing.T) {
 	// Sanity: marker should never be touched because retry never runs.
 	v.Tasks = append(v.Tasks, Task{Type: Shell, Cmd: "touch " + retryMarker})
 
-	err := RunVerify(v)
+	outcome, err := RunVerify(v)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if outcome != VerifyOutcomeFailed {
+		t.Errorf("outcome = %v, want VerifyOutcomeFailed", outcome)
 	}
 	rErr, ok := liberrs.AsError(err)
 	if !ok {
@@ -113,9 +127,12 @@ func TestRunVerify_secondPassFails(t *testing.T) {
 			{Type: Shell, Cmd: "exit 0"},
 		},
 	}
-	err := RunVerify(v)
+	outcome, err := RunVerify(v)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if outcome != VerifyOutcomeFailed {
+		t.Errorf("outcome = %v, want VerifyOutcomeFailed", outcome)
 	}
 	rErr, ok := liberrs.AsError(err)
 	if !ok {
@@ -135,8 +152,12 @@ func TestRunVerify_emptyTasksIsNoop(t *testing.T) {
 			{Type: Shell, Cmd: "touch " + retryMarker},
 		},
 	}
-	if err := RunVerify(v); err != nil {
+	outcome, err := RunVerify(v)
+	if err != nil {
 		t.Fatalf("RunVerify with empty tasks returned %v, want nil", err)
+	}
+	if outcome != VerifyOutcomeOK {
+		t.Errorf("outcome = %v, want VerifyOutcomeOK for empty tasks", outcome)
 	}
 	if _, err := os.Stat(retryMarker); err == nil {
 		t.Error("OnFail ran for a verify with no tasks")
