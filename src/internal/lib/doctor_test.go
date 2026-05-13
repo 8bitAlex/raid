@@ -330,6 +330,188 @@ func TestCheckProfile_singleRepoInvalid(t *testing.T) {
 	}
 }
 
+// --- checkVerify ---
+
+func TestCheckVerify_passingEntryProducesOKFinding(t *testing.T) {
+	entries := []Verify{
+		{
+			Name:  "echo-works",
+			Tasks: []Task{{Type: Shell, Cmd: "exit 0"}},
+		},
+	}
+	findings := checkVerify("verify", entries)
+	if len(findings) != 1 {
+		t.Fatalf("checkVerify: got %d findings, want 1", len(findings))
+	}
+	f := findings[0]
+	if f.Severity != SeverityOK {
+		t.Errorf("severity = %v, want SeverityOK", f.Severity)
+	}
+	if f.Check != "verify/echo-works" {
+		t.Errorf("check = %q, want %q", f.Check, "verify/echo-works")
+	}
+}
+
+func TestCheckVerify_remediatedEntryProducesWarnFinding(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "fix")
+	entries := []Verify{
+		{
+			Name:   "needs-fix",
+			Tasks:  []Task{{Type: Shell, Cmd: "test -f " + marker}},
+			OnFail: []Task{{Type: Shell, Cmd: "touch " + marker}},
+		},
+	}
+	findings := checkVerify("verify", entries)
+	if len(findings) != 1 {
+		t.Fatalf("checkVerify: got %d findings, want 1", len(findings))
+	}
+	f := findings[0]
+	if f.Severity != SeverityWarn {
+		t.Errorf("severity = %v, want SeverityWarn for remediated outcome", f.Severity)
+	}
+	if f.Suggestion == "" {
+		t.Error("remediated finding should carry a suggestion")
+	}
+}
+
+func TestCheckVerify_failedEntryProducesErrorFinding(t *testing.T) {
+	entries := []Verify{
+		{
+			Name:  "broken",
+			Tasks: []Task{{Type: Shell, Cmd: "exit 1"}},
+		},
+	}
+	findings := checkVerify("verify", entries)
+	if len(findings) != 1 {
+		t.Fatalf("checkVerify: got %d findings, want 1", len(findings))
+	}
+	f := findings[0]
+	if f.Severity != SeverityError {
+		t.Errorf("severity = %v, want SeverityError", f.Severity)
+	}
+	if f.Suggestion == "" {
+		t.Error("failed finding should carry a suggestion")
+	}
+}
+
+func TestCheckVerify_skipsZeroEntries(t *testing.T) {
+	// Zero-value verify (from a stray YAML list item) should be ignored
+	// rather than producing a "passed" finding for an empty check.
+	findings := checkVerify("verify", []Verify{{}, {Name: "real", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}})
+	if len(findings) != 1 {
+		t.Fatalf("checkVerify: got %d findings, want 1 (zero entry skipped)", len(findings))
+	}
+	if findings[0].Check != "verify/real" {
+		t.Errorf("check = %q, want %q", findings[0].Check, "verify/real")
+	}
+}
+
+func TestCheckVerify_failureDoesNotShortCircuitSubsequent(t *testing.T) {
+	// A failing verify must not prevent later entries from running —
+	// doctor needs to surface every finding in a single pass.
+	entries := []Verify{
+		{Name: "first-fails", Tasks: []Task{{Type: Shell, Cmd: "exit 1"}}},
+		{Name: "second-passes", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}},
+	}
+	findings := checkVerify("verify", entries)
+	if len(findings) != 2 {
+		t.Fatalf("checkVerify: got %d findings, want 2", len(findings))
+	}
+	if findings[0].Severity != SeverityError {
+		t.Errorf("first finding severity = %v, want SeverityError", findings[0].Severity)
+	}
+	if findings[1].Severity != SeverityOK {
+		t.Errorf("second finding severity = %v, want SeverityOK", findings[1].Severity)
+	}
+}
+
+func TestCheckVerify_emptyEntriesIsNoOp(t *testing.T) {
+	findings := checkVerify("verify", nil)
+	if len(findings) != 0 {
+		t.Errorf("expected 0 findings, got %d", len(findings))
+	}
+}
+
+// --- checkProfile with verify entries ---
+
+func TestCheckProfile_runsProfileLevelVerify(t *testing.T) {
+	setupTestConfig(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	// Profile-level verify with one passing and one failing entry.
+	body := `name: vp
+verify:
+  - name: ok
+    tasks:
+      - type: Shell
+        cmd: exit 0
+  - name: broken
+    tasks:
+      - type: Shell
+        cmd: exit 1
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddProfile(Profile{Name: "vp", Path: path}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProfile("vp"); err != nil {
+		t.Fatal(err)
+	}
+
+	findings := checkProfile()
+	var sawOK, sawError bool
+	for _, f := range findings {
+		if f.Check == "verify/ok" && f.Severity == SeverityOK {
+			sawOK = true
+		}
+		if f.Check == "verify/broken" && f.Severity == SeverityError {
+			sawError = true
+		}
+	}
+	if !sawOK {
+		t.Error("expected 'verify/ok' OK finding")
+	}
+	if !sawError {
+		t.Error("expected 'verify/broken' error finding")
+	}
+}
+
+func TestCheckRepo_runsRepoLevelVerify(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+	repoYaml := `name: r
+branch: main
+verify:
+  - name: hello
+    tasks:
+      - type: Shell
+        cmd: exit 0
+`
+	if err := os.WriteFile(filepath.Join(dir, RaidConfigFileName), []byte(repoYaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := Repo{
+		Name:   "r",
+		Path:   dir,
+		URL:    "http://example.com/r.git",
+		Verify: []Verify{{Name: "hello", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+	}
+	findings := checkRepo(repo)
+	var sawVerify bool
+	for _, f := range findings {
+		if f.Check == "repo/r verify/hello" && f.Severity == SeverityOK {
+			sawVerify = true
+		}
+	}
+	if !sawVerify {
+		t.Errorf("expected 'repo/r verify/hello' OK finding, got %+v", findings)
+	}
+}
+
 // severitySet returns a set of all severities present in findings.
 func severitySet(findings []Finding) map[Severity]bool {
 	out := make(map[Severity]bool, len(findings))

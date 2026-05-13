@@ -27,6 +27,23 @@ Checks include:
 - Referenced task groups exist
 - Environment names are unique
 - Custom command names don't shadow built-in commands
+- Every [`verify:`](../references/schema#verify) entry on the profile and per-repo `raid.yaml` files
+
+## Verify entries
+
+If your profile or any repo's `raid.yaml` defines a [`verify:`](../references/schema#verify) block, doctor runs every entry and surfaces each as its own finding:
+
+| Outcome | Severity | What it means |
+|---|---|---|
+| First-try pass | `ok` | The verify's `tasks:` exited cleanly on the first try. |
+| Remediated | `warn` | `tasks:` failed, the optional `onFail:` block ran, and the re-run of `tasks:` then passed. The precondition holds *now* — but it didn't before, so doctor warns you to investigate why. |
+| Failed | `error` | Either no `onFail:` was defined, `onFail:` itself failed, or the retry of `tasks:` failed again. The underlying task error is included in the finding's message. |
+
+Doctor runs verify tasks with the same execution context as `install:` — the active environment, raid vars, and task options all apply. A failure on one verify entry does not prevent subsequent entries from running, so you see the full health picture in a single pass.
+
+:::warning Verify tasks execute real commands
+Doctor invokes the actual `tasks:` and `onFail:` shell commands you've defined. Keep verify checks small, fast, and side-effect-light (a `node --version` probe, a `test -f`, a `Wait` against a local port). Heavy bootstrap work belongs in `install:`.
+:::
 
 ## When to run it
 

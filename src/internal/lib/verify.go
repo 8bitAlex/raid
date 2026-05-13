@@ -11,12 +11,12 @@ import (
 // failed via errs.VerifyFailed.
 //
 // Verify entries live at the top level of profiles and per-repo
-// raid.yaml files. raid doctor (#42) will surface them as findings in
-// its health report; this package provides the runner so any caller
-// can drive it the same way doctor will.
+// raid.yaml files. raid doctor surfaces them as findings: a first-try
+// pass is an OK finding, a successful self-heal is a warning (so the
+// user knows something needed fixing), and a failure is an error.
 type Verify struct {
 	// Name is the human-readable label surfaced in failure messages
-	// and (eventually) doctor's findings list. Required.
+	// and doctor's findings list. Required.
 	Name string `json:"name" yaml:"name"`
 	// Tasks is the precondition assertion. All tasks must exit 0 for
 	// the verify to pass on the first try.
@@ -36,28 +36,47 @@ func (v Verify) IsZero() bool {
 	return v.Name == "" && len(v.Tasks) == 0 && len(v.OnFail) == 0
 }
 
+// VerifyOutcome distinguishes a first-try pass from a successful
+// self-heal. Doctor maps these to OK / warn severities; a fourth state
+// (failed) is conveyed by RunVerify's error return.
+type VerifyOutcome int
+
+const (
+	// VerifyOutcomeOK means Tasks passed on the first try; no
+	// remediation ran.
+	VerifyOutcomeOK VerifyOutcome = iota
+	// VerifyOutcomeRemediated means Tasks failed on the first try,
+	// OnFail succeeded, and the retry of Tasks passed. The verify
+	// holds *now*, but it didn't before — worth surfacing as a
+	// warning so the user knows something silently fixed itself.
+	VerifyOutcomeRemediated
+	// VerifyOutcomeFailed means Tasks didn't pass: either no OnFail
+	// was defined, OnFail itself failed, or the retry of Tasks
+	// still failed. RunVerify returns a non-nil error in this case.
+	VerifyOutcomeFailed
+)
+
 // RunVerify executes the verify entry per the documented semantics:
 // run Tasks; on failure, if OnFail is set, run it and re-run Tasks
-// once. Returns nil on success (including remediated success), or
-// errs.VerifyFailed wrapping the underlying cause otherwise.
+// once. Returns one of three outcomes — see VerifyOutcome.
+//
+// An empty Tasks slice is treated as a no-op pass.
 //
 // Tasks run with raid's normal env / raidVars / command-session
 // context — same as install: tasks — so verifies see whatever the
-// caller has loaded. The caller is responsible for setting up
-// `startSession` / `endSession` if it needs session isolation; doctor
-// is expected to wrap RunVerify calls accordingly.
-func RunVerify(v Verify) error {
+// caller has loaded.
+func RunVerify(v Verify) (VerifyOutcome, error) {
 	if len(v.Tasks) == 0 {
 		// No-op: an entry with no Tasks asserts nothing, so it
-		// vacuously passes. Treat as success rather than rejecting
-		// at the schema layer so doctor can iterate generously.
-		return nil
+		// vacuously passes. Treat as OK rather than rejecting at
+		// the schema layer so doctor can iterate generously.
+		return VerifyOutcomeOK, nil
 	}
 
 	if err := ExecuteTasks(v.Tasks); err == nil {
-		return nil
+		return VerifyOutcomeOK, nil
 	} else if len(v.OnFail) == 0 {
-		return liberrs.VerifyFailed(v.Name, err)
+		return VerifyOutcomeFailed, liberrs.VerifyFailed(v.Name, err)
 	}
 
 	// First pass failed and we have remediation. Run it once.
@@ -65,12 +84,12 @@ func RunVerify(v Verify) error {
 		// Remediation itself failed — don't retry the asserts; the
 		// user's fix-up step is broken, that's the more useful
 		// failure to surface.
-		return liberrs.VerifyFailed(v.Name, err)
+		return VerifyOutcomeFailed, liberrs.VerifyFailed(v.Name, err)
 	}
 
 	// Exactly one retry of the asserts.
 	if err := ExecuteTasks(v.Tasks); err != nil {
-		return liberrs.VerifyFailed(v.Name, err)
+		return VerifyOutcomeFailed, liberrs.VerifyFailed(v.Name, err)
 	}
-	return nil
+	return VerifyOutcomeRemediated, nil
 }

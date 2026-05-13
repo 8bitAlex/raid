@@ -93,10 +93,11 @@
 # ---------------------------------------------------------------------------
 # Verify  (declarative preconditions; keep checks small and fast)
 # ---------------------------------------------------------------------------
-# Each entry asserts a dependency or environmental precondition. Entries are
-# accepted by the schema today; a future release will wire `raid doctor` (#42)
-# to run them and report pass/fail. An optional `onFail:` remediation gets
-# exactly one chance to fix things before the entry is reported as failed.
+# Each entry asserts a dependency or environmental precondition. raid doctor
+# runs every verify and reports pass / remediated / failed. An optional
+# onFail: remediation gets exactly one chance to fix things — if it
+# succeeds, doctor re-runs `tasks:` once and reports the verify as
+# remediated (warn); otherwise it's reported as failed.
 #
 # verify:
 #   - name: Node installed

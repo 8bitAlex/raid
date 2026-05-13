@@ -88,6 +88,8 @@ func checkProfile() []Finding {
 			})
 		}
 		findings = append(findings, Finding{Severity: SeverityOK, Check: "profile schema", Message: "valid (single-repo)"})
+		// In single-repo mode, verify entries live on the synthesized
+		// repo, not the wrapper profile — checkRepo picks them up.
 		for _, repo := range fullProfile.Repositories {
 			findings = append(findings, checkRepo(repo)...)
 		}
@@ -112,6 +114,8 @@ func checkProfile() []Finding {
 			Message:  err.Error(),
 		})
 	}
+
+	findings = append(findings, checkVerify("verify", fullProfile.Verify)...)
 
 	if len(fullProfile.Repositories) == 0 {
 		return append(findings, Finding{
@@ -177,12 +181,66 @@ func checkRepo(repo Repo) []Finding {
 			Message:    err.Error(),
 			Suggestion: fmt.Sprintf("fix %s to match the repo schema", raidFile),
 		})
-	} else {
-		findings = append(findings, Finding{
-			Severity: SeverityOK,
-			Check:    fmt.Sprintf("repo/%s raid.yaml", repo.Name),
-			Message:  "valid",
-		})
+		return findings
+	}
+	findings = append(findings, Finding{
+		Severity: SeverityOK,
+		Check:    fmt.Sprintf("repo/%s raid.yaml", repo.Name),
+		Message:  "valid",
+	})
+
+	findings = append(findings, checkVerify(fmt.Sprintf("repo/%s verify", repo.Name), repo.Verify)...)
+	return findings
+}
+
+// checkVerify runs each verify entry and converts the outcome into a
+// finding. label is the check-name prefix ("verify" for profile-level,
+// "repo/<name> verify" for repo-level). The entry's Name is appended
+// so each finding has a unique, human-readable label.
+//
+// Outcomes map to severities:
+//   - VerifyOutcomeOK         → SeverityOK
+//   - VerifyOutcomeRemediated → SeverityWarn (the verify holds now, but
+//     it didn't on the first try — worth surfacing so the user knows
+//     something silently fixed itself)
+//   - VerifyOutcomeFailed     → SeverityError
+//
+// Failures don't short-circuit subsequent entries — doctor reports every
+// verify so the user sees the full picture in one pass.
+func checkVerify(label string, entries []Verify) []Finding {
+	var findings []Finding
+	for _, v := range entries {
+		if v.IsZero() {
+			continue
+		}
+		check := fmt.Sprintf("%s/%s", label, v.Name)
+		outcome, err := RunVerify(v)
+		switch outcome {
+		case VerifyOutcomeOK:
+			findings = append(findings, Finding{
+				Severity: SeverityOK,
+				Check:    check,
+				Message:  "passed",
+			})
+		case VerifyOutcomeRemediated:
+			findings = append(findings, Finding{
+				Severity:   SeverityWarn,
+				Check:      check,
+				Message:    "remediated by onFail",
+				Suggestion: "investigate why the precondition wasn't already in place",
+			})
+		case VerifyOutcomeFailed:
+			msg := "failed"
+			if err != nil {
+				msg = err.Error()
+			}
+			findings = append(findings, Finding{
+				Severity:   SeverityError,
+				Check:      check,
+				Message:    msg,
+				Suggestion: "fix the underlying dependency or update the verify block to match reality",
+			})
+		}
 	}
 	return findings
 }
