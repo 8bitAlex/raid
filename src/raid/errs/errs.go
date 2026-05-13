@@ -58,6 +58,7 @@ const (
 	CodeRepoNotCloned          = liberrs.CodeRepoNotCloned
 	CodeEnvNotFound            = liberrs.CodeEnvNotFound
 	CodeCommandNotFound        = liberrs.CodeCommandNotFound
+	CodeVerifyFailed           = liberrs.CodeVerifyFailed
 )
 
 // AsError walks the wrapped-error chain and returns the first Error.
@@ -111,3 +112,4 @@ func TaskWaitTimeout(target string, cause error) Error { return liberrs.TaskWait
 func TaskTemplateFailed(cause error) Error             { return liberrs.TaskTemplateFailed(cause) }
 func TaskGitFailed(cause error) Error                  { return liberrs.TaskGitFailed(cause) }
 func TaskHTTPFailed(url string, cause error) Error     { return liberrs.TaskHTTPFailed(url, cause) }
+func VerifyFailed(name string, cause error) Error      { return liberrs.VerifyFailed(name, cause) }

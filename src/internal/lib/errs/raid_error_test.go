@@ -319,6 +319,8 @@ func TestEveryConstructor_isWellFormed(t *testing.T) {
 		{"TaskGitFailed(nil)", func() *RaidError { return TaskGitFailed(nil) }, CodeTaskGitFailed},
 		{"TaskHTTPFailed", func() *RaidError { return TaskHTTPFailed("u", errors.New("c")) }, CodeTaskHTTPFailed},
 		{"TaskHTTPFailed(nil)", func() *RaidError { return TaskHTTPFailed("u", nil) }, CodeTaskHTTPFailed},
+		{"VerifyFailed", func() *RaidError { return VerifyFailed("v", errors.New("c")) }, CodeVerifyFailed},
+		{"VerifyFailed(nil)", func() *RaidError { return VerifyFailed("v", nil) }, CodeVerifyFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

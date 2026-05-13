@@ -137,6 +137,20 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[strin
 	return lib.ExecuteRepoCommand(repoName, cmdName, args, named)
 }
 
+// Verify is a re-export of the declarative precondition entry used in
+// profiles and per-repo configs. See lib.Verify for the field
+// semantics.
+type Verify = lib.Verify
+
+// RunVerify executes a single verify entry: run Tasks; on failure, run
+// the optional OnFail remediation and re-run Tasks once. Returns nil
+// on success (including remediated success), or a structured
+// errs.VerifyFailed otherwise. Re-exported so cmd/doctor (#42) can call
+// it without reaching into internal/lib.
+func RunVerify(v Verify) error {
+	return lib.RunVerify(v)
+}
+
 // Severity indicates the importance of a Doctor finding.
 type Severity = lib.Severity
 

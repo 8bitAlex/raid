@@ -633,6 +633,27 @@
                 }
             },
             "additionalProperties": false
+        },
+        "verifyArray": {
+            "type": "array",
+            "description": "Declarative precondition checks. Each entry runs `tasks:` to assert a dependency or environmental precondition; if any task exits non-zero and `onFail:` is provided, raid runs the remediation once and re-runs `tasks:` exactly once. Verify entries are inert at the CLI today — `raid doctor` (#42) surfaces them as findings. Keep checks small and fast: each entry is run on every doctor invocation.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable label surfaced in failure messages and doctor's findings list."
+                    },
+                    "tasks": {
+                        "$ref": "#/properties/tasks"
+                    },
+                    "onFail": {
+                        "$ref": "#/properties/tasks"
+                    }
+                },
+                "required": ["name", "tasks"],
+                "additionalProperties": false
+            }
         }
     }
 }

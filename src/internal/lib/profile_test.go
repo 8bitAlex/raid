@@ -716,6 +716,84 @@ install:
 	}
 }
 
+// TestValidateProfile_verify exercises schema constraints on the
+// top-level `verify:` block: that valid entries pass, and that
+// entries missing `name` or `tasks` are rejected.
+func TestValidateProfile_verify(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{
+			name: "verify accepted with name, tasks, and onFail",
+			body: `name: t
+verify:
+  - name: Node installed
+    tasks:
+      - type: Shell
+        cmd: node --version
+    onFail:
+      - type: Shell
+        cmd: nvm install --lts
+`,
+		},
+		{
+			name: "verify accepted with only name and tasks",
+			body: `name: t
+verify:
+  - name: simple
+    tasks:
+      - type: Print
+        message: hi
+`,
+		},
+		{
+			name: "verify rejected when name is missing",
+			body: `name: t
+verify:
+  - tasks:
+      - type: Shell
+        cmd: node --version
+`,
+			wantErr: true,
+		},
+		{
+			name: "verify rejected when tasks is missing",
+			body: `name: t
+verify:
+  - name: Node installed
+`,
+			wantErr: true,
+		},
+		{
+			name: "verify rejected with unknown field",
+			body: `name: t
+verify:
+  - name: x
+    tasks:
+      - type: Shell
+        cmd: exit 0
+    bogus: nope
+`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "profile.yaml")
+			if err := os.WriteFile(path, []byte(tt.body), 0644); err != nil {
+				t.Fatalf("write profile: %v", err)
+			}
+			err := ValidateProfile(path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateProfile() err = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // --- WriteProfileFile ---
 
 func TestWriteProfileFile_createsFile(t *testing.T) {

@@ -46,6 +46,7 @@ func TestPublicSurface_constructorsRouteThrough(t *testing.T) {
 		{"TaskTemplateFailed", TaskTemplateFailed(nil), CodeTaskTemplateFailed, CategoryTask},
 		{"TaskGitFailed", TaskGitFailed(nil), CodeTaskGitFailed, CategoryTask},
 		{"TaskHTTPFailed", TaskHTTPFailed("u", nil), CodeTaskHTTPFailed, CategoryNetwork},
+		{"VerifyFailed", VerifyFailed("v", nil), CodeVerifyFailed, CategoryConfig},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
