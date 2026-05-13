@@ -41,8 +41,8 @@ If your profile or any repo's `raid.yaml` defines a [`verify:`](../references/sc
 
 Doctor runs verify tasks with the same execution context as `install:` — the active environment, raid vars, and task options all apply. A failure on one verify entry does not prevent subsequent entries from running, so you see the full health picture in a single pass.
 
-:::warning Verify tasks execute real commands
-Doctor invokes the actual `tasks:` and `onFail:` shell commands you've defined. Keep verify checks small, fast, and side-effect-light (a `node --version` probe, a `test -f`, a `Wait` against a local port). Heavy bootstrap work belongs in `install:`.
+:::warning Verify tasks execute real work
+Doctor invokes the actual `tasks:` and `onFail:` blocks you've defined — that's any task type raid supports (shell commands, HTTP, Git, Template, Prompt/Confirm, SetVar, …), not just shell. Non-shell tasks can still make network calls, mutate files, or prompt for input. Keep verify checks small, fast, and side-effect-light (a `node --version` probe, a `test -f`, a `Wait` against a local port). Heavy bootstrap work belongs in `install:`.
 :::
 
 ## When to run it

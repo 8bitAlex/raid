@@ -189,6 +189,21 @@ func checkRepo(repo Repo) []Finding {
 		Message:  "valid",
 	})
 
+	// Merge verify entries from the per-repo raid.yaml. The profile-level
+	// Repo only carries what's in the wrapping profile (or, for
+	// BuildSingleRepoProfile, just name/path/branch), so without this
+	// merge per-repo verify blocks would be silently skipped.
+	repoConfig, err := ExtractRepo(repo.Path)
+	if err != nil {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Check:    fmt.Sprintf("repo/%s raid.yaml", repo.Name),
+			Message:  err.Error(),
+		})
+		return findings
+	}
+	repo.Verify = append(repo.Verify, repoConfig.Verify...)
+
 	findings = append(findings, checkVerify(fmt.Sprintf("repo/%s verify", repo.Name), repo.Verify)...)
 	return findings
 }

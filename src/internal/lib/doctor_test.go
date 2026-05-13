@@ -479,7 +479,12 @@ verify:
 	}
 }
 
-func TestCheckRepo_runsRepoLevelVerify(t *testing.T) {
+// TestCheckRepo_loadsVerifyFromRaidYaml covers the doctor path's
+// responsibility for loading verify entries from the per-repo raid.yaml
+// itself. The Repo passed in has an empty Verify — production code paths
+// like BuildSingleRepoProfile only carry name/path/branch — so doctor
+// must read raid.yaml to surface its verify findings.
+func TestCheckRepo_loadsVerifyFromRaidYaml(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 	repoYaml := `name: r
@@ -495,10 +500,9 @@ verify:
 	}
 
 	repo := Repo{
-		Name:   "r",
-		Path:   dir,
-		URL:    "http://example.com/r.git",
-		Verify: []Verify{{Name: "hello", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+		Name: "r",
+		Path: dir,
+		URL:  "http://example.com/r.git",
 	}
 	findings := checkRepo(repo)
 	var sawVerify bool
@@ -508,7 +512,49 @@ verify:
 		}
 	}
 	if !sawVerify {
-		t.Errorf("expected 'repo/r verify/hello' OK finding, got %+v", findings)
+		t.Errorf("expected 'repo/r verify/hello' OK finding from raid.yaml, got %+v", findings)
+	}
+}
+
+// TestCheckRepo_mergesProfileAndRaidYamlVerify covers the case where the
+// profile-level Repo entry has its own verify and the per-repo raid.yaml
+// has additional verify entries — both should surface as findings.
+func TestCheckRepo_mergesProfileAndRaidYamlVerify(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+	repoYaml := `name: r
+branch: main
+verify:
+  - name: from-file
+    tasks:
+      - type: Shell
+        cmd: exit 0
+`
+	if err := os.WriteFile(filepath.Join(dir, RaidConfigFileName), []byte(repoYaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := Repo{
+		Name:   "r",
+		Path:   dir,
+		URL:    "http://example.com/r.git",
+		Verify: []Verify{{Name: "from-profile", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
+	}
+	findings := checkRepo(repo)
+	var sawProfile, sawFile bool
+	for _, f := range findings {
+		if f.Check == "repo/r verify/from-profile" && f.Severity == SeverityOK {
+			sawProfile = true
+		}
+		if f.Check == "repo/r verify/from-file" && f.Severity == SeverityOK {
+			sawFile = true
+		}
+	}
+	if !sawProfile {
+		t.Errorf("expected 'repo/r verify/from-profile' OK finding, got %+v", findings)
+	}
+	if !sawFile {
+		t.Errorf("expected 'repo/r verify/from-file' OK finding, got %+v", findings)
 	}
 }
 

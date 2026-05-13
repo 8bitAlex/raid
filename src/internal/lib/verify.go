@@ -36,9 +36,11 @@ func (v Verify) IsZero() bool {
 	return v.Name == "" && len(v.Tasks) == 0 && len(v.OnFail) == 0
 }
 
-// VerifyOutcome distinguishes a first-try pass from a successful
-// self-heal. Doctor maps these to OK / warn severities; a fourth state
-// (failed) is conveyed by RunVerify's error return.
+// VerifyOutcome is the tri-state result of running a verify entry:
+// OK (first-try pass), Remediated (self-heal succeeded), or Failed.
+// Doctor maps OK/Remediated to OK/warn severities and Failed to an
+// error severity; RunVerify also returns a non-nil error alongside
+// VerifyOutcomeFailed so direct callers get the underlying cause.
 type VerifyOutcome int
 
 const (

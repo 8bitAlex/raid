@@ -636,7 +636,7 @@
         },
         "verifyArray": {
             "type": "array",
-            "description": "Declarative precondition checks. Each entry runs `tasks:` to assert a dependency or environmental precondition; if any task exits non-zero and `onFail:` is provided, raid runs the remediation once and re-runs `tasks:` exactly once. Verify entries are inert at the CLI today — `raid doctor` (#42) surfaces them as findings. Keep checks small and fast: each entry is run on every doctor invocation.",
+            "description": "Declarative precondition checks. Each entry runs `tasks:` to assert a dependency or environmental precondition; if any task exits non-zero and `onFail:` is provided, raid runs the remediation once and re-runs `tasks:` exactly once. `raid doctor` runs every verify entry on the active profile and per-repo `raid.yaml` files and surfaces each as a finding (ok / warn / error). Keep checks small and fast: each entry is run on every doctor invocation.",
             "items": {
                 "type": "object",
                 "properties": {
