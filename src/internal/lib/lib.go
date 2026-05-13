@@ -437,7 +437,11 @@ func sanitizeRepoVarName(name string) string {
 // installRepo clones a single repository and runs its install tasks.
 func installRepo(repo Repo) error {
 	if err := CloneRepository(repo); err != nil {
-		return liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "failed to clone repository '%s': %v", repo.Name, err)
+		// CloneRepository already returns structured errors with codes,
+		// categories, and hints (CLONE_FAILED, GIT_NOT_INSTALLED,
+		// REPO_NOT_CLONED). Re-wrapping would misclassify non-network
+		// failures and drop the original hint/details.
+		return err
 	}
 	if err := ExecuteTasks(withDefaultDir(repo.Install.Tasks, sys.ExpandPath(repo.Path))); err != nil {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to execute install tasks for '%s': %v", repo.Name, err)
@@ -501,7 +505,10 @@ func Install(maxThreads int) error {
 				<-semaphore
 			}
 			if err != nil {
-				cloneErrs <- liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "failed to clone repository '%s': %v", repo.Name, err)
+				// Preserve the structured error from CloneRepository
+				// (CLONE_FAILED, GIT_NOT_INSTALLED, REPO_NOT_CLONED, etc.)
+				// so the aggregate below can expose each per-repo cause.
+				cloneErrs <- err
 			}
 		}(repo)
 	}
@@ -514,7 +521,12 @@ func Install(maxThreads int) error {
 		collected = append(collected, err)
 	}
 	if len(collected) > 0 {
-		return liberrs.Newf(liberrs.CodeCloneFailed, liberrs.CategoryNetwork, "some repositories failed to clone: %v", collected)
+		// If only one repo failed, surface its structured error directly
+		// so its code/category/hint/details survive untouched.
+		if len(collected) == 1 {
+			return collected[0]
+		}
+		return liberrs.CloneFailedMulti(collected)
 	}
 
 	// Phase 2: run profile-level install tasks before any repo tasks.

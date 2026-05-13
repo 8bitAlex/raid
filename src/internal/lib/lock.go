@@ -40,7 +40,10 @@ func lockPath() string {
 func AcquireMutationLock() (func(), error) {
 	path := lockPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, liberrs.Newf(liberrs.CodeLockFailed, liberrs.CategoryGeneric, "create raid config dir: %v", err)
+		// Route through LockFailed so the user-visible hint about
+		// ~/.raid/.lock is included consistently across every lock
+		// acquisition failure.
+		return nil, liberrs.LockFailed(fmt.Errorf("create raid config dir: %w", err))
 	}
 	lk := flock.New(path)
 	if err := lk.Lock(); err != nil {

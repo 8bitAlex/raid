@@ -151,15 +151,32 @@ func newRaidError(code string, category Category, message, hint string, details 
 // (preserve-back-compat) error message but want to participate in the
 // structured error system. Prefer the dedicated constructors below when
 // the situation matches an existing code.
+//
+// If the final argument is an error, it is captured as the wrapped cause
+// (so errors.Is / errors.As keep working) regardless of the format
+// verbs. Callers that pass an error purely as a formatting argument and
+// do NOT want it captured should convert it (e.g. err.Error()) first.
 func Newf(code string, category Category, format string, args ...any) *RaidError {
 	var cause error
-	// Last arg is a cause if it's an error and the format ends with %w/%v.
 	if n := len(args); n > 0 {
 		if e, ok := args[n-1].(error); ok {
 			cause = e
 		}
 	}
 	return newRaidError(code, category, formatMsg(format, args...), "", nil, cause)
+}
+
+// joinErrors wraps a slice of errors so errors.Is / errors.As can walk
+// each one. nil-safe; returns nil for empty input.
+func joinErrors(errs []error) error {
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errs[0]
+	default:
+		return errors.Join(errs...)
+	}
 }
 
 // AsError walks the wrapped-error chain and returns the first Error.

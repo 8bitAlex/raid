@@ -160,20 +160,32 @@ func executeRoot(args []string) int {
 	rootCmd.SetArgs(args[1:])
 
 	if err := rootCmd.Execute(); err != nil {
-		// Subprocess exits keep their own status — preserve prior behavior
-		// for Shell / Script task failures so $? matches what the user's
-		// command returned.
+		rErr, isStructured := errs.AsError(err)
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		hasExit := errors.As(err, &exitErr)
+
+		// A plain exec.ExitError (no structured wrapping) means the
+		// subprocess already printed its own stderr — don't double-report,
+		// just propagate the subprocess exit status so $? matches.
+		if hasExit && !isStructured {
 			return exitErr.ExitCode()
 		}
+
+		// Structured errors (including ones that wrap exec.ExitError, e.g.
+		// TASK_SHELL_FAILED) should still surface their code/hint/JSON so
+		// --json consumers see the error shape. After emitting, preserve
+		// the subprocess exit code when one is available so shell pipelines
+		// keep working.
 		if jsonModeFromArgs(args) {
 			errs.EmitJSON(os.Stderr, err)
 		} else {
 			fmt.Fprintln(os.Stderr, "raid:", err)
-			if rErr, ok := errs.AsError(err); ok && rErr.Hint() != "" {
+			if isStructured && rErr.Hint() != "" {
 				fmt.Fprintln(os.Stderr, "hint:", rErr.Hint())
 			}
+		}
+		if hasExit {
+			return exitErr.ExitCode()
 		}
 		return errs.ExitCode(err)
 	}

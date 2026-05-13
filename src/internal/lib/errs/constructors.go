@@ -131,6 +131,36 @@ func CloneFailed(name, url string, cause error) *RaidError {
 		map[string]any{"repo": name, "url": url}, cause)
 }
 
+// CloneFailedMulti aggregates multiple per-repo clone failures into a
+// single structured error while preserving each cause for unwrap-style
+// inspection (errors.Is / errors.As walk through joinedErrors). The
+// details map carries a per-repo summary (code, category, message) so
+// JSON consumers can read each failure without unwrapping.
+func CloneFailedMulti(causes []error) *RaidError {
+	joined := joinErrors(causes)
+	msg := "some repositories failed to clone"
+	if joined != nil {
+		msg = formatMsg("some repositories failed to clone: %v", joined)
+	}
+	repos := make([]map[string]any, 0, len(causes))
+	for _, c := range causes {
+		entry := map[string]any{"message": c.Error()}
+		if rErr, ok := AsError(c); ok {
+			entry["code"] = rErr.Code()
+			entry["category"] = rErr.Category().String()
+			for k, v := range rErr.Details() {
+				if k == "repo" || k == "url" {
+					entry[k] = v
+				}
+			}
+		}
+		repos = append(repos, entry)
+	}
+	return newRaidError(CodeCloneFailed, CategoryNetwork, msg,
+		"Verify each repository URL is reachable and you have permission to clone it.",
+		map[string]any{"failures": repos, "count": len(causes)}, joined)
+}
+
 // EnvNotFound — environment name not declared.
 func EnvNotFound(name string) *RaidError {
 	return newRaidError(CodeEnvNotFound, CategoryNotFound,
