@@ -655,6 +655,13 @@ install:
     - type: Shell
       cmd: 'true'
       options: {showExeTime: true, continueOnFailure: true}
+    - type: Group
+      ref: cleanup
+      options: {continueOnFailure: true}
+task_groups:
+  cleanup:
+    - type: Shell
+      cmd: 'true'
 `
 	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
 		t.Fatalf("setup: %v", err)
