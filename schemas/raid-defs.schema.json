@@ -625,6 +625,11 @@
                     "type": "boolean",
                     "description": "When true, print a dim line to stderr after the task (or command) completes showing the elapsed time, e.g. `task-name complete in 1.2s`.",
                     "default": false
+                },
+                "continueOnFailure": {
+                    "type": "boolean",
+                    "description": "When true, a non-zero exit from this task does not abort the parent command — subsequent tasks still run and the failure is reported as a warning on stderr. The overall command exit code is only affected by non-ignored failures. Useful for cleanup teardown, best-effort lint/format steps, and optional probes. No effect on commands.",
+                    "default": false
                 }
             },
             "additionalProperties": false

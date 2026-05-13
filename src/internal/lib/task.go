@@ -35,10 +35,16 @@ type TaskProps struct {
 // task types and to user-defined commands. New fields ship additively; old
 // fields keep their semantics across minor versions.
 type TaskOptions struct {
-	// ShowExeTime, when true, prints a dim "→ <label> (1.2s)" line to
-	// stderr after the task (or command) completes — for both success and
-	// failure, so the elapsed time is always visible.
+	// ShowExeTime, when true, prints a dim "<label> complete in <time>"
+	// line to stderr after the task (or command) completes — for both
+	// success and failure, so the elapsed time is always visible.
 	ShowExeTime bool `json:"showExeTime,omitempty" yaml:"showExeTime,omitempty"`
+	// ContinueOnFailure, when true, lets a non-zero task exit slip past
+	// the sequencer: subsequent tasks still run and the parent command's
+	// exit code is unaffected by this task. A dim warning is logged to
+	// stderr so the ignored failure remains visible. Only meaningful on
+	// tasks — has no effect when set on a command's own options.
+	ContinueOnFailure bool `json:"continueOnFailure,omitempty" yaml:"continueOnFailure,omitempty"`
 }
 
 // Label returns the human-readable identifier for a task: its `name:`

@@ -610,6 +610,60 @@ commands:
 	}
 }
 
+// TestValidateProfile_continueOnFailure_acceptedOnEveryTaskType locks
+// the schema contract for the new `options.continueOnFailure` field —
+// every task variant must accept it without re-declaration.
+func TestValidateProfile_continueOnFailure_acceptedOnEveryTaskType(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	body := `name: cof
+install:
+  tasks:
+    - type: Shell
+      cmd: 'true'
+      options: {continueOnFailure: true}
+    - type: Script
+      path: ./x.sh
+      options: {continueOnFailure: true}
+    - type: HTTP
+      url: 'https://example.com/a'
+      dest: /tmp/a
+      options: {continueOnFailure: true}
+    - type: Wait
+      url: 'https://example.com/ready'
+      options: {continueOnFailure: true}
+    - type: Template
+      src: ./t.tmpl
+      dest: /tmp/out
+      options: {continueOnFailure: true}
+    - type: Git
+      op: pull
+      options: {continueOnFailure: true}
+    - type: Prompt
+      var: NAME
+      options: {continueOnFailure: true}
+    - type: Confirm
+      message: ok?
+      options: {continueOnFailure: true}
+    - type: Print
+      message: hi
+      options: {continueOnFailure: true}
+    - type: Set
+      var: X
+      value: y
+      options: {continueOnFailure: true}
+    - type: Shell
+      cmd: 'true'
+      options: {showExeTime: true, continueOnFailure: true}
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if err := ValidateProfile(path); err != nil {
+		t.Fatalf("ValidateProfile() unexpected error: %v", err)
+	}
+}
+
 func TestValidateProfile_optionsRejectsUnknownField(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "profile.yaml")

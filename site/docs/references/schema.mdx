@@ -246,6 +246,7 @@ The `options:` block is shared by every task type and by user-defined commands. 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `showExeTime` | bool | `false` | When true, raid prints a dim line to stderr after the task (or command) completes: `<name> complete in 1.2s`. Fires for both success and failure. On a command this fires once for the whole command's elapsed time; on a task it fires for that single task. The two are independent — set both to time the command end-to-end *and* see per-task breakdowns. |
+| `continueOnFailure` | bool | `false` | When true, a non-zero exit from this task does not abort the parent command — subsequent tasks still run and a dim warning is logged to stderr (`warning: <name> failed (continueOnFailure): <err>`). The command's overall exit code is only affected by *non-ignored* failures, so this lets you opt into best-effort steps (cleanup teardown, lint/format probes, optional checks) without losing the ability to detect strict failures elsewhere. Only meaningful on tasks; no effect when set on a command's own `options`. |
 
 ```yaml
 commands:
@@ -272,6 +273,29 @@ server-build complete in 164.1s
 client-install complete in 0.9s
 build complete in 165.0s
 ```
+
+`continueOnFailure` makes a task best-effort — its non-zero exit logs a warning but doesn't abort the command:
+
+```yaml
+commands:
+  - name: ci
+    tasks:
+      - type: Shell
+        name: lint
+        cmd: golangci-lint run
+        options:
+          continueOnFailure: true   # don't fail CI on lint findings
+      - type: Shell
+        name: test
+        cmd: go test ./...          # real failures still abort
+      - type: Shell
+        name: cleanup-cache
+        cmd: rm -rf .cache
+        options:
+          continueOnFailure: true   # cleanup is best-effort
+```
+
+If `golangci-lint` reports findings, raid prints `warning: lint failed (continueOnFailure): …` to stderr but still runs `go test`. A failing test then aborts the command with the usual error path.
 
 ### Condition
 

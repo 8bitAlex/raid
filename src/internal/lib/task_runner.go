@@ -114,11 +114,23 @@ func ExecuteTasks(tasks []Task) error {
 			go func(task Task) {
 				defer wg.Done()
 				if err := ExecuteTask(task); err != nil {
+					if isContinueOnFailure(task) {
+						emitContinueOnFailureWarning(task, err)
+						return
+					}
 					errorChan <- err
 				}
 			}(task)
 		} else {
 			if err := ExecuteTask(task); err != nil {
+				if isContinueOnFailure(task) {
+					// Best-effort task — log a warning and keep going.
+					// The error is swallowed for the purposes of the
+					// command's exit code; concurrent peers still run
+					// to completion.
+					emitContinueOnFailureWarning(task, err)
+					continue
+				}
 				// Wait for any already-started concurrent tasks before returning.
 				wg.Wait()
 				close(errorChan)
@@ -140,6 +152,25 @@ func ExecuteTasks(tasks []Task) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// isContinueOnFailure reports whether the task's options opt into
+// best-effort execution. Nil-safe so callers don't need to guard the
+// pointer dereference at every site.
+func isContinueOnFailure(t Task) bool {
+	return t.Options != nil && t.Options.ContinueOnFailure
+}
+
+// emitContinueOnFailureWarning prints a dim "warning: <label> failed
+// (continueOnFailure): <err>" line to commandStderr so the ignored
+// failure remains visible to the operator. Matches the dim styling
+// used by showExeTime so the auxiliary lines read consistently.
+func emitContinueOnFailureWarning(t Task, err error) {
+	const (
+		dim   = "\033[2m"
+		reset = "\033[0m"
+	)
+	fmt.Fprintf(commandStderr, "%swarning: %s failed (continueOnFailure): %v%s\n", dim, t.Label(), err, reset)
 }
 
 func ExecuteTask(task Task) error {
