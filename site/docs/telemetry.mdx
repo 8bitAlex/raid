@@ -9,7 +9,7 @@ description: What raid's opt-in anonymous CLI telemetry collects, what it never 
 
 raid ships an **opt-in, anonymous** CLI telemetry pipeline so the team can prioritize features against real usage signal — which task types matter, which commands fail, which features go unused — without ever capturing what you actually run.
 
-**Off by default.** A fresh install never sends anything to the telemetry endpoint until you explicitly run `raid telemetry on` (or accept the first-run prompt). When opted out, raid makes zero telemetry / PostHog requests, and there's an integration test that pins this contract. (raid still performs an unrelated GitHub release-version check on normal invocations regardless of telemetry state — that request is independent of this pipeline.)
+**Off by default.** A fresh install never sends anything to the telemetry endpoint until you explicitly run `raid telemetry on` (or accept the first-run prompt). The one narrow exception is the [follow-up question](#follow-up-may-we-record-the-denial): if you decline the first-run prompt and then explicitly answer yes to the follow-up, raid sends exactly one anonymous `raid_telemetry_opt_out` event and then stays off forever. Answering no to the follow-up (or skipping it for any reason) means raid still sends nothing. When opted out, raid makes zero further telemetry / PostHog requests, and there's an integration test that pins this contract. (raid still performs an unrelated GitHub release-version check on normal invocations regardless of telemetry state — that request is independent of this pipeline.)
 
 ## What raid collects
 
@@ -19,7 +19,7 @@ raid ships an **opt-in, anonymous** CLI telemetry pipeline so the team can prior
 | `raid_command_executed` | `command_name`, `task_count`, `task_types[]`, `duration_ms`, `success` |
 | `raid_command_failed` | `command_name`, `error_code` (from the [errors table](references/errors)), `duration_ms` |
 | `raid_task_executed` | `task_type`, `duration_ms`, `success` — **sampled** at ~10% to bound volume |
-| `raid_telemetry_opt_out` | `reason` (optional free-text from `raid telemetry off --why "..."`) |
+| `raid_telemetry_opt_out` | `reason` — either `"prompt-declined"` (set automatically when you accept the [follow-up question](#follow-up-may-we-record-the-denial)) or the free-text string from `raid telemetry off --why "..."`. Optional; absent when neither path was used. |
 
 **Every event also carries:** `distinct_id` (anonymous UUIDv4 from `~/.config/raid/telemetry-id`), `raid_version`, `os` (e.g. `darwin`/`linux`/`windows`), `arch` (e.g. `arm64`/`amd64`).
 
@@ -48,6 +48,23 @@ See: https://raidcli.dev/docs/telemetry
 ```
 
 Default is **no** (capital `N`). `[?]` shows the long-form disclosure inline and re-asks.
+
+### Follow-up: may we record the denial?
+
+If you decline the first prompt, raid asks one follow-up question:
+
+```
+Telemetry is off. May raid send a single anonymous event recording your decision?
+This is the only event raid would ever send; it helps the project measure how
+many users opt out vs. opt in. Same anonymity guarantees as above.
+
+  [y] yes, send once       [N] no, send nothing at all
+> 
+```
+
+Default is **no** again. Answering yes fires exactly one `raid_telemetry_opt_out` event (with `reason: "prompt-declined"`) and then leaves telemetry permanently off — that's the whole transaction. Answering no (or hitting Enter) skips the network entirely; raid touches zero endpoints for the remainder of the install.
+
+The follow-up exists because opt-out rate is the most useful single signal for the project: without it, we can't tell whether a quiet user has opted out actively or just never finished setup. It's also why the follow-up exists *only* on the explicit-decline path — when you skip the first prompt for any other reason (non-TTY, headless, `DO_NOT_TRACK`, etc.), raid never asks anything further.
 
 **Non-interactive contexts skip the prompt entirely and leave telemetry off.** Specifically, raid does not prompt when:
 

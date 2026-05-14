@@ -17,11 +17,18 @@
 //
 // The package is read-only side-effect-free for users who never opt
 // in via prompt or `raid telemetry on`: no goroutines spawned, no
-// HTTP calls. The one exception is the consent-decision marker —
-// MaybePromptForConsent persists a "decided=off" entry to viper when
-// the prompt is skipped (DO_NOT_TRACK, non-TTY, headless) so we don't
-// re-prompt on the next interactive run. No anonymous ID is created
-// or written until the user explicitly opts in.
+// HTTP calls. Two narrow exceptions exist:
+//   - MaybePromptForConsent persists a "decided=off" entry to viper
+//     when the prompt is skipped (DO_NOT_TRACK, non-TTY, headless) so
+//     we don't re-prompt on the next interactive run. No anonymous ID
+//     or network traffic results.
+//   - CaptureOptOutConsented, used only by the first-run follow-up
+//     prompt when a declining user explicitly consents to record their
+//     decision, creates an anonymous ID and sends exactly one
+//     `raid_telemetry_opt_out` event before leaving telemetry off
+//     forever. This is per-event consent, never state-level.
+// Outside of those two paths, no anonymous ID is created or written
+// until the user explicitly opts in.
 package telemetry
 
 import (
@@ -96,6 +103,35 @@ func Capture(name string, properties map[string]any) {
 		defer inflight.Done()
 		send(Event{Name: name, Properties: full})
 	}()
+}
+
+// CaptureOptOutConsented fires the opt-out event under explicit
+// per-event consent — used by the first-run prompt when a user
+// declines telemetry generally but agrees to send a single
+// anonymous "denial recorded" event. Bypasses the standard
+// IsActive() gate (which would short-circuit because consent has
+// just been set to off, or is still undecided) but still respects
+// the two hard kill-switches: a build with no APIKey and a
+// DO_NOT_TRACK env var. Synchronous so the event has its best
+// chance to land before raid exits.
+//
+// Callers MUST ensure the user has explicitly consented to this
+// specific event — never call this for any other purpose, and
+// never extend it to a general "bypass" capture path. The whole
+// trust model of telemetry rests on consent being explicit at the
+// event level when state-level consent isn't true.
+func CaptureOptOutConsented(reason string) {
+	if APIKey == "" {
+		return
+	}
+	if isDoNotTrack() {
+		return
+	}
+	id := loadOrCreateID()
+	if id == "" {
+		return
+	}
+	send(Event{Name: EventTelemetryOptOut, Properties: enrichProperties(id, OptOutProps(reason))})
 }
 
 // CaptureSync is Capture's blocking variant. Used by `raid telemetry
