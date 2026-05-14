@@ -10,6 +10,7 @@ import (
 
 	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/internal/telemetry"
 )
 
 // Command is a named, user-defined CLI command that can be invoked via 'raid <name>'.
@@ -106,6 +107,7 @@ func ExecuteCommand(name string, args []string, named map[string]string) error {
 	startedAt := RecordRecentStart(found.Name)
 	err := runCommand(found)
 	RecordRecentEnd(found.Name, err, startedAt)
+	captureCommandTelemetry(found, err, time.Since(startedAt))
 	return err
 }
 
@@ -145,7 +147,53 @@ func ExecuteRepoCommand(repoName, cmdName string, args []string, named map[strin
 	startedAt := RecordRecentStart(recentName)
 	err := runCommand(found)
 	RecordRecentEnd(recentName, err, startedAt)
+	captureCommandTelemetry(found, err, time.Since(startedAt))
 	return err
+}
+
+// captureCommandTelemetry fires the appropriate raid_command_executed
+// or raid_command_failed event for the run. Sanitized: only the
+// command's `name:` field (project-author label, not user content),
+// the task-type list, the structured error code, and timing reach the
+// payload. Cmd bodies, args, paths, and env values are never touched.
+//
+// Telemetry.Capture is a no-op when consent is off so this is safe to
+// call unconditionally. The unused parameters are tolerated by the
+// shared sanitizer below.
+func captureCommandTelemetry(cmd Command, err error, dur time.Duration) {
+	durMs := dur.Milliseconds()
+	if err == nil {
+		telemetry.Capture(
+			telemetry.EventCommandExecuted,
+			telemetry.CommandExecutedProps(cmd.Name, len(cmd.Tasks), commandTaskTypes(cmd), durMs),
+		)
+		return
+	}
+	telemetry.Capture(
+		telemetry.EventCommandFailed,
+		telemetry.CommandFailedProps(cmd.Name, errorCodeFor(err), durMs),
+	)
+}
+
+// commandTaskTypes returns the list of task-type strings used by the
+// command. Type only — no cmd, path, var, or message. Order
+// preserved so the per-command structure stays visible in PostHog.
+func commandTaskTypes(cmd Command) []string {
+	out := make([]string, 0, len(cmd.Tasks))
+	for _, t := range cmd.Tasks {
+		out = append(out, string(t.Type))
+	}
+	return out
+}
+
+// errorCodeFor returns the structured-error code for an error if
+// available, or "UNKNOWN" otherwise. Never returns the error's
+// message — that can contain user content.
+func errorCodeFor(err error) string {
+	if rErr, ok := liberrs.AsError(err); ok {
+		return rErr.Code()
+	}
+	return "UNKNOWN"
 }
 
 // setCommandArgs binds positional args to RAID_ARG_N and named args/flags to

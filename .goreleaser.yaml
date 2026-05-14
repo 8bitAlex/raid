@@ -20,6 +20,12 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
+      # Inject the PostHog publishable project key at build time. Dev
+      # builds and `go run` leave this empty, which makes the
+      # telemetry package no-op (no events sent). Set
+      # POSTHOG_API_KEY in the release CI environment to populate it
+      # for tagged builds. See src/internal/telemetry/telemetry.go.
+      - -X github.com/8bitalex/raid/src/internal/telemetry.APIKey={{ envOrDefault "POSTHOG_API_KEY" "" }}
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

@@ -14,8 +14,10 @@ import (
 	"github.com/8bitalex/raid/src/cmd/env"
 	"github.com/8bitalex/raid/src/cmd/install"
 	"github.com/8bitalex/raid/src/cmd/profile"
+	telemetrycmd "github.com/8bitalex/raid/src/cmd/telemetry"
 	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/internal/telemetry"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
@@ -28,6 +30,7 @@ var reservedNames = map[string]bool{
 	"env":        true,
 	"doctor":     true,
 	"context":    true,
+	"telemetry":  true,
 	"help":       true,
 	"version":    true,
 	"completion": true,
@@ -59,6 +62,7 @@ func init() {
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(doctor.Command)
 	rootCmd.AddCommand(contextcmd.Command)
+	rootCmd.AddCommand(telemetrycmd.Command)
 }
 
 // isInfoCommand reports whether the invocation is for a built-in informational
@@ -162,6 +166,21 @@ func executeRoot(args []string) int {
 	// caller is providing a different args list (e.g. during tests).
 	rootCmd.SetArgs(args[1:])
 
+	// First-run consent prompt for telemetry. Runs only for non-info,
+	// non-telemetry-subcommand invocations to avoid prompting on
+	// `raid --help`, `raid telemetry on`, and similar. The prompt
+	// itself no-ops when stdin isn't a TTY or when --yes/--headless
+	// is set, so this is safe in CI / pipes / agent hosts. See
+	// telemetry.MaybePromptForConsent for the full skip matrix.
+	if !info && !isTelemetrySubcommand(args) {
+		_ = telemetry.MaybePromptForConsent(headlessFromArgs(args) || jsonModeFromArgs(args))
+	}
+
+	// Flush any pending telemetry events before exit so async sends
+	// don't get dropped when raid returns. The deadline is short so a
+	// stuck network can't drag out shutdown.
+	defer telemetry.Flush(1500 * time.Millisecond)
+
 	if err := rootCmd.Execute(); err != nil {
 		rErr, isStructured := errs.AsError(err)
 		var exitErr *exec.ExitError
@@ -215,6 +234,45 @@ func applyHeadlessFlag(cmd *cobra.Command, _ []string) error {
 		os.Setenv(lib.HeadlessEnvVar, "1")
 	}
 	return nil
+}
+
+// isTelemetrySubcommand reports whether the user invoked one of the
+// `raid telemetry ...` subcommands. The first-run consent prompt must
+// skip these — prompting "do you want telemetry?" right before
+// running `raid telemetry on` is hostile UX, and the off/status/
+// purge/preview commands need to work for users who haven't opted in.
+func isTelemetrySubcommand(args []string) bool {
+	for _, a := range args[1:] {
+		if a == "--" {
+			return false
+		}
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		return a == "telemetry"
+	}
+	return false
+}
+
+// headlessFromArgs is the early-scan counterpart to jsonModeFromArgs
+// for the headless persistent flag. The first-run prompt needs to
+// know the user's headless intent before cobra has parsed flags so
+// it can skip prompting in non-interactive contexts. Matches every
+// flag form: `-y`, `--yes`, `--yes=true`, `--headless`,
+// `--headless=true`, plus their explicit `=false` opt-outs.
+func headlessFromArgs(args []string) bool {
+	for _, a := range args[1:] {
+		if a == "--" {
+			break
+		}
+		switch {
+		case a == "-y", a == "--yes", a == "--yes=true", a == "--headless", a == "--headless=true":
+			return true
+		case a == "--yes=false", a == "--headless=false":
+			return false
+		}
+	}
+	return false
 }
 
 // jsonModeFromArgs reports whether the user passed `--json` (or
