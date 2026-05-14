@@ -74,6 +74,50 @@ type WorkspaceCommand struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Steps       []WorkspaceStep `json:"steps,omitempty"`
+	// Agent is the resolved MCP-facing safety hint. Always emitted so
+	// clients can rely on `agent.safe` being present — a command with
+	// no `agent:` block in YAML surfaces as `{safe: false}`.
+	Agent WorkspaceAgent `json:"agent"`
+}
+
+// WorkspaceAgent is the wire form of Agent. `Safe` has no `omitempty`
+// so it's always present in the JSON, which is load-bearing for the
+// "default unsafe" contract — clients can read `agent.safe` without
+// distinguishing absence from `false`.
+type WorkspaceAgent struct {
+	Safe        bool     `json:"safe"`
+	Reads       []string `json:"reads,omitempty"`
+	Writes      []string `json:"writes,omitempty"`
+	Description string   `json:"description,omitempty"`
+}
+
+// resolveAgent flattens a Command's optional Agent block into the
+// always-emitted wire form. A nil Agent yields `{Safe: false}` with
+// Description falling back to the command's `usage`. When the block
+// is present, an empty Description still falls back to `usage` so
+// MCP clients always see a non-empty descriptor.
+func resolveAgent(cmd Command) WorkspaceAgent {
+	if cmd.Agent == nil {
+		return WorkspaceAgent{Description: descriptionFallback(cmd, "")}
+	}
+	return WorkspaceAgent{
+		Safe:        cmd.Agent.Safe,
+		Reads:       cmd.Agent.Reads,
+		Writes:      cmd.Agent.Writes,
+		Description: descriptionFallback(cmd, cmd.Agent.Description),
+	}
+}
+
+// descriptionFallback guarantees a non-empty descriptor for MCP clients:
+// agent.description → usage → command name.
+func descriptionFallback(cmd Command, desc string) string {
+	if desc != "" {
+		return desc
+	}
+	if cmd.Usage != "" {
+		return cmd.Usage
+	}
+	return cmd.Name
 }
 
 // WorkspaceStep describes one named task inside a command's task sequence.
@@ -133,6 +177,7 @@ func GetWorkspaceContext() WorkspaceContext {
 			Name:        cmd.Name,
 			Description: cmd.Usage,
 			Steps:       collectSteps(cmd.Tasks),
+			Agent:       resolveAgent(cmd),
 		})
 	}
 	return wc

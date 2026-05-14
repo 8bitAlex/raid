@@ -20,7 +20,11 @@ type Command struct {
 	Flags   []Flag       `json:"flags,omitempty"`
 	Tasks   []Task       `json:"tasks"`
 	Options *TaskOptions `json:"options,omitempty"`
-	Out     *Output      `json:"out,omitempty"`
+	// Agent carries optional MCP-facing safety metadata. A nil Agent
+	// surfaces to MCP clients as `{safe: false}` so unannotated
+	// commands keep their "requires confirmation" semantics.
+	Agent *Agent  `json:"agent,omitempty"`
+	Out   *Output `json:"out,omitempty"`
 }
 
 // Arg declares a positional argument for a custom command. The supplied value

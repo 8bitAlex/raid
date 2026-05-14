@@ -120,6 +120,66 @@ func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 	}
 }
 
+// TestGetWorkspaceContext_populatesAgentForProfileCommands verifies that a
+// command's agent block flows into the WorkspaceCommand snapshot.
+func TestGetWorkspaceContext_populatesAgentForProfileCommands(t *testing.T) {
+	resetWorkspaceContextState(t)
+	context = &Context{
+		Profile: Profile{
+			Name: "demo",
+			Path: "/tmp/demo.raid.yaml",
+			Commands: []Command{
+				{Name: "test", Usage: "Run tests", Agent: &Agent{Safe: true, Reads: []string{"./..."}}},
+				{Name: "deploy", Usage: "Deploy"}, // no Agent block
+			},
+		},
+	}
+
+	got := GetWorkspaceContext()
+	if len(got.Workspace.Commands) != 2 {
+		t.Fatalf("Commands len = %d, want 2", len(got.Workspace.Commands))
+	}
+	if !got.Workspace.Commands[0].Agent.Safe {
+		t.Errorf("Commands[0].Agent.Safe = false, want true")
+	}
+	if got.Workspace.Commands[1].Agent.Safe {
+		t.Errorf("Commands[1].Agent.Safe = true, want false (no Agent block)")
+	}
+}
+
+// TestGetWorkspaceContext_populatesAgentForRepoMergedCommands verifies the
+// mergeCommands path: per-repo raid.yaml commands get hoisted into
+// profile.Commands at load time (lib.go:358), and their agent metadata must
+// survive that merge into WorkspaceCommand. Regression guard.
+func TestGetWorkspaceContext_populatesAgentForRepoMergedCommands(t *testing.T) {
+	resetWorkspaceContextState(t)
+	repoCommand := Command{
+		Name:  "smoke",
+		Usage: "Smoke test the api",
+		Agent: &Agent{Safe: true, Description: "Idempotent smoke test, safe to auto-run"},
+	}
+	merged := mergeCommands(nil, []Command{repoCommand})
+	context = &Context{
+		Profile: Profile{
+			Name:     "demo",
+			Path:     "/tmp/demo.raid.yaml",
+			Commands: merged,
+		},
+	}
+
+	got := GetWorkspaceContext()
+	if len(got.Workspace.Commands) != 1 {
+		t.Fatalf("Commands len = %d, want 1", len(got.Workspace.Commands))
+	}
+	wc := got.Workspace.Commands[0]
+	if !wc.Agent.Safe {
+		t.Error("repo-merged command's Agent.Safe = false, want true")
+	}
+	if wc.Agent.Description != "Idempotent smoke test, safe to auto-run" {
+		t.Errorf("Agent.Description = %q, want explicit override from repo command", wc.Agent.Description)
+	}
+}
+
 // TestGetWorkspaceContext_commandStepsOnlyNamedTasks verifies that named tasks
 // surface as steps and unnamed tasks are skipped, preserving the original
 // task order.
