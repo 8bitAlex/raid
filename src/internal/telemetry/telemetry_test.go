@@ -622,6 +622,194 @@ func TestMaybePromptForConsent_explainerThenAccept(t *testing.T) {
 	}
 }
 
+// --- Follow-up opt-out event consent ---
+
+// TestMaybePromptForConsent_declineThenConsentToOptOutEvent covers
+// the happy path of the follow-up prompt: user declines telemetry
+// generally, then opts into sending a single anonymous
+// "denial recorded" event so the project can measure opt-out
+// rates. The event must land via the bypass path
+// (CaptureOptOutConsented) because the standard IsActive() gate is
+// false at that moment.
+func TestMaybePromptForConsent_declineThenConsentToOptOutEvent(t *testing.T) {
+	setupTestEnv(t)
+	isInteractiveFn = func() bool { return true }
+	// "n" declines the first prompt; "y" accepts the follow-up.
+	r := strings.NewReader("n\ny\n")
+	promptInFn = func() io.Reader { return r }
+	promptOutFn = func() io.Writer { return io.Discard }
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	got := MaybePromptForConsent(false)
+	if got != PromptDeclined {
+		t.Errorf("outcome = %v, want PromptDeclined", got)
+	}
+	st := LoadState()
+	if !st.Decided || st.Enabled {
+		t.Errorf("state = %+v, want decided=true enabled=false after decline", st)
+	}
+	if h := atomic.LoadInt32(&hits); h != 1 {
+		t.Errorf("opt-out event delivered %d times, want 1", h)
+	}
+}
+
+// TestMaybePromptForConsent_declineRefuseOptOutEventSendsNothing
+// covers the conservative default — declining the main prompt and
+// then declining the follow-up must send zero events. This is the
+// trust-preserving path: a user who chose "no" twice should leave
+// the binary in a state that has touched the network zero times.
+func TestMaybePromptForConsent_declineRefuseOptOutEventSendsNothing(t *testing.T) {
+	setupTestEnv(t)
+	isInteractiveFn = func() bool { return true }
+	r := strings.NewReader("n\nn\n")
+	promptInFn = func() io.Reader { return r }
+	promptOutFn = func() io.Writer { return io.Discard }
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	got := MaybePromptForConsent(false)
+	if got != PromptDeclined {
+		t.Errorf("outcome = %v, want PromptDeclined", got)
+	}
+	if h := atomic.LoadInt32(&hits); h != 0 {
+		t.Errorf("refusing follow-up sent %d events, want 0", h)
+	}
+}
+
+// TestMaybePromptForConsent_declineEmptyFollowUpSendsNothing pins
+// the capital-N default on the follow-up: hitting Enter at the
+// second prompt is "no". A stray Enter (or a piped script that
+// answers the main prompt but leaves stdin closed) must never
+// flip into the "send event" path.
+func TestMaybePromptForConsent_declineEmptyFollowUpSendsNothing(t *testing.T) {
+	setupTestEnv(t)
+	isInteractiveFn = func() bool { return true }
+	// "\n" declines the main prompt; the follow-up reads EOF.
+	r := strings.NewReader("\n")
+	promptInFn = func() io.Reader { return r }
+	promptOutFn = func() io.Writer { return io.Discard }
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	if got := MaybePromptForConsent(false); got != PromptDeclined {
+		t.Errorf("outcome = %v, want PromptDeclined", got)
+	}
+	if h := atomic.LoadInt32(&hits); h != 0 {
+		t.Errorf("EOF follow-up sent %d events, want 0", h)
+	}
+}
+
+// TestMaybePromptForConsent_acceptSkipsFollowUp asserts the
+// follow-up prompt does not fire when the user opted in — there's
+// no "denial" to record, and an extra prompt would be confusing.
+func TestMaybePromptForConsent_acceptSkipsFollowUp(t *testing.T) {
+	setupTestEnv(t)
+	isInteractiveFn = func() bool { return true }
+	// "y" accepts. If the follow-up wrongly fired, the second line
+	// would be the input — but the test reader has only one line,
+	// so the missing line proves the follow-up was skipped.
+	r := strings.NewReader("y\n")
+	promptInFn = func() io.Reader { return r }
+	out := &strings.Builder{}
+	promptOutFn = func() io.Writer { return out }
+
+	got := MaybePromptForConsent(false)
+	if got != PromptAccepted {
+		t.Errorf("outcome = %v, want PromptAccepted", got)
+	}
+	if strings.Contains(out.String(), "recording your decision") {
+		t.Errorf("follow-up prompt text leaked into output: %q", out.String())
+	}
+}
+
+// --- CaptureOptOutConsented ---
+
+// TestCaptureOptOutConsented_bypassesInactive — the whole point of
+// this entry point. Consent is undecided / disabled (IsActive ==
+// false), but an explicit per-event consent path must still send.
+func TestCaptureOptOutConsented_bypassesInactive(t *testing.T) {
+	setupTestEnv(t)
+	var hits int32
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		body, _ = io.ReadAll(r.Body)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	if IsActive() {
+		t.Fatal("test precondition: IsActive should be false on fresh setup")
+	}
+	CaptureOptOutConsented("prompt-declined")
+	if h := atomic.LoadInt32(&hits); h != 1 {
+		t.Fatalf("delivered %d events, want 1", h)
+	}
+	// Confirm the event carries the opt-out shape — name + reason.
+	if !strings.Contains(string(body), EventTelemetryOptOut) {
+		t.Errorf("body missing event name %q: %s", EventTelemetryOptOut, body)
+	}
+	if !strings.Contains(string(body), `"reason":"prompt-declined"`) {
+		t.Errorf("body missing reason: %s", body)
+	}
+}
+
+// TestCaptureOptOutConsented_respectsAPIKeyEmpty — even with
+// explicit consent, a build without an API key has no destination
+// and must no-op. Otherwise dev builds would surface a confusing
+// "no endpoint" path.
+func TestCaptureOptOutConsented_respectsAPIKeyEmpty(t *testing.T) {
+	setupTestEnv(t)
+	APIKey = ""
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	CaptureOptOutConsented("prompt-declined")
+	if h := atomic.LoadInt32(&hits); h != 0 {
+		t.Errorf("delivered %d events with empty API key, want 0", h)
+	}
+}
+
+// TestCaptureOptOutConsented_respectsDoNotTrack — the hard
+// kill-switch must override the per-event consent path. A user
+// who set DO_NOT_TRACK=1 has expressed a global "never" that
+// trumps any one-off consent we might collect afterward.
+func TestCaptureOptOutConsented_respectsDoNotTrack(t *testing.T) {
+	setupTestEnv(t)
+	os.Setenv(DoNotTrackEnvVar, "1")
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	CaptureOptOutConsented("prompt-declined")
+	if h := atomic.LoadInt32(&hits); h != 0 {
+		t.Errorf("delivered %d events with DO_NOT_TRACK=1, want 0", h)
+	}
+}
+
 // --- Consent state ---
 
 func TestSetEnabled_persistsBothKeys(t *testing.T) {

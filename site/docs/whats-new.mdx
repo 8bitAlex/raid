@@ -11,6 +11,8 @@ User-visible changes per release, latest first. For full commit history see the 
 
 ## 0.17.0 — upcoming
 
+**Optional opt-out telemetry follow-up.** When a user declines the first-run telemetry prompt, raid now asks one follow-up question: may we send a single anonymous event recording your denial? Default is no (capital N) just like the main prompt. If accepted, raid fires exactly one `raid_telemetry_opt_out` event (with `reason: "prompt-declined"`) under explicit per-event consent and then leaves telemetry permanently off — that's the whole transaction. If declined or skipped, raid touches zero endpoints for the remainder of the install. The follow-up runs *only* on the explicit-decline path: non-TTY, headless, `DO_NOT_TRACK`, already-decided, and `raid telemetry ...` invocations skip both prompts. Closes the opt-out-rate measurement gap that's otherwise impossible to fill from website analytics alone.
+
 **Per-task output prefixing in concurrent runs.** Tasks with `concurrent: true` now have their stdout/stderr lines prefixed with `[task-name]` and rendered in a deterministic per-task color, so interleaved output stays attributable. Prefixing is automatically suppressed on non-TTY sinks (pipes, file redirects, CI logs, and the MCP server's capture buffer), so machine-readable output is byte-identical to today. `NO_COLOR=1` strips just the color; `--no-prefix` / `RAID_NO_PREFIX=1` strips both. Partial trailing lines without a final newline are flushed with their prefix when the task exits, so output is never silently lost. See [raid → Output prefixing in concurrent runs](/docs/usage/raid#output-prefixing-in-concurrent-runs). Closes [#77](https://github.com/8bitAlex/raid/issues/77).
 
 ## 0.16.0 — upcoming

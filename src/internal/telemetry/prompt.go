@@ -98,10 +98,50 @@ func MaybePromptForConsent(skipInteractive bool) PromptResult {
 			fmt.Fprint(promptOutFn(), explainerText())
 			continue
 		default:
+			// User declined the main prompt. Ask one follow-up: may
+			// we send a single anonymous "denial recorded" event so
+			// the project can measure opt-out rates? Default is no.
+			// If they say yes we fire under per-event consent
+			// BEFORE flipping the state off (technically the bypass
+			// path doesn't require the order, but firing first
+			// matches the `raid telemetry off` pattern and makes
+			// the intent obvious to future readers).
+			if askOptOutEventConsent(reader) {
+				CaptureOptOutConsented("prompt-declined")
+			}
 			_ = SetEnabled(false)
 			return PromptDeclined
 		}
 	}
+}
+
+// askOptOutEventConsent renders the follow-up prompt and returns
+// true iff the user explicitly accepts. Default is no (capital N)
+// so a stray enter keeps the strict opt-out posture. Exists as a
+// separate function so the prompt text + truthy-answer matching
+// have a single test surface.
+func askOptOutEventConsent(reader *bufio.Reader) bool {
+	fmt.Fprint(promptOutFn(), optOutFollowUpText())
+	line, err := reader.ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	switch strings.TrimSpace(strings.ToLower(line)) {
+	case "y", "yes":
+		return true
+	}
+	return false
+}
+
+func optOutFollowUpText() string {
+	return "" +
+		"\n" +
+		"Telemetry is off. May raid send a single anonymous event recording your decision?\n" +
+		"This is the only event raid would ever send; it helps the project measure how\n" +
+		"many users opt out vs. opt in. Same anonymity guarantees as above.\n" +
+		"\n" +
+		"  [y] yes, send once       [N] no, send nothing at all\n" +
+		"> "
 }
 
 // readPromptAnswer renders the prompt and reads a single line of

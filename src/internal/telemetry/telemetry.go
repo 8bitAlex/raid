@@ -98,6 +98,35 @@ func Capture(name string, properties map[string]any) {
 	}()
 }
 
+// CaptureOptOutConsented fires the opt-out event under explicit
+// per-event consent — used by the first-run prompt when a user
+// declines telemetry generally but agrees to send a single
+// anonymous "denial recorded" event. Bypasses the standard
+// IsActive() gate (which would short-circuit because consent has
+// just been set to off, or is still undecided) but still respects
+// the two hard kill-switches: a build with no APIKey and a
+// DO_NOT_TRACK env var. Synchronous so the event has its best
+// chance to land before raid exits.
+//
+// Callers MUST ensure the user has explicitly consented to this
+// specific event — never call this for any other purpose, and
+// never extend it to a general "bypass" capture path. The whole
+// trust model of telemetry rests on consent being explicit at the
+// event level when state-level consent isn't true.
+func CaptureOptOutConsented(reason string) {
+	if APIKey == "" {
+		return
+	}
+	if isDoNotTrack() {
+		return
+	}
+	id := loadOrCreateID()
+	if id == "" {
+		return
+	}
+	send(Event{Name: EventTelemetryOptOut, Properties: enrichProperties(id, OptOutProps(reason))})
+}
+
 // CaptureSync is Capture's blocking variant. Used by `raid telemetry
 // off` so the opt-out event is attempted synchronously before the
 // process exits — we want to give the event the best chance to land
