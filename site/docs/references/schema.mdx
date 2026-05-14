@@ -151,6 +151,7 @@ commands:
 | `flags` | list | No | Declared flags / options. See [Flags](#command-flags). |
 | [`tasks`](#task) | list | Yes | Task sequence to run |
 | [`options`](#options) | object | No | Shared options block. Same shape as on tasks. Fires once per command — independent of per-task `options`. |
+| [`agent`](#agent-metadata) | object | No | MCP-facing safety hint. Absence equates to `{safe: false}`. |
 | [`out`](#output) | object | No | Output configuration |
 
 Command names cannot shadow built-in names: `install`, `env`, `profile`, `doctor`.
@@ -179,6 +180,44 @@ Each entry under `flags` declares a long-form `--name` flag (and optionally a `-
 | `type` | enum | No | One of `string` (default), `bool`, `int`. Bool flags bind as the literal strings `"true"` / `"false"`. |
 | `required` | bool | No | If true, cobra rejects the invocation when the flag is omitted. |
 | `default` | string \| bool \| int | No | Value used when the flag is omitted. Must match `type`. |
+
+### Agent metadata
+
+Optional `agent:` block on a command surfaces safety hints to MCP clients (the `raid context serve` agent toolkit). Clients read the resolved form from the [`raid://workspace/commands`](../usage/context#workspace-resources) resource and use it to decide whether to auto-execute a command or prompt the user for approval.
+
+**Default unsafe:** a command without an `agent:` block surfaces to MCP clients as `{safe: false}`. Existing config keeps its current "requires confirmation" semantics; opt commands in by setting `safe: true`.
+
+**Hint only:** raid does not gate execution on these fields. The agent client implements the policy.
+
+```yaml
+commands:
+  - name: test
+    usage: "Run unit tests"
+    tasks:
+      - type: Shell
+        cmd: "go test ./..."
+    agent:
+      safe: true
+      reads:  ["./..."]
+      writes: []
+      description: "Run the Go unit-test suite. Idempotent, no side effects."
+
+  - name: deploy
+    usage: "Deploy to production"
+    tasks:
+      - type: Shell
+        cmd: "./scripts/deploy.sh"
+    agent:
+      safe: false
+      description: "Deploys live infrastructure. Requires user confirmation."
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `safe` | bool | No | When `true`, the command is idempotent and free of side effects — MCP clients that respect the hint may auto-execute it. Defaults to `false`. |
+| `reads` | list&lt;string&gt; | No | Paths or globs the command reads. Informational only — raid does not parse or enforce these. |
+| `writes` | list&lt;string&gt; | No | Paths or globs the command writes. Informational only. |
+| `description` | string | No | Agent-facing description. Overrides `usage` in the MCP workspace resource when set. |
 
 ### Output
 

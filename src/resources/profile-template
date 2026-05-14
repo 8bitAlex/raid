@@ -109,6 +109,14 @@
 #         cmd: npm run build
 #         path: ~/dev/my-project/frontend
 #         concurrent: true
+#     # Optional `agent:` block — MCP clients use this to decide whether
+#     # to auto-execute or require user approval. Commands without an
+#     # `agent:` block default to `safe: false`.
+#     agent:
+#       safe: true
+#       reads:  ["./..."]
+#       writes: ["dist/", "build/"]
+#       description: "Build all services. Idempotent."
 #
 #   - name: deploy
 #     usage: Deploy to production
@@ -121,6 +129,9 @@
 #         default: latest
 #       - type: Shell
 #         cmd: ./scripts/deploy.sh $DEPLOY_TAG
+#     agent:
+#       safe: false       # destructive — agents should prompt
+#       description: "Deploy to production. Requires confirmation."
 #
 #   - name: lint
 #     usage: Lint and format all code

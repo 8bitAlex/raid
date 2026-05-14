@@ -547,6 +547,9 @@
                     "options": {
                         "$ref": "#/$defs/taskOptions"
                     },
+                    "agent": {
+                        "$ref": "#/$defs/commandAgent"
+                    },
                     "out": {
                         "type": "object",
                         "description": "Output configuration for the command",
@@ -630,6 +633,32 @@
                     "type": "boolean",
                     "description": "When true, a non-zero exit from this task does not abort the parent command — subsequent tasks still run and the failure is reported as a warning on stderr. The overall command exit code is only affected by non-ignored failures. Useful for cleanup teardown, best-effort lint/format steps, and optional probes. No effect on commands.",
                     "default": false
+                }
+            },
+            "additionalProperties": false
+        },
+        "commandAgent": {
+            "type": "object",
+            "description": "Agent-facing safety metadata for a command. MCP clients read this from the `raid://workspace/commands` resource to decide whether to auto-execute or require user confirmation. Absence of the block is equivalent to `{safe: false}` — agents should treat unannotated commands as requiring confirmation.",
+            "properties": {
+                "safe": {
+                    "type": "boolean",
+                    "description": "When true, the command is idempotent with no side effects and may be auto-executed by MCP clients. Defaults to false.",
+                    "default": false
+                },
+                "reads": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Paths or globs the command reads. Informational only — raid does not parse or enforce these. Mirrors Claude Code's permission-model fields."
+                },
+                "writes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Paths or globs the command writes. Informational only — raid does not parse or enforce these."
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Agent-facing description. Overrides the command's `usage` field in the MCP workspace resource when set."
                 }
             },
             "additionalProperties": false

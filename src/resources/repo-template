@@ -73,6 +73,11 @@
 #     tasks:
 #       - type: Shell
 #         cmd: npm test
+#     # Optional `agent:` block — MCP clients use this to decide whether
+#     # to auto-execute. Commands without `agent:` default to safe: false.
+#     agent:
+#       safe: true
+#       reads: ["./..."]
 #
 #   - name: lint
 #     usage: Lint and type-check

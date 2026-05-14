@@ -302,3 +302,30 @@ verify:
 		})
 	}
 }
+
+// TestValidateRepo_agentBlockAccepted verifies the shared command schema
+// reaches the repo validator — `agent:` on a command inside raid.yaml is
+// accepted via the same $ref the profile schema uses.
+func TestValidateRepo_agentBlockAccepted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "raid.yaml")
+	body := `name: r
+branch: main
+commands:
+  - name: smoke
+    usage: Smoke test
+    tasks:
+      - type: Shell
+        cmd: curl -fsS localhost:8080/healthz
+    agent:
+      safe: true
+      reads: ["./internal/health/**"]
+      description: "Idempotent smoke test"
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRepo(path); err != nil {
+		t.Errorf("ValidateRepo() unexpected err: %v", err)
+	}
+}

@@ -23,6 +23,7 @@ Raid is written in Go, distributed as a single self-contained binary, and publis
 - [Tasks](https://raidcli.dev/docs/features/tasks): All 11 task types — Shell, Script, Set, Git, HTTP, Wait, Prompt, Confirm, Print, Template, Group
 - [Task groups](https://raidcli.dev/docs/features/task-groups): Reusable task sequences invoked by `ref`
 - [Variables](https://raidcli.dev/docs/features/variables): Variable scoping, substitution, defaults, and overrides
+- [Agent metadata on commands](https://raidcli.dev/docs/references/schema#agent-metadata): Optional `agent:` block (`safe`, `reads`, `writes`, `description`) so MCP clients can decide whether to auto-execute. Defaults to `safe: false` for commands without the block.
 
 ## Usage
 

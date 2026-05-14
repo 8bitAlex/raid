@@ -794,6 +794,100 @@ verify:
 	}
 }
 
+// TestValidateProfile_agent exercises the schema constraints on the
+// optional `agent:` block on commands: missing block is valid, valid
+// shape passes, unknown fields and wrong types are rejected.
+func TestValidateProfile_agent(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{
+			name: "agent block accepted with all fields",
+			body: `name: t
+commands:
+  - name: test
+    usage: Run tests
+    tasks:
+      - type: Shell
+        cmd: go test ./...
+    agent:
+      safe: true
+      reads: ["./..."]
+      writes: []
+      description: "Run unit tests"
+`,
+		},
+		{
+			name: "agent block missing is valid",
+			body: `name: t
+commands:
+  - name: build
+    usage: Build
+    tasks:
+      - type: Shell
+        cmd: go build ./...
+`,
+		},
+		{
+			name: "agent rejects unknown field",
+			body: `name: t
+commands:
+  - name: test
+    usage: Run tests
+    tasks:
+      - type: Shell
+        cmd: go test ./...
+    agent:
+      safety: true
+`,
+			wantErr: true,
+		},
+		{
+			name: "agent.safe must be boolean",
+			body: `name: t
+commands:
+  - name: test
+    usage: Run tests
+    tasks:
+      - type: Shell
+        cmd: go test ./...
+    agent:
+      safe: "yes"
+`,
+			wantErr: true,
+		},
+		{
+			name: "agent.reads must be array of strings",
+			body: `name: t
+commands:
+  - name: test
+    usage: Run tests
+    tasks:
+      - type: Shell
+        cmd: go test ./...
+    agent:
+      reads: "src"
+`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "profile.yaml")
+			if err := os.WriteFile(path, []byte(tt.body), 0644); err != nil {
+				t.Fatalf("write profile: %v", err)
+			}
+			err := ValidateProfile(path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateProfile() err = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // --- WriteProfileFile ---
 
 func TestWriteProfileFile_createsFile(t *testing.T) {
