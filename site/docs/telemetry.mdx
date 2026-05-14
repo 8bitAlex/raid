@@ -1,0 +1,106 @@
+---
+title: Telemetry
+sidebar_position: 60
+slug: /telemetry
+description: What raid's opt-in anonymous CLI telemetry collects, what it never collects, and how to inspect, enable, disable, or purge it.
+---
+
+# Telemetry
+
+raid ships an **opt-in, anonymous** CLI telemetry pipeline so the team can prioritize features against real usage signal — which task types matter, which commands fail, which features go unused — without ever capturing what you actually run.
+
+**Off by default.** A fresh install never sends anything to the telemetry endpoint until you explicitly run `raid telemetry on` (or accept the first-run prompt). When opted out, raid makes zero telemetry / PostHog requests, and there's an integration test that pins this contract. (raid still performs an unrelated GitHub release-version check on normal invocations regardless of telemetry state — that request is independent of this pipeline.)
+
+## What raid collects
+
+| Event | Properties (sanitized) |
+|---|---|
+| `raid_first_run` | `os`, `arch`, `raid_version`, `install_method` (best-effort) |
+| `raid_command_executed` | `command_name`, `task_count`, `task_types[]`, `duration_ms`, `success` |
+| `raid_command_failed` | `command_name`, `error_code` (from the [errors table](references/errors)), `duration_ms` |
+| `raid_task_executed` | `task_type`, `duration_ms`, `success` — **sampled** at ~10% to bound volume |
+| `raid_telemetry_opt_out` | `reason` (optional free-text from `raid telemetry off --why "..."`) |
+
+**Every event also carries:** `distinct_id` (anonymous UUIDv4 from `~/.config/raid/telemetry-id`), `raid_version`, `os` (e.g. `darwin`/`linux`/`windows`), `arch` (e.g. `arm64`/`amd64`).
+
+## What raid never collects
+
+- **Command bodies.** `cmd:`, `path:`, `runner:`, `src:`, `dest:`, `url:` — never sent.
+- **Variable values.** Anything set by a `Set` task or passed in env vars.
+- **Argument values.** `RAID_ARG_*`, declared args, declared flag values. The one exception is the explicit opt-out reason: `raid telemetry off --why "..."` sends the free-text string you typed as the `reason` property on `raid_telemetry_opt_out` — and only on that event. raid never collects argument or flag values implicitly.
+- **Stdout / stderr.** Task output is never captured by the telemetry layer.
+- **Identifiers.** Username, hostname, IP, MAC, OS version beyond `darwin`/`linux`/`windows`, terminal emulator — none.
+- **File paths beyond their kind.** `task_types: ["shell", "shell", "print"]` is fine; the actual paths are not.
+
+The source of truth is the [`src/internal/telemetry`](https://github.com/8bitalex/raid/tree/main/src/internal/telemetry) package. Every event builder is a tiny pure function — read them yourself.
+
+## First-run consent
+
+On your first interactive `raid <command>` invocation after install, raid prints the consent prompt to stderr:
+
+```
+raid would like to send anonymous usage telemetry to help prioritize features.
+We never collect: file paths, command contents, env values, or anything that could identify you.
+See: https://raidcli.dev/docs/telemetry
+
+  [y] yes, send telemetry      [N] no, leave it off       [?] what's collected
+> 
+```
+
+Default is **no** (capital `N`). `[?]` shows the long-form disclosure inline and re-asks.
+
+**Non-interactive contexts skip the prompt entirely and leave telemetry off.** Specifically, raid does not prompt when:
+
+- `DO_NOT_TRACK=1` is set in the environment (cross-tool standard — [consoledonottrack.com](https://consoledonottrack.com)).
+- `-y`, `--yes`, or `--headless` is on the command line (see [Headless mode](usage/raid#headless-mode)).
+- `--json` is on the command line (machine-readable output mode).
+- stdin isn't a TTY (CI runners, pipes, agent hosts).
+- This raid build wasn't compiled with a PostHog API key (dev builds — telemetry is dead code).
+- The invocation is a `raid telemetry ...` subcommand (so you can run `raid telemetry on` without being prompted to opt in first).
+
+In each of these cases raid records the decision as off-by-default so it won't try to prompt later either. Switch back on explicitly with `raid telemetry on`.
+
+## Managing telemetry
+
+```bash
+raid telemetry on            # opt in
+raid telemetry off           # opt out
+raid telemetry off --why "ci runner"   # opt out + record an anonymous reason
+raid telemetry status        # show current state, anonymous ID, ID file path
+raid telemetry status --json # same, as JSON
+raid telemetry purge         # delete the anonymous ID file (breaks linkage to past events)
+raid telemetry preview       # render a sample event payload — does not send
+```
+
+`raid telemetry preview` is the recommended way to see exactly what raid would post before opting in. The API key is automatically redacted in the preview output so you can paste it anywhere.
+
+## Three ways to opt out
+
+1. **`raid telemetry off`** — persists the choice; future runs stay off.
+2. **`DO_NOT_TRACK=1`** — env var; overrides the persisted state for the current process and any child it spawns. Honored on every run regardless of `telemetry on`.
+3. **Never opt in.** The first-run prompt defaults to off, and non-interactive contexts skip the prompt entirely.
+
+You can purge the anonymous machine ID at any time with `raid telemetry purge` — that breaks linkage between future events and any sent before. Useful if you've been opted in for a while and want to reset.
+
+## Destination
+
+- **PostHog US Cloud**, project `Raid` (id `403603`).
+- Endpoint: `https://us.i.posthog.com/i/v0/e/`.
+- The PostHog publishable project key is baked into release builds at compile time via a ldflag. Dev / `go run` builds have no key and never send.
+
+Network failures are **always silent**. A 2-second HTTP timeout, fire-and-forget goroutines, and a 1.5-second flush deadline at process exit mean a stuck network can't slow raid down or break a command.
+
+## Source code
+
+The entire telemetry implementation is in [`src/internal/telemetry`](https://github.com/8bitalex/raid/tree/main/src/internal/telemetry):
+
+| File | Role |
+|---|---|
+| [`telemetry.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/telemetry.go) | `Capture`, `Flush`, the HTTP send path, `PreviewPayload` |
+| [`consent.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/consent.go) | Consent state (read/write via viper) + `DO_NOT_TRACK` honor |
+| [`id.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/id.go) | Anonymous UUIDv4 generation + persistence + purge |
+| [`events.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/events.go) | Event builders. Every builder is a few lines — easy to audit. |
+| [`sampling.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/sampling.go) | Per-task sample rate |
+| [`prompt.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/prompt.go) | First-run consent prompt flow |
+
+The test file [`telemetry_test.go`](https://github.com/8bitalex/raid/blob/main/src/internal/telemetry/telemetry_test.go) pins the contracts above: zero network calls when opted out, zero network calls under `DO_NOT_TRACK`, sanitization of every event builder, UUIDv4 format of the anonymous ID, and the redacted-key preview output.

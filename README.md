@@ -195,6 +195,12 @@ RAID_HEADLESS=1 raid deploy
 - `Prompt` tasks **use their `default:`** value instead of reading stdin.
 - A `Prompt` **without a `default:`** fails fast with `HEADLESS_PROMPT_NO_DEFAULT` (exit code 3, category `task`) so the variable is never silently set to empty. Add a default for every Prompt you expect CI / agent invocations to run.
 
+### Telemetry (opt-in, anonymous)
+
+raid ships an **opt-in** anonymous CLI telemetry pipeline. It is **off by default** and the first interactive run prompts (capital-N default); non-interactive contexts (no TTY, `--yes`/`--headless`, `--json`, `DO_NOT_TRACK=1`) skip the prompt entirely and stay off. Events carry sanitized properties only — command names, task types, structured error codes, duration — never `cmd:` bodies, paths, env values, or task output.
+
+Manage state with `raid telemetry on / off / status / purge / preview`. `raid telemetry preview` shows the exact payload raid would post (with the API key redacted) so you can audit before opting in. Full disclosure at [raidcli.dev/docs/telemetry](https://raidcli.dev/docs/telemetry).
+
 ### `raid <command>`
 
 Run a custom command defined in the active profile or any of its repositories.

@@ -16,6 +16,7 @@ import (
 
 	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 	"github.com/8bitalex/raid/src/internal/sys"
+	"github.com/8bitalex/raid/src/internal/telemetry"
 	"github.com/joho/godotenv"
 )
 
@@ -189,9 +190,32 @@ func ExecuteTask(task Task) error {
 		start := timeNowFn()
 		err := dispatchTask(task)
 		emitExeTime(task.Label(), timeNowFn().Sub(start))
+		captureTaskTelemetry(task, err, timeNowFn().Sub(start))
 		return err
 	}
-	return dispatchTask(task)
+	start := timeNowFn()
+	err := dispatchTask(task)
+	captureTaskTelemetry(task, err, timeNowFn().Sub(start))
+	return err
+}
+
+// captureTaskTelemetry fires the sampled raid_task_executed event.
+// Only the task type, outcome, and duration leak — never the cmd
+// body, path, URL, var name, default value, or any other content.
+// Sampled at the call site to keep PostHog volume bounded for
+// commands with hundreds of tasks.
+//
+// Sampled fast-paths via telemetry.IsActive when telemetry is off, so
+// the per-task overhead when opted out is effectively zero (no RNG
+// call).
+func captureTaskTelemetry(task Task, err error, dur time.Duration) {
+	if !telemetry.Sampled() {
+		return
+	}
+	telemetry.Capture(
+		telemetry.EventTaskExecuted,
+		telemetry.TaskExecutedProps(string(task.Type), dur.Milliseconds(), err == nil),
+	)
 }
 
 // dispatchTask is the inner switch separated from ExecuteTask so the

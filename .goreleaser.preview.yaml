@@ -20,6 +20,10 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
+      # Preview builds also receive the PostHog API key when
+      # POSTHOG_API_KEY is set in CI; absent → empty → telemetry
+      # no-ops. Mirrors the stable goreleaser config.
+      - -X github.com/8bitalex/raid/src/internal/telemetry.APIKey={{ envOrDefault "POSTHOG_API_KEY" "" }}
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
