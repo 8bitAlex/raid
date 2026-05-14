@@ -42,6 +42,8 @@ func setupTestEnv(t *testing.T) {
 	prevRng := rngFn
 	prevHomeDirFn := homeDirFn
 	prevIsInteractive := isInteractiveFn
+	prevPromptIn := promptInFn
+	prevPromptOut := promptOutFn
 
 	os.Setenv(IDFileEnv, idPath)
 	os.Unsetenv(DoNotTrackEnvVar)
@@ -63,6 +65,8 @@ func setupTestEnv(t *testing.T) {
 		rngFn = prevRng
 		homeDirFn = prevHomeDirFn
 		isInteractiveFn = prevIsInteractive
+		promptInFn = prevPromptIn
+		promptOutFn = prevPromptOut
 		resetIDCacheForTest()
 		viper.Reset()
 		_ = prevConfig

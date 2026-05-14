@@ -19,8 +19,12 @@ var rngFn = func() float64 { return rand.Float64() }
 
 // Sampled reports whether a task event should be captured this time
 // per TaskSampleRate. Caller fires Capture only when this returns
-// true.
+// true. Fast-paths when telemetry is inactive so opted-out users don't
+// pay the per-task RNG call.
 func Sampled() bool {
+	if !IsActive() {
+		return false
+	}
 	if TaskSampleRate <= 0 {
 		return false
 	}

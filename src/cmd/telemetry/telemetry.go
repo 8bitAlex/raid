@@ -69,8 +69,9 @@ var offCmd = &cobra.Command{
 		why, _ := cmd.Flags().GetString("why")
 		// Fire the opt-out BEFORE flipping consent off — otherwise
 		// IsActive() would return false and the event would be
-		// dropped. CaptureSync also blocks until delivery so the
-		// event lands even though raid exits immediately after.
+		// dropped. CaptureSync blocks on the HTTP attempt (best-effort:
+		// network/non-2xx errors are silently dropped) so the event
+		// gets a real chance to land before raid exits.
 		libtelemetry.CaptureSync(libtelemetry.EventTelemetryOptOut,
 			libtelemetry.OptOutProps(why))
 		if err := libtelemetry.SetEnabled(false); err != nil {

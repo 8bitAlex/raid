@@ -78,25 +78,37 @@ func loadIDIfExists() string {
 // fresh one if the file doesn't exist. Empty return means we couldn't
 // resolve the path or persist the value — Capture treats that as "do
 // nothing" rather than blocking the user's command.
+//
+// Cross-process safe: the create path uses O_CREATE|O_EXCL so two
+// concurrent first-run raid invocations can't both win and write
+// different IDs. The loser observes EEXIST and re-reads whatever the
+// winner persisted, so every process ends up with the same
+// distinct_id from the first event onward.
 func loadOrCreateID() string {
 	if id := loadIDIfExists(); id != "" {
 		return id
 	}
 	idMu.Lock()
 	defer idMu.Unlock()
-	// Recheck under the lock — another goroutine may have raced ahead.
+	// Recheck under the lock — another in-process goroutine may have
+	// raced ahead while we waited.
 	if idCached != "" {
 		return idCached
+	}
+	path := IDPath()
+	if path == "" {
+		return ""
 	}
 	id, err := newID()
 	if err != nil {
 		return ""
 	}
-	if err := writeID(id); err != nil {
+	persisted, err := writeIDExclusive(path, id)
+	if err != nil {
 		return ""
 	}
-	idCached = id
-	return id
+	idCached = persisted
+	return persisted
 }
 
 // newID generates a fresh UUIDv4 from crypto/rand. We don't depend on
@@ -118,19 +130,37 @@ func newID() (string, error) {
 	), nil
 }
 
-// writeID persists the ID to disk, creating ~/.config/raid/ if
-// needed. Permissions are 0600 because this is a stable identifier
-// for the user's machine — not a secret, but no reason to leave it
-// world-readable either.
-func writeID(id string) error {
-	path := IDPath()
-	if path == "" {
-		return fmt.Errorf("telemetry: no home directory resolvable")
-	}
+// writeIDExclusive persists the ID at path using O_CREATE|O_EXCL so
+// concurrent callers can't clobber each other's value. If the file
+// already exists (another process won the race), the existing
+// contents are read and returned instead. Permissions are 0600
+// because this is a stable identifier for the user's machine — not a
+// secret, but no reason to leave it world-readable either.
+func writeIDExclusive(path, id string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
+		return "", err
 	}
-	return os.WriteFile(path, []byte(id+"\n"), 0600)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		if os.IsExist(err) {
+			// Another process won the race — read what they wrote.
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return "", readErr
+			}
+			existing := strings.TrimSpace(string(data))
+			if existing == "" {
+				return "", fmt.Errorf("telemetry: id file present but empty at %s", path)
+			}
+			return existing, nil
+		}
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(id + "\n"); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 // PurgeID deletes the on-disk ID file. PostHog can't link future

@@ -205,8 +205,9 @@ func ExecuteTask(task Task) error {
 // Sampled at the call site to keep PostHog volume bounded for
 // commands with hundreds of tasks.
 //
-// Sampling and Capture both fast-path when telemetry is off, so the
-// per-task overhead when opted out is effectively zero.
+// Sampled fast-paths via telemetry.IsActive when telemetry is off, so
+// the per-task overhead when opted out is effectively zero (no RNG
+// call).
 func captureTaskTelemetry(task Task, err error, dur time.Duration) {
 	if !telemetry.Sampled() {
 		return

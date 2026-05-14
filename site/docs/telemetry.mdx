@@ -9,7 +9,7 @@ description: What raid's opt-in anonymous CLI telemetry collects, what it never 
 
 raid ships an **opt-in, anonymous** CLI telemetry pipeline so the team can prioritize features against real usage signal — which task types matter, which commands fail, which features go unused — without ever capturing what you actually run.
 
-**Off by default.** A fresh install never sends anything until you explicitly run `raid telemetry on` (or accept the first-run prompt). When opted out, raid makes zero network requests during normal use, and there's an integration test that pins this contract.
+**Off by default.** A fresh install never sends anything to the telemetry endpoint until you explicitly run `raid telemetry on` (or accept the first-run prompt). When opted out, raid makes zero telemetry / PostHog requests, and there's an integration test that pins this contract. (raid still performs an unrelated GitHub release-version check on normal invocations regardless of telemetry state — that request is independent of this pipeline.)
 
 ## What raid collects
 
@@ -27,7 +27,7 @@ raid ships an **opt-in, anonymous** CLI telemetry pipeline so the team can prior
 
 - **Command bodies.** `cmd:`, `path:`, `runner:`, `src:`, `dest:`, `url:` — never sent.
 - **Variable values.** Anything set by a `Set` task or passed in env vars.
-- **Argument values.** `RAID_ARG_*`, declared args, declared flag values.
+- **Argument values.** `RAID_ARG_*`, declared args, declared flag values. The one exception is the explicit opt-out reason: `raid telemetry off --why "..."` sends the free-text string you typed as the `reason` property on `raid_telemetry_opt_out` — and only on that event. raid never collects argument or flag values implicitly.
 - **Stdout / stderr.** Task output is never captured by the telemetry layer.
 - **Identifiers.** Username, hostname, IP, MAC, OS version beyond `darwin`/`linux`/`windows`, terminal emulator — none.
 - **File paths beyond their kind.** `task_types: ["shell", "shell", "print"]` is fine; the actual paths are not.

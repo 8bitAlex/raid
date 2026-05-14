@@ -169,11 +169,22 @@ func executeRoot(args []string) int {
 	// First-run consent prompt for telemetry. Runs only for non-info,
 	// non-telemetry-subcommand invocations to avoid prompting on
 	// `raid --help`, `raid telemetry on`, and similar. The prompt
-	// itself no-ops when stdin isn't a TTY or when --yes/--headless
-	// is set, so this is safe in CI / pipes / agent hosts. See
-	// telemetry.MaybePromptForConsent for the full skip matrix.
+	// itself no-ops when stdin isn't a TTY, when --yes/--headless is
+	// set, when --json is set, or when RAID_HEADLESS=1 in the env
+	// (CI / agent-host opt-in path), so it's safe in non-interactive
+	// contexts. See telemetry.MaybePromptForConsent for the full skip
+	// matrix.
 	if !info && !isTelemetrySubcommand(args) {
-		_ = telemetry.MaybePromptForConsent(headlessFromArgs(args) || jsonModeFromArgs(args))
+		skip := headlessFromArgs(args) || jsonModeFromArgs(args) || lib.IsHeadless()
+		switch telemetry.MaybePromptForConsent(skip) {
+		case telemetry.PromptAccepted:
+			// User opted in via the first-run prompt — fire the
+			// adoption event so `raid telemetry on` and the prompt
+			// path both produce raid_first_run. Synchronous so the
+			// event lands even if the user's command crashes before
+			// Flush runs.
+			telemetry.CaptureSync(telemetry.EventFirstRun, telemetry.FirstRunProps(""))
+		}
 	}
 
 	// Flush any pending telemetry events before exit so async sends
@@ -241,12 +252,30 @@ func applyHeadlessFlag(cmd *cobra.Command, _ []string) error {
 // skip these — prompting "do you want telemetry?" right before
 // running `raid telemetry on` is hostile UX, and the off/status/
 // purge/preview commands need to work for users who haven't opted in.
+//
+// Flag-aware: persistent flags that take a value (`--config <path>`
+// / `-c <path>`) consume the following token, so an invocation like
+// `raid --config telemetry install` should resolve to the `install`
+// subcommand and not be misread as `telemetry`. The bool persistent
+// flags (`--json`, `--yes`/`-y`, `--headless`) do not consume a
+// following token.
 func isTelemetrySubcommand(args []string) bool {
+	skipNext := false
 	for _, a := range args[1:] {
 		if a == "--" {
 			return false
 		}
+		if skipNext {
+			skipNext = false
+			continue
+		}
 		if strings.HasPrefix(a, "-") {
+			// Only the value-taking root flags consume the next
+			// token (and only in their bare form — `--config=path`
+			// keeps the value attached).
+			if a == "--config" || a == "-c" {
+				skipNext = true
+			}
 			continue
 		}
 		return a == "telemetry"
@@ -260,19 +289,25 @@ func isTelemetrySubcommand(args []string) bool {
 // it can skip prompting in non-interactive contexts. Matches every
 // flag form: `-y`, `--yes`, `--yes=true`, `--headless`,
 // `--headless=true`, plus their explicit `=false` opt-outs.
+//
+// Mirrors pflag's "last value wins" behavior: if the user passes
+// `--yes=true --yes=false`, the parsed value is false, so this scan
+// must also resolve to false. We walk the full arg list and only
+// commit the final occurrence.
 func headlessFromArgs(args []string) bool {
+	out := false
 	for _, a := range args[1:] {
 		if a == "--" {
 			break
 		}
 		switch {
 		case a == "-y", a == "--yes", a == "--yes=true", a == "--headless", a == "--headless=true":
-			return true
+			out = true
 		case a == "--yes=false", a == "--headless=false":
-			return false
+			out = false
 		}
 	}
-	return false
+	return out
 }
 
 // jsonModeFromArgs reports whether the user passed `--json` (or

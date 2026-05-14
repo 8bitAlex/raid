@@ -16,8 +16,10 @@ package telemetry
 //     non-sensitive — it's a label the project author chose, not
 //     anything the end user typed in.
 //   - taskCount: total task entries in the command.
-//   - taskTypes: distinct task-type strings (Shell, Script, …).
-//     Types only, never the cmd body or args.
+//   - taskTypes: ordered list of task-type strings (Shell, Script, …),
+//     one entry per task in the command — duplicates are preserved so
+//     the per-command structure stays visible. Types only, never the
+//     cmd body or args.
 //   - durationMs: wall-clock command duration in milliseconds.
 func CommandExecutedProps(commandName string, taskCount int, taskTypes []string, durationMs int64) map[string]any {
 	return map[string]any{

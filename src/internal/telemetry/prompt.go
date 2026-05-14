@@ -15,8 +15,11 @@ type PromptResult int
 
 const (
 	// PromptSkipped means we never showed the prompt (non-interactive
-	// context, DO_NOT_TRACK, already decided, no API key). Consent
-	// state was marked decided=off so we won't try again.
+	// context, DO_NOT_TRACK, already decided, no API key). For most
+	// skip reasons consent is also marked decided=off so we won't try
+	// again. Exception: the "no API key" branch (dev builds where
+	// telemetry is dead code) returns PromptSkipped without persisting
+	// any consent state — there's nothing useful to remember.
 	PromptSkipped PromptResult = iota
 	// PromptDeclined means the user explicitly chose no.
 	PromptDeclined

@@ -15,8 +15,13 @@
 //  4. executeRoot calls Flush at the end of every invocation so
 //     in-flight events finish (or get dropped on timeout).
 //
-// The package is read-only side-effect-free if the user never opts in:
-// no goroutines spawned, no files written, no HTTP calls.
+// The package is read-only side-effect-free for users who never opt
+// in via prompt or `raid telemetry on`: no goroutines spawned, no
+// HTTP calls. The one exception is the consent-decision marker —
+// MaybePromptForConsent persists a "decided=off" entry to viper when
+// the prompt is skipped (DO_NOT_TRACK, non-TTY, headless) so we don't
+// re-prompt on the next interactive run. No anonymous ID is created
+// or written until the user explicitly opts in.
 package telemetry
 
 import (
@@ -67,9 +72,13 @@ var httpClient = &http.Client{Timeout: 2 * time.Second}
 // returns and the event would be dropped.
 var inflight sync.WaitGroup
 
-// Capture is the public hook every event fires through. It returns
-// immediately; the network call (if any) runs on a goroutine. Capture
-// is safe to call even when telemetry isn't active — it just no-ops.
+// Capture is the public hook every event fires through. The network
+// POST runs on a goroutine; Capture itself only blocks on
+// loadOrCreateID(), which can touch the filesystem (home-dir
+// resolution, mkdir, write) the first time an opted-in user fires an
+// event. Subsequent calls hit the in-process cache and return without
+// disk I/O. Capture is safe to call even when telemetry isn't active —
+// it just no-ops.
 //
 // Callers must not pass sensitive content in properties. Sanitization
 // is enforced upstream by the event builders, not here.
@@ -90,9 +99,11 @@ func Capture(name string, properties map[string]any) {
 }
 
 // CaptureSync is Capture's blocking variant. Used by `raid telemetry
-// off` so the opt-out event is guaranteed to land before the process
-// exits — we don't want users to flip telemetry off and have the
-// opt-out event silently dropped by Flush's timeout.
+// off` so the opt-out event is attempted synchronously before the
+// process exits — we want to give the event the best chance to land
+// rather than rely on Flush's timeout. This is best-effort: send()
+// silently drops network and non-2xx errors, so delivery isn't
+// guaranteed, just synchronously attempted.
 func CaptureSync(name string, properties map[string]any) {
 	if !IsActive() {
 		return
@@ -192,9 +203,11 @@ func send(evt Event) {
 // given event, without sending it. Used by `raid telemetry preview`
 // so users can see exactly what raid emits before opting in.
 //
-// Pretty-prints the JSON for human inspection. Returns an empty
-// string when no anonymous ID exists yet (the user hasn't opted in
-// and we don't want to create the id file just for a preview).
+// Pretty-prints the JSON for human inspection. When no anonymous ID
+// exists yet (the user hasn't opted in and we don't want to create
+// the id file just for a preview), a placeholder string is shown in
+// the distinct_id field so the preview still renders the full payload
+// shape. Returns an empty string only on JSON marshaling failure.
 func PreviewPayload(name string, properties map[string]any) string {
 	id := loadIDIfExists()
 	if id == "" {
