@@ -323,6 +323,9 @@ func TestPurgeID_idempotent(t *testing.T) {
 
 func TestSampled_rateZeroNeverFires(t *testing.T) {
 	setupTestEnv(t)
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
 	TaskSampleRate = 0
 	for i := 0; i < 100; i++ {
 		if Sampled() {
@@ -333,6 +336,9 @@ func TestSampled_rateZeroNeverFires(t *testing.T) {
 
 func TestSampled_rateOneAlwaysFires(t *testing.T) {
 	setupTestEnv(t)
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
 	TaskSampleRate = 1
 	for i := 0; i < 100; i++ {
 		if !Sampled() {
@@ -341,8 +347,23 @@ func TestSampled_rateOneAlwaysFires(t *testing.T) {
 	}
 }
 
+func TestSampled_inactiveTelemetryNeverFires(t *testing.T) {
+	setupTestEnv(t)
+	TaskSampleRate = 1
+	// IsActive is false (no SetEnabled call), so even rate=1 must
+	// short-circuit — opted-out users pay zero per-task RNG cost.
+	for i := 0; i < 100; i++ {
+		if Sampled() {
+			t.Fatal("Sampled() returned true while telemetry inactive")
+		}
+	}
+}
+
 func TestSampled_intermediateRateUsesRNG(t *testing.T) {
 	setupTestEnv(t)
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
 	TaskSampleRate = 0.5
 	// Force-deterministic: alternating 0.0 / 0.9 means exactly half
 	// the samples (the ones below 0.5) should fire.
