@@ -122,6 +122,56 @@ func TestJsonModeFromArgs(t *testing.T) {
 	}
 }
 
+// TestApplyHeadlessFlag covers the rootCmd PersistentPreRunE that
+// translates the --yes / --headless flags into RAID_HEADLESS=1 so
+// lib.IsHeadless sees the toggle deep inside task execution.
+func TestApplyHeadlessFlag(t *testing.T) {
+	// Save and restore the env var so the test is hermetic against
+	// whatever the host shell exports.
+	prev, had := os.LookupEnv(lib.HeadlessEnvVar)
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(lib.HeadlessEnvVar, prev)
+		} else {
+			os.Unsetenv(lib.HeadlessEnvVar)
+		}
+	})
+
+	tests := []struct {
+		name    string
+		argv    []string
+		wantSet bool
+	}{
+		{"neither flag", []string{}, false},
+		{"--yes long form", []string{"--yes"}, true},
+		{"-y short form", []string{"-y"}, true},
+		{"--headless alias", []string{"--headless"}, true},
+		{"--yes=false", []string{"--yes=false"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Unsetenv(lib.HeadlessEnvVar)
+
+			cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+			cmd.PersistentFlags().BoolP("yes", "y", false, "")
+			cmd.PersistentFlags().Bool("headless", false, "")
+			cmd.PersistentPreRunE = applyHeadlessFlag
+			cmd.SetArgs(tt.argv)
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetErr(new(bytes.Buffer))
+
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+
+			_, set := os.LookupEnv(lib.HeadlessEnvVar)
+			if set != tt.wantSet {
+				t.Errorf("RAID_HEADLESS set = %v, want %v", set, tt.wantSet)
+			}
+		})
+	}
+}
+
 func TestBaseVersion(t *testing.T) {
 	tests := []struct {
 		name    string

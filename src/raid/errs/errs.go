@@ -59,6 +59,7 @@ const (
 	CodeEnvNotFound            = liberrs.CodeEnvNotFound
 	CodeCommandNotFound        = liberrs.CodeCommandNotFound
 	CodeVerifyFailed           = liberrs.CodeVerifyFailed
+	CodeHeadlessPromptNoDefault = liberrs.CodeHeadlessPromptNoDefault
 )
 
 // AsError walks the wrapped-error chain and returns the first Error.
@@ -113,3 +114,4 @@ func TaskTemplateFailed(cause error) Error             { return liberrs.TaskTemp
 func TaskGitFailed(cause error) Error                  { return liberrs.TaskGitFailed(cause) }
 func TaskHTTPFailed(url string, cause error) Error     { return liberrs.TaskHTTPFailed(url, cause) }
 func VerifyFailed(name string, cause error) Error      { return liberrs.VerifyFailed(name, cause) }
+func HeadlessPromptNoDefault(varName string) Error     { return liberrs.HeadlessPromptNoDefault(varName) }

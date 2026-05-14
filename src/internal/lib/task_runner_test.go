@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 )
 
 // --- getShell ---
@@ -1413,6 +1415,90 @@ func TestExecuteTask_confirm_no(t *testing.T) {
 		if err != nil && !strings.Contains(err.Error(), "aborted") {
 			t.Errorf("answer %q: error %q should mention 'aborted'", answer, err.Error())
 		}
+	}
+}
+
+// --- Headless mode ---
+
+func TestExecuteTask_confirm_headlessAutoAccepts(t *testing.T) {
+	// In headless mode Confirm must auto-accept without touching stdin.
+	// This is the documented trade-off for CI / agent invocations.
+	defer SetHeadlessForTest(true)()
+
+	// Don't swap stdin — if the code path read from it, the test would
+	// either hang or read random shell input. The assertion is implicit
+	// in the lack of either failure mode plus a nil error.
+	if err := ExecuteTask(Task{Type: Confirm, Message: "Proceed?"}); err != nil {
+		t.Fatalf("headless Confirm returned error: %v", err)
+	}
+}
+
+func TestExecuteTask_prompt_headlessUsesDefault(t *testing.T) {
+	defer SetHeadlessForTest(true)()
+	os.Unsetenv("RAID_PROMPT_HEADLESS_DEFAULT")
+	t.Cleanup(func() { os.Unsetenv("RAID_PROMPT_HEADLESS_DEFAULT") })
+
+	task := Task{
+		Type:    Prompt,
+		Var:     "RAID_PROMPT_HEADLESS_DEFAULT",
+		Default: "ci-value",
+	}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("headless Prompt with default returned error: %v", err)
+	}
+	if got := os.Getenv("RAID_PROMPT_HEADLESS_DEFAULT"); got != "ci-value" {
+		t.Errorf("env = %q, want default %q", got, "ci-value")
+	}
+}
+
+func TestExecuteTask_prompt_headlessNoDefaultFailsFast(t *testing.T) {
+	defer SetHeadlessForTest(true)()
+	os.Unsetenv("RAID_PROMPT_HEADLESS_NO_DEFAULT")
+	t.Cleanup(func() { os.Unsetenv("RAID_PROMPT_HEADLESS_NO_DEFAULT") })
+
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_HEADLESS_NO_DEFAULT"}
+	err := ExecuteTask(task)
+	if err == nil {
+		t.Fatal("expected error for headless Prompt without default, got nil")
+	}
+	rErr, ok := liberrs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != liberrs.CodeHeadlessPromptNoDefault {
+		t.Errorf("code = %q, want HEADLESS_PROMPT_NO_DEFAULT", rErr.Code())
+	}
+	if got, _ := rErr.Details()["var"].(string); got != "RAID_PROMPT_HEADLESS_NO_DEFAULT" {
+		t.Errorf("details[var] = %q, want the prompt's Var", got)
+	}
+	if _, set := os.LookupEnv("RAID_PROMPT_HEADLESS_NO_DEFAULT"); set {
+		t.Error("env var should not be set when Prompt fails")
+	}
+}
+
+func TestExecuteTask_prompt_headlessOverEnvVar(t *testing.T) {
+	// The env-var entry point (RAID_HEADLESS=1) is the documented hook
+	// for CI / agents that bypass the CLI flag. Verify it reaches
+	// execPrompt the same way the SetHeadlessForTest override does.
+	prev, had := os.LookupEnv(HeadlessEnvVar)
+	os.Setenv(HeadlessEnvVar, "1")
+	headlessOverride = nil
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(HeadlessEnvVar, prev)
+		} else {
+			os.Unsetenv(HeadlessEnvVar)
+		}
+	})
+	os.Unsetenv("RAID_PROMPT_HEADLESS_ENV")
+	t.Cleanup(func() { os.Unsetenv("RAID_PROMPT_HEADLESS_ENV") })
+
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_HEADLESS_ENV", Default: "from-env"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("env-var-driven headless returned error: %v", err)
+	}
+	if got := os.Getenv("RAID_PROMPT_HEADLESS_ENV"); got != "from-env" {
+		t.Errorf("env = %q, want %q", got, "from-env")
 	}
 }
 

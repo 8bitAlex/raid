@@ -296,3 +296,17 @@ func VerifyFailed(name string, cause error) *RaidError {
 		"Fix the underlying dependency or update the verify block to match reality.",
 		map[string]any{"verify": name}, cause)
 }
+
+// HeadlessPromptNoDefault — a Prompt task fired in headless mode but
+// has no `default:` value to fall back to. CategoryTask because it's
+// a runtime task failure rather than a config-validation issue: the
+// config is structurally valid, it just can't satisfy this particular
+// invocation. The variable name is surfaced as a detail so JSON
+// consumers can name the offending prompt without parsing the
+// message.
+func HeadlessPromptNoDefault(varName string) *RaidError {
+	return newRaidError(CodeHeadlessPromptNoDefault, CategoryTask,
+		formatMsg("prompt for %q has no default and raid is in headless mode", varName),
+		"Add a `default:` to the Prompt task, or run raid without -y / --yes / --headless / RAID_HEADLESS.",
+		map[string]any{"var": varName}, nil)
+}

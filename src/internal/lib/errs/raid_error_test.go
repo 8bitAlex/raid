@@ -321,6 +321,7 @@ func TestEveryConstructor_isWellFormed(t *testing.T) {
 		{"TaskHTTPFailed(nil)", func() *RaidError { return TaskHTTPFailed("u", nil) }, CodeTaskHTTPFailed},
 		{"VerifyFailed", func() *RaidError { return VerifyFailed("v", errors.New("c")) }, CodeVerifyFailed},
 		{"VerifyFailed(nil)", func() *RaidError { return VerifyFailed("v", nil) }, CodeVerifyFailed},
+		{"HeadlessPromptNoDefault", func() *RaidError { return HeadlessPromptNoDefault("VAR") }, CodeHeadlessPromptNoDefault},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

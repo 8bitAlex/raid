@@ -716,6 +716,18 @@ func execPrompt(task Task) error {
 		return liberrs.ArgInvalid("var is required for Prompt task")
 	}
 
+	// Headless mode: skip stdin entirely. Use the declared default if
+	// present; otherwise fail fast with a structured error. We refuse
+	// to set the variable to "" silently because callers downstream
+	// would silently misbehave on the missing value.
+	if IsHeadless() {
+		if task.Default == "" {
+			return liberrs.HeadlessPromptNoDefault(task.Var)
+		}
+		os.Setenv(task.Var, task.Default)
+		return nil
+	}
+
 	message := task.Message
 	if message == "" {
 		message = fmt.Sprintf("Enter value for %s:", task.Var)
@@ -741,6 +753,15 @@ func execPrompt(task Task) error {
 }
 
 func execConfirm(task Task) error {
+	// Headless mode auto-accepts every Confirm. This is the documented
+	// trade-off for CI / agent invocations — destructive guards must be
+	// expressed via something stricter than a Confirm prompt (an
+	// environment-gated condition, a verify entry, etc.) when headless
+	// callers are in scope.
+	if IsHeadless() {
+		return nil
+	}
+
 	message := task.Message
 	if message == "" {
 		message = "Continue?"

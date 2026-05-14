@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.15.0 — upcoming
+
+**Headless mode for CI, scheduled runs, and agents.** A new top-level `-y` / `--yes` / `--headless` flag (and `RAID_HEADLESS=1` env-var equivalent) auto-resolves interactive prompts so non-interactive callers no longer deadlock on a `Confirm` or `Prompt`. `Confirm` auto-accepts; `Prompt` skips stdin and uses its `default:` value; a `Prompt` without a default fails fast with a structured `HEADLESS_PROMPT_NO_DEFAULT` error (exit code `3`) instead of silently setting the variable to empty. The flag and env var are interchangeable — the flag works by setting the env var, so a single read site in lib serves both the CLI and programmatic entry points. Headless auto-accepts every `Confirm`, so stronger destructive-action guardrails must be expressed via a [`verify:`](/docs/references/schema#verify) entry, a `condition:`, or an explicit env-var check. See [raid → Headless mode](/docs/usage/raid#headless-mode). Closes [#67](https://github.com/8bitAlex/raid/issues/67).
+
 ## 0.14.0 — upcoming
 
 **Agent-oriented metadata on commands.** Commands now accept an optional `agent:` block (`safe`, `reads`, `writes`, `description`) so MCP clients can decide whether to auto-execute a command or prompt the user for approval. The `raid://workspace/commands` resource always emits `agent.safe` for every command — entries authored without an `agent:` block surface as `{safe: false}`, preserving the current "requires confirmation" semantics by default. The metadata is a hint: raid surfaces it; the agent client implements the policy. Both top-level profile commands and per-repo `raid.yaml` commands carry the metadata. See [Schema → Agent metadata](/docs/references/schema#agent-metadata) and [Context → Agent metadata on workspace commands](/docs/usage/context#agent-metadata-on-workspace-commands). Closes [#51](https://github.com/8bitAlex/raid/issues/51).

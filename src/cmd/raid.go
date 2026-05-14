@@ -50,6 +50,9 @@ func init() {
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(raid.ConfigPath, raid.ConfigPathFlag, raid.ConfigPathFlagShort, "", raid.ConfigPathFlagDesc)
 	rootCmd.PersistentFlags().Bool("json", false, "Emit JSON output for scriptable / agent consumption (where supported)")
+	rootCmd.PersistentFlags().BoolP("yes", "y", false, "Auto-resolve interactive prompts (Confirm/Prompt tasks). Confirm auto-accepts; Prompt uses its `default:` or fails with HEADLESS_PROMPT_NO_DEFAULT.")
+	rootCmd.PersistentFlags().Bool("headless", false, "Alias for --yes; intended for CI, scheduled runs, and agent hosts. Also enabled by setting RAID_HEADLESS=1 in the environment.")
+	rootCmd.PersistentPreRunE = applyHeadlessFlag
 	// Subcommands
 	rootCmd.AddCommand(profile.Command)
 	rootCmd.AddCommand(install.Command)
@@ -190,6 +193,28 @@ func executeRoot(args []string) int {
 		return errs.ExitCode(err)
 	}
 	return 0
+}
+
+// applyHeadlessFlag is rootCmd's PersistentPreRunE. It runs after
+// cobra resolves persistent flags but before any subcommand's RunE,
+// so it's the right hook to translate the --yes/--headless flags
+// into the RAID_HEADLESS env var that lib.IsHeadless() reads.
+//
+// Setting an env var instead of a Go variable keeps lib free of any
+// cobra dependency — and the env var is also the documented
+// programmatic entry point for callers that bypass the CLI (CI
+// runners, agent hosts) so a single read site in lib serves both.
+//
+// We only set the var when one of the flags is true; existing
+// RAID_HEADLESS=1 in the environment is left untouched so external
+// callers can still flip headless mode on without passing the flag.
+func applyHeadlessFlag(cmd *cobra.Command, _ []string) error {
+	yes, _ := cmd.Flags().GetBool("yes")
+	headless, _ := cmd.Flags().GetBool("headless")
+	if yes || headless {
+		os.Setenv(lib.HeadlessEnvVar, "1")
+	}
+	return nil
 }
 
 // jsonModeFromArgs reports whether the user passed `--json` (or

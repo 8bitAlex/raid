@@ -468,6 +468,8 @@ Prompt the user for input and store the result in a variable.
 | `message` | string | No | Message to display to the user |
 | `default` | string | No | Default value if the user provides no input |
 
+In [headless mode](../usage/raid#headless-mode) (`-y`, `--headless`, or `RAID_HEADLESS=1`), Prompt skips stdin and uses `default:` directly. A Prompt without a `default:` fails with `HEADLESS_PROMPT_NO_DEFAULT` — add a default for every Prompt you expect CI / agent invocations to run.
+
 ### Confirm
 
 Ask the user for yes/no confirmation. If the user answers no, remaining tasks are skipped.
@@ -476,6 +478,8 @@ Ask the user for yes/no confirmation. If the user answers no, remaining tasks ar
 |---|---|---|---|
 | `type` | string | Yes | `"Confirm"` |
 | `message` | string | No | Confirmation prompt to display |
+
+In [headless mode](../usage/raid#headless-mode), Confirm auto-accepts. Express destructive-action gates through a [`verify:`](#verify) entry, a `condition:` on the destructive task, or an explicit env-var check — anything that doesn't depend on a user answering a prompt.
 
 ### Set
 
