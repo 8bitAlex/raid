@@ -9,7 +9,7 @@ description: What raid's opt-in anonymous CLI telemetry collects, what it never 
 
 raid ships an **opt-in, anonymous** CLI telemetry pipeline so the team can prioritize features against real usage signal — which task types matter, which commands fail, which features go unused — without ever capturing what you actually run.
 
-**Off by default.** A fresh install never sends anything to the telemetry endpoint until you explicitly run `raid telemetry on` (or accept the first-run prompt). When opted out, raid makes zero telemetry / PostHog requests, and there's an integration test that pins this contract. (raid still performs an unrelated GitHub release-version check on normal invocations regardless of telemetry state — that request is independent of this pipeline.)
+**Off by default.** A fresh install never sends anything to the telemetry endpoint until you explicitly run `raid telemetry on` (or accept the first-run prompt). The one narrow exception is the [follow-up question](#follow-up-may-we-record-the-denial): if you decline the first-run prompt and then explicitly answer yes to the follow-up, raid sends exactly one anonymous `raid_telemetry_opt_out` event and then stays off forever. Answering no to the follow-up (or skipping it for any reason) means raid still sends nothing. When opted out, raid makes zero further telemetry / PostHog requests, and there's an integration test that pins this contract. (raid still performs an unrelated GitHub release-version check on normal invocations regardless of telemetry state — that request is independent of this pipeline.)
 
 ## What raid collects
 

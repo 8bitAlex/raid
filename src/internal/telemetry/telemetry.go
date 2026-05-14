@@ -17,11 +17,18 @@
 //
 // The package is read-only side-effect-free for users who never opt
 // in via prompt or `raid telemetry on`: no goroutines spawned, no
-// HTTP calls. The one exception is the consent-decision marker —
-// MaybePromptForConsent persists a "decided=off" entry to viper when
-// the prompt is skipped (DO_NOT_TRACK, non-TTY, headless) so we don't
-// re-prompt on the next interactive run. No anonymous ID is created
-// or written until the user explicitly opts in.
+// HTTP calls. Two narrow exceptions exist:
+//   - MaybePromptForConsent persists a "decided=off" entry to viper
+//     when the prompt is skipped (DO_NOT_TRACK, non-TTY, headless) so
+//     we don't re-prompt on the next interactive run. No anonymous ID
+//     or network traffic results.
+//   - CaptureOptOutConsented, used only by the first-run follow-up
+//     prompt when a declining user explicitly consents to record their
+//     decision, creates an anonymous ID and sends exactly one
+//     `raid_telemetry_opt_out` event before leaving telemetry off
+//     forever. This is per-event consent, never state-level.
+// Outside of those two paths, no anonymous ID is created or written
+// until the user explicitly opts in.
 package telemetry
 
 import (

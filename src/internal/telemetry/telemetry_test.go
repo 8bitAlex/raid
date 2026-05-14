@@ -721,9 +721,9 @@ func TestMaybePromptForConsent_declineEmptyFollowUpSendsNothing(t *testing.T) {
 func TestMaybePromptForConsent_acceptSkipsFollowUp(t *testing.T) {
 	setupTestEnv(t)
 	isInteractiveFn = func() bool { return true }
-	// "y" accepts. If the follow-up wrongly fired, the second line
-	// would be the input — but the test reader has only one line,
-	// so the missing line proves the follow-up was skipped.
+	// "y" accepts. The assertion below pins behavior by checking the
+	// prompt output never contains the follow-up question text — if
+	// the follow-up wrongly fired, that string would appear in `out`.
 	r := strings.NewReader("y\n")
 	promptInFn = func() io.Reader { return r }
 	out := &strings.Builder{}
