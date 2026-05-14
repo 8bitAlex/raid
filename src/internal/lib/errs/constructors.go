@@ -307,6 +307,6 @@ func VerifyFailed(name string, cause error) *RaidError {
 func HeadlessPromptNoDefault(varName string) *RaidError {
 	return newRaidError(CodeHeadlessPromptNoDefault, CategoryTask,
 		formatMsg("prompt for %q has no default and raid is in headless mode", varName),
-		"Add a `default:` to the Prompt task, or run raid without -y / --headless / RAID_HEADLESS.",
+		"Add a `default:` to the Prompt task, or run raid without -y / --yes / --headless / RAID_HEADLESS.",
 		map[string]any{"var": varName}, nil)
 }

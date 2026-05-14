@@ -57,7 +57,7 @@ The third row is deliberate: silently setting the variable to an empty string wo
 
 **Destructive Confirms in headless mode.** Headless auto-accepts every `Confirm`, so the prompt is no longer a safety gate. Express stronger guardrails through a [`verify:`](../references/schema#verify) entry, a `condition:` on the destructive task, or an explicit env-var check — anything that doesn't depend on a user answering a prompt.
 
-**Env var.** Set `RAID_HEADLESS=1` (or `true` / `yes` / `on`, case-insensitive) for the same effect as the flag. The flag and env var are interchangeable; the flag works by setting the env var so a single read site in raid serves both.
+**Env var.** Set `RAID_HEADLESS=1` (or `true` / `yes` / `on`, case-insensitive) for the same effect as the flag. The flag and env var are interchangeable; the flag works by setting the env var so a single read site in lib (`lib.IsHeadless()`) serves both.
 
 ## Built-in commands
 
