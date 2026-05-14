@@ -96,6 +96,7 @@ const (
 	CodeEnvNotFound            = "ENV_NOT_FOUND"
 	CodeCommandNotFound        = "COMMAND_NOT_FOUND"
 	CodeVerifyFailed           = "VERIFY_FAILED"
+	CodeHeadlessPromptNoDefault = "HEADLESS_PROMPT_NO_DEFAULT"
 )
 
 // RaidError is the canonical implementation of raid's Error interface.

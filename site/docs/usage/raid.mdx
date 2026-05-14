@@ -19,6 +19,8 @@ These flags can be used with any subcommand.
 | `-c, --config <path>` | Path to the config file (default: `~/.raid/config.toml`) |
 | `-h, --help` | Show help for any command |
 | `-v, --version` | Print the current raid version |
+| `--json` | Emit JSON output / errors for scriptable and agent consumption (where supported) |
+| `-y, --yes`, `--headless` | Auto-resolve interactive prompts. See [Headless mode](#headless-mode) below |
 
 ## Config file
 
@@ -32,6 +34,30 @@ raid -c /tmp/test-config.toml doctor
 ```
 
 This is useful when managing multiple independent setups or during testing.
+
+## Headless mode
+
+For CI runs, scheduled jobs, and agent-driven invocations there's no human at a terminal to answer interactive prompts. Pass `-y`, `--yes`, or `--headless` (all equivalent) to auto-resolve every prompt:
+
+```bash
+raid -y deploy
+raid --headless install
+RAID_HEADLESS=1 raid deploy        # env-var equivalent (same effect)
+```
+
+**Behavior:**
+
+| Task type | Headless behavior |
+|---|---|
+| [`Confirm`](../references/schema#confirm) | Auto-accepts. The prompt is skipped and the next task runs. |
+| [`Prompt`](../references/schema#prompt) with a `default:` | Uses the declared default; stdin is not read. |
+| [`Prompt`](../references/schema#prompt) without a `default:` | Fails fast with `HEADLESS_PROMPT_NO_DEFAULT` (exit code `3`, category `task`). |
+
+The third row is deliberate: silently setting the variable to an empty string would surface as a confusing downstream failure. Add a `default:` to every Prompt you expect to run headlessly.
+
+**Destructive Confirms in headless mode.** Headless auto-accepts every `Confirm`, so the prompt is no longer a safety gate. Express stronger guardrails through a [`verify:`](../references/schema#verify) entry, a `condition:` on the destructive task, or an explicit env-var check — anything that doesn't depend on a user answering a prompt.
+
+**Env var.** Set `RAID_HEADLESS=1` (or `true` / `yes` / `on`, case-insensitive) for the same effect as the flag. The flag and env var are interchangeable; the flag works by setting the env var so a single read site in raid serves both.
 
 ## Built-in commands
 

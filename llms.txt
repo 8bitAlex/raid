@@ -32,7 +32,7 @@ Raid is written in Go, distributed as a single self-contained binary, and publis
 - [raid profile](https://raidcli.dev/docs/usage/profile): Add profiles from a git repo URL, raw file URL, or local path (including single-repo `raid.yaml` configs); list, switch, and remove profiles
 - [Custom commands](https://raidcli.dev/docs/usage/custom): Define and invoke `raid <cmd>` team workflows
 - [raid doctor](https://raidcli.dev/docs/usage/doctor): Diagnose profile and repo configuration issues
-- [raid root command](https://raidcli.dev/docs/usage/raid): Global flags and top-level invocation
+- [raid root command](https://raidcli.dev/docs/usage/raid): Global flags and top-level invocation, including [headless mode](https://raidcli.dev/docs/usage/raid#headless-mode) (`-y` / `--yes` / `--headless` / `RAID_HEADLESS=1`) that auto-resolves Confirm and Prompt tasks for CI / agent runs
 - [raid context](https://raidcli.dev/docs/usage/context): Snapshot the active workspace, or run `raid context serve` as an MCP server (stdio) exposing profile, env, repos, commands, recent, and live vars as resources, plus the canonical raid agent toolkit as tools
 
 ## Reference

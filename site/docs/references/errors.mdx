@@ -48,6 +48,7 @@ still reflects what the user's script returned.
 | `TASK_WAIT_TIMEOUT` | task | A `Wait` task exceeded its timeout. |
 | `TASK_TEMPLATE_FAILED` | task | A `Template` task couldn't render or write. |
 | `TASK_GIT_FAILED` | task | A `Git` task (non-clone) failed. |
+| `HEADLESS_PROMPT_NO_DEFAULT` | task | A `Prompt` task fired in [headless mode](../usage/raid#headless-mode) but has no `default:` to fall back to. Add a default, or run without `-y` / `--headless`. |
 | `CLONE_FAILED` | network | `git clone` returned non-zero. |
 | `TASK_HTTP_FAILED` | network | An `HTTP` task failed. |
 | `PROFILE_NOT_FOUND` | not-found | The referenced profile is not registered. |

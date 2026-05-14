@@ -181,6 +181,20 @@ Check the current configuration for issues and get suggestions for fixing them. 
 
 Read commands accept `--json` for scriptable, machine-readable output: `raid profile list`, `raid env`, `raid env list`, `raid doctor`, and `raid context`. Output shapes are stable; severity strings in `doctor` are one of `ok`, `warn`, `error`.
 
+### Headless mode (`-y` / `--yes` / `--headless`)
+
+CI runs, scheduled jobs, and agent-driven invocations don't have a human at a terminal to answer interactive prompts. Pass `-y`, `--yes`, or `--headless` (all equivalent) — or set `RAID_HEADLESS=1` — to auto-resolve every prompt:
+
+```bash
+raid -y deploy
+raid --headless install
+RAID_HEADLESS=1 raid deploy
+```
+
+- `Confirm` tasks **auto-accept** in headless mode. Stronger destructive-action gates must come from a [`verify:`](https://raidcli.dev/docs/references/schema#verify) entry, a `condition:` on the destructive task, or an explicit env-var check — not from a prompt that a non-interactive caller will always say yes to.
+- `Prompt` tasks **use their `default:`** value instead of reading stdin.
+- A `Prompt` **without a `default:`** fails fast with `HEADLESS_PROMPT_NO_DEFAULT` (exit code 3, category `task`) so the variable is never silently set to empty. Add a default for every Prompt you expect CI / agent invocations to run.
+
 ### `raid <command>`
 
 Run a custom command defined in the active profile or any of its repositories.
@@ -375,6 +389,8 @@ Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful
   message: "This will reset the production database. Continue?"
 ```
 
+Auto-accepts in headless mode (`-y` / `--yes` / `--headless` / `RAID_HEADLESS=1`) — see the [Headless mode](#headless-mode--y----yes----headless) section.
+
 ### Git
 
 Perform a git operation in a repository directory.
@@ -429,6 +445,8 @@ Ask the user for input and store the result in an environment variable for use b
   message: "Which environment? (dev/staging/prod)"
   default: dev     # optional: used when user presses enter with no input
 ```
+
+In headless mode the `default:` is used directly; a Prompt without a default fails with `HEADLESS_PROMPT_NO_DEFAULT`. See [Headless mode](#headless-mode--y----yes----headless).
 
 ### Script
 
