@@ -225,22 +225,24 @@ func (w *prefixedWriter) Flush() error {
 	return nil
 }
 
-// shouldPrefix decides whether task output should be wrapped.
-// All three conditions must hold:
+// shouldPrefix decides whether task output written to sink should
+// be wrapped. All three conditions must hold:
 //   - the task is opted into concurrent execution (sequential
 //     output is unambiguous by ordering, so prefixing it is just
 //     visual noise);
-//   - the underlying sink is a TTY (pipes, file redirects, CI
-//     logs, and the MCP server's syncBuffer all return false so
-//     machine-readable output stays byte-identical to today);
 //   - the user hasn't disabled prefixing via --no-prefix or
-//     RAID_NO_PREFIX.
-func shouldPrefix(task Task) bool {
+//     RAID_NO_PREFIX;
+//   - sink itself is a TTY. Each stream (stdout/stderr) is checked
+//     independently — when one is a terminal and the other is
+//     redirected to a file or pipe, only the terminal stream gets
+//     prefixing so the redirected sink stays byte-identical to
+//     today.
+func shouldPrefix(task Task, sink io.Writer) bool {
 	if !task.Concurrent {
 		return false
 	}
 	if PrefixDisabled() {
 		return false
 	}
-	return isTerminalSinkFn(commandStdout)
+	return isTerminalSinkFn(sink)
 }

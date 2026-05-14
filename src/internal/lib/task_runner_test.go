@@ -1863,6 +1863,9 @@ func TestExecuteTasks_concurrentTasksNoMidLineInterleave(t *testing.T) {
 	// into a TTY-stubbed sink. Every line in the sink must be
 	// attributable to exactly one of the two tasks — the shared
 	// outputMu must hold prefix+line+newline atomic across goroutines.
+	if runtime.GOOS == "windows" {
+		t.Skip("test command uses POSIX shell syntax ($(seq ...), for ...; do)")
+	}
 	defer SetPrefixDisabledForTest(false)()
 	defer stubTerminalSink(true)()
 	// NO_COLOR keeps the assertion regex simple.

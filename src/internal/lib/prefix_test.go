@@ -428,7 +428,7 @@ func TestColorDisabled_envVar(t *testing.T) {
 func TestShouldPrefix_sequentialNeverPrefixes(t *testing.T) {
 	defer SetPrefixDisabledForTest(false)()
 	defer stubTerminalSink(true)()
-	if shouldPrefix(Task{Concurrent: false}) {
+	if shouldPrefix(Task{Concurrent: false}, commandStdout) {
 		t.Error("sequential task should not be prefixed")
 	}
 }
@@ -436,7 +436,7 @@ func TestShouldPrefix_sequentialNeverPrefixes(t *testing.T) {
 func TestShouldPrefix_concurrentOnTTYWithFlagDisabled(t *testing.T) {
 	defer SetPrefixDisabledForTest(true)()
 	defer stubTerminalSink(true)()
-	if shouldPrefix(Task{Concurrent: true}) {
+	if shouldPrefix(Task{Concurrent: true}, commandStdout) {
 		t.Error("PrefixDisabled should suppress prefixing even on TTY")
 	}
 }
@@ -444,7 +444,7 @@ func TestShouldPrefix_concurrentOnTTYWithFlagDisabled(t *testing.T) {
 func TestShouldPrefix_concurrentNonTTY(t *testing.T) {
 	defer SetPrefixDisabledForTest(false)()
 	defer stubTerminalSink(false)()
-	if shouldPrefix(Task{Concurrent: true}) {
+	if shouldPrefix(Task{Concurrent: true}, commandStdout) {
 		t.Error("non-TTY sink should suppress prefixing")
 	}
 }
@@ -452,10 +452,35 @@ func TestShouldPrefix_concurrentNonTTY(t *testing.T) {
 func TestShouldPrefix_concurrentOnTTY(t *testing.T) {
 	defer SetPrefixDisabledForTest(false)()
 	defer stubTerminalSink(true)()
-	if !shouldPrefix(Task{Concurrent: true}) {
+	if !shouldPrefix(Task{Concurrent: true}, commandStdout) {
 		t.Error("concurrent task on TTY should be prefixed")
 	}
 }
+
+// When stdout is a TTY but stderr is redirected to a non-TTY (or
+// vice versa), each sink is judged independently. Verifies the fix
+// for the original "decision-from-stdout-applies-to-stderr" bug.
+func TestShouldPrefix_perSinkIndependent(t *testing.T) {
+	defer SetPrefixDisabledForTest(false)()
+	prev := isTerminalSinkFn
+	defer func() { isTerminalSinkFn = prev }()
+	tty := &taggedWriter{tag: "tty"}
+	pipe := &taggedWriter{tag: "pipe"}
+	isTerminalSinkFn = func(w io.Writer) bool {
+		tw, _ := w.(*taggedWriter)
+		return tw != nil && tw.tag == "tty"
+	}
+	if !shouldPrefix(Task{Concurrent: true}, tty) {
+		t.Error("TTY sink should be prefixed")
+	}
+	if shouldPrefix(Task{Concurrent: true}, pipe) {
+		t.Error("non-TTY sink should not be prefixed even if peer is TTY")
+	}
+}
+
+type taggedWriter struct{ tag string }
+
+func (t *taggedWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 // stubTerminalSink overrides the TTY detector for the duration of a
 // test. Production callers always read isTerminalSink directly.

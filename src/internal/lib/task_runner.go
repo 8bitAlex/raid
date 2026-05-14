@@ -447,7 +447,9 @@ func execScript(task Task) error {
 // byte-identical to today.
 func setCmdOutput(cmd *exec.Cmd, task Task) func() {
 	cmd.Stdin = os.Stdin
-	if !shouldPrefix(task) {
+	wrapOut := shouldPrefix(task, commandStdout)
+	wrapErr := shouldPrefix(task, commandStderr)
+	if !wrapOut && !wrapErr {
 		cmd.Stdout = commandStdout
 		cmd.Stderr = commandStderr
 		return func() {}
@@ -457,13 +459,26 @@ func setCmdOutput(cmd *exec.Cmd, task Task) func() {
 		color = colorForName(task.Label())
 	}
 	prefix := buildPrefix(task.Label(), color)
-	out := newPrefixedWriter(commandStdout, prefix)
-	errW := newPrefixedWriter(commandStderr, prefix)
-	cmd.Stdout = out
-	cmd.Stderr = errW
+	var out, errW *prefixedWriter
+	if wrapOut {
+		out = newPrefixedWriter(commandStdout, prefix)
+		cmd.Stdout = out
+	} else {
+		cmd.Stdout = commandStdout
+	}
+	if wrapErr {
+		errW = newPrefixedWriter(commandStderr, prefix)
+		cmd.Stderr = errW
+	} else {
+		cmd.Stderr = commandStderr
+	}
 	return func() {
-		_ = out.Flush()
-		_ = errW.Flush()
+		if out != nil {
+			_ = out.Flush()
+		}
+		if errW != nil {
+			_ = errW.Flush()
+		}
 	}
 }
 
@@ -842,14 +857,25 @@ func execPrint(task Task) error {
 		msg = expandRaid(msg)
 	}
 
+	sink := io.Writer(commandStdout)
+	if shouldPrefix(task, commandStdout) {
+		color := ""
+		if !colorDisabled() {
+			color = colorForName(task.Label())
+		}
+		pw := newPrefixedWriter(commandStdout, buildPrefix(task.Label(), color))
+		defer pw.Flush()
+		sink = pw
+	}
+
 	if task.Color != "" {
 		if code, ok := colorCodes[strings.ToLower(task.Color)]; ok {
-			fmt.Fprintf(commandStdout, "%s%s%s\n", code, msg, colorCodes["reset"])
+			fmt.Fprintf(sink, "%s%s%s\n", code, msg, colorCodes["reset"])
 			return nil
 		}
 	}
 
-	fmt.Fprintln(commandStdout, msg)
+	fmt.Fprintln(sink, msg)
 	return nil
 }
 
