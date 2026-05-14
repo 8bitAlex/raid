@@ -319,6 +319,115 @@ func TestPurgeID_idempotent(t *testing.T) {
 	}
 }
 
+func TestLoadOrCreateID_reusesExistingFile(t *testing.T) {
+	// Simulates a concurrent-process race: another raid invocation
+	// already wrote an ID before this one calls loadOrCreateID. The
+	// O_CREATE|O_EXCL path must observe the existing file and adopt
+	// the same value rather than overwriting with a fresh UUID.
+	setupTestEnv(t)
+	path := IDPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	preset := "11111111-2222-4333-8444-555555555555"
+	if err := os.WriteFile(path, []byte(preset+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got := loadOrCreateID()
+	if got != preset {
+		t.Errorf("loadOrCreateID = %q, want preset %q", got, preset)
+	}
+}
+
+func TestLoadOrCreateID_emptyOnHomeDirError(t *testing.T) {
+	setupTestEnv(t)
+	// Force the home-dir resolver to fail AND clear the env override
+	// so IDPath returns "". loadOrCreateID must fail closed (empty
+	// string) rather than panic or write somewhere unexpected.
+	os.Unsetenv(IDFileEnv)
+	homeDirFn = func() (string, error) { return "", os.ErrPermission }
+	if got := loadOrCreateID(); got != "" {
+		t.Errorf("loadOrCreateID = %q, want \"\" on home-dir failure", got)
+	}
+}
+
+func TestLoadIDIfExists_returnsEmptyWhenFileMissing(t *testing.T) {
+	setupTestEnv(t)
+	if got := loadIDIfExists(); got != "" {
+		t.Errorf("loadIDIfExists on fresh env = %q, want empty", got)
+	}
+}
+
+// --- CaptureSync ---
+
+func TestCaptureSync_sendsImmediately(t *testing.T) {
+	setupTestEnv(t)
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	CaptureSync(EventTelemetryOptOut, OptOutProps("test"))
+	// No Flush — CaptureSync blocks on the request itself.
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("CaptureSync delivered %d events, want 1", got)
+	}
+}
+
+func TestCaptureSync_noopWhenInactive(t *testing.T) {
+	setupTestEnv(t)
+	// IsActive is false (no SetEnabled). CaptureSync must short-circuit.
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+	CaptureSync(EventTelemetryOptOut, OptOutProps("ignored"))
+	if got := atomic.LoadInt32(&hits); got != 0 {
+		t.Errorf("inactive CaptureSync sent %d events, want 0", got)
+	}
+}
+
+// --- send: silent on errors ---
+
+func TestSend_swallowsNetworkErrors(t *testing.T) {
+	setupTestEnv(t)
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	// Point at a closed server — Dial will fail synchronously, but
+	// send() must absorb the error without panicking and Flush must
+	// still return cleanly.
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	closedURL := srv.URL
+	srv.Close()
+	CaptureEndpoint = closedURL
+	Capture(EventCommandExecuted, CommandExecutedProps("x", 0, nil, 0))
+	Flush(1 * time.Second) // must not hang
+}
+
+// --- PreviewPayload ---
+
+func TestPreviewPayload_placeholderWhenNoID(t *testing.T) {
+	setupTestEnv(t)
+	// No prior ID file → preview should still render (with a
+	// placeholder in the distinct_id slot) rather than returning
+	// empty. The comment contract was updated to match this.
+	payload := PreviewPayload(EventCommandExecuted, CommandExecutedProps("build", 0, nil, 0))
+	if payload == "" {
+		t.Fatal("preview empty when no ID file exists")
+	}
+	if !strings.Contains(payload, "no-id-yet") {
+		t.Errorf("preview missing placeholder marker: %s", payload)
+	}
+}
+
 // --- Sampling ---
 
 func TestSampled_rateZeroNeverFires(t *testing.T) {

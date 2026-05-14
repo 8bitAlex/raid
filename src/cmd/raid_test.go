@@ -100,6 +100,63 @@ func TestExecuteRoot_structuredErrorRouting(t *testing.T) {
 	}
 }
 
+func TestHeadlessFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no flag", []string{"raid", "install"}, false},
+		{"-y short", []string{"raid", "-y", "install"}, true},
+		{"long --yes", []string{"raid", "--yes", "install"}, true},
+		{"--headless", []string{"raid", "--headless", "install"}, true},
+		{"--yes=true", []string{"raid", "--yes=true", "install"}, true},
+		{"--yes=false", []string{"raid", "--yes=false", "install"}, false},
+		// pflag uses the last value when a flag is repeated; the
+		// pre-cobra scan must mirror that.
+		{"last value wins true→false", []string{"raid", "--yes=true", "--yes=false", "install"}, false},
+		{"last value wins false→true", []string{"raid", "--headless=false", "--headless", "install"}, true},
+		{"after --", []string{"raid", "--", "--yes"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := headlessFromArgs(tt.args); got != tt.want {
+				t.Errorf("headlessFromArgs(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsTelemetrySubcommand(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no args", []string{"raid"}, false},
+		{"direct", []string{"raid", "telemetry"}, true},
+		{"with sub", []string{"raid", "telemetry", "on"}, true},
+		{"bool flag before", []string{"raid", "--json", "telemetry"}, true},
+		{"--yes before", []string{"raid", "--yes", "telemetry", "off"}, true},
+		// Critical: --config consumes the next token, so the
+		// `telemetry` here is the config path, not the subcommand.
+		{"config value mistaken", []string{"raid", "--config", "telemetry", "install"}, false},
+		{"-c short value", []string{"raid", "-c", "telemetry", "install"}, false},
+		// --config=value attaches the value, so the next token is
+		// the real subcommand.
+		{"config attached value", []string{"raid", "--config=path", "telemetry"}, true},
+		{"different subcommand", []string{"raid", "install"}, false},
+		{"after --", []string{"raid", "--", "telemetry"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTelemetrySubcommand(tt.args); got != tt.want {
+				t.Errorf("isTelemetrySubcommand(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestJsonModeFromArgs(t *testing.T) {
 	tests := []struct {
 		name string
