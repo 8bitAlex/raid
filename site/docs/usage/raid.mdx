@@ -21,6 +21,7 @@ These flags can be used with any subcommand.
 | `-v, --version` | Print the current raid version |
 | `--json` | Emit JSON output / errors for scriptable and agent consumption (where supported) |
 | `-y, --yes`, `--headless` | Auto-resolve interactive prompts. See [Headless mode](#headless-mode) below |
+| `--no-prefix` | Disable per-task output prefixing in concurrent runs. See [Output prefixing](#output-prefixing-in-concurrent-runs) below |
 
 ## Config file
 
@@ -58,6 +59,33 @@ The third row is deliberate: silently setting the variable to an empty string wo
 **Destructive Confirms in headless mode.** Headless auto-accepts every `Confirm`, so the prompt is no longer a safety gate. Express stronger guardrails through a [`verify:`](../references/schema#verify) entry, a `condition:` on the destructive task, or an explicit env-var check — anything that doesn't depend on a user answering a prompt.
 
 **Env var.** Set `RAID_HEADLESS=1` (or `true` / `yes` / `on`, case-insensitive) for the same effect as the flag. The flag and env var are interchangeable; the flag works by setting the env var so a single read site in lib (`lib.IsHeadless()`) serves both.
+
+## Output prefixing in concurrent runs
+
+When raid runs tasks with `concurrent: true`, their stdout/stderr lines are prefixed with `[task-name]` and rendered in a deterministic per-task color, so interleaved output stays attributable:
+
+```
+[build] tsc compiling…
+[test] PASS  src/foo.test.ts
+[build] tsc finished in 1.4s
+[test] PASS  src/bar.test.ts
+```
+
+The task name comes from the [`name:`](../references/schema#task) field; tasks without a name fall back to their type (`Shell`, `Script`, `Git`). Colors are picked from a 6-color palette via a stable hash of the task label, so the same name always gets the same color across runs.
+
+**Suppressed on non-TTY sinks.** When raid's stdout isn't an interactive terminal — pipes, file redirects, CI logs, the MCP server's capture buffer — prefixing and color are both disabled. `raid <cmd> > log.txt` and `raid <cmd> | grep …` produce byte-identical output to today.
+
+**Sequential tasks are unprefixed.** Tasks without `concurrent: true` run one at a time in declared order, so their output is already unambiguous; prefixing them would just add visual noise.
+
+**Disable on demand.** Three escape hatches:
+
+| Toggle | What it disables |
+|---|---|
+| `--no-prefix` / `RAID_NO_PREFIX=1` | Both the prefix and the color. Useful when you want the raw subprocess output even on a TTY. |
+| `NO_COLOR=1` (any non-empty value) | Strips ANSI color codes but keeps the prefix. Follows the [no-color.org](https://no-color.org/) convention. |
+| `concurrent: false` | The task runs sequentially with the rest, so its output is naturally attributable by ordering. |
+
+**Trailing partial lines are flushed.** When a concurrent task exits without a final newline, raid emits the buffered partial line with its prefix so the last output is still attributed.
 
 ## Built-in commands
 

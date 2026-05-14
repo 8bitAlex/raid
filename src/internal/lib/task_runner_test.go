@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -1775,5 +1776,142 @@ func TestBuildSubprocessEnv_orderRaidVarsLast(t *testing.T) {
 	}
 	if raidIdx < osIdx {
 		t.Errorf("raid-set entry at %d came before OS entry at %d; exec uses last-occurrence so raidVar must come last", raidIdx, osIdx)
+	}
+}
+
+// --- setCmdOutput per-task prefixing ---
+
+func TestSetCmdOutput_sequentialTaskNoWrap(t *testing.T) {
+	// Even with a TTY-positive sink and prefix enabled, a sequential
+	// task must not be wrapped — sequential output is unambiguous
+	// by ordering, and prefixing it is visual noise.
+	defer SetPrefixDisabledForTest(false)()
+	defer stubTerminalSink(true)()
+	cmd := exec.Command("true")
+	flush := setCmdOutput(cmd, Task{Type: Shell, Concurrent: false, TaskProps: TaskProps{Name: "seq"}})
+	defer flush()
+	if cmd.Stdout != commandStdout {
+		t.Errorf("Stdout = %T, want commandStdout (no wrap for sequential)", cmd.Stdout)
+	}
+	if cmd.Stderr != commandStderr {
+		t.Errorf("Stderr = %T, want commandStderr (no wrap for sequential)", cmd.Stderr)
+	}
+}
+
+func TestSetCmdOutput_concurrentTaskNonTTYNoWrap(t *testing.T) {
+	// The default test sink (bytes.Buffer via withCapturedStderr) is
+	// not a TTY, so prefixing must stay off even when the task opts
+	// into concurrent execution. This guarantees existing test
+	// fixtures and CI pipelines see byte-identical task output.
+	defer SetPrefixDisabledForTest(false)()
+	defer stubTerminalSink(false)()
+	cmd := exec.Command("true")
+	flush := setCmdOutput(cmd, Task{Type: Shell, Concurrent: true, TaskProps: TaskProps{Name: "c"}})
+	defer flush()
+	if cmd.Stdout != commandStdout {
+		t.Errorf("Stdout wrapped despite non-TTY sink: %T", cmd.Stdout)
+	}
+}
+
+func TestSetCmdOutput_concurrentTaskWithNoPrefixFlagNoWrap(t *testing.T) {
+	defer SetPrefixDisabledForTest(true)()
+	defer stubTerminalSink(true)()
+	cmd := exec.Command("true")
+	flush := setCmdOutput(cmd, Task{Type: Shell, Concurrent: true, TaskProps: TaskProps{Name: "c"}})
+	defer flush()
+	if cmd.Stdout != commandStdout {
+		t.Errorf("--no-prefix should suppress wrap on TTY: %T", cmd.Stdout)
+	}
+}
+
+func TestSetCmdOutput_concurrentTaskOnTTYWraps(t *testing.T) {
+	// With TTY positive + prefix enabled, cmd.Stdout must be a
+	// *prefixedWriter and the cleanup must flush partial trailing
+	// bytes. We don't drive the subprocess — assigning the writers
+	// and verifying the flush callback is enough.
+	defer SetPrefixDisabledForTest(false)()
+	defer stubTerminalSink(true)()
+
+	var sink bytes.Buffer
+	restore := SetCommandOutput(&sink, &sink)
+	defer restore()
+
+	cmd := exec.Command("true")
+	flush := setCmdOutput(cmd, Task{Type: Shell, Concurrent: true, TaskProps: TaskProps{Name: "build"}})
+
+	pw, ok := cmd.Stdout.(*prefixedWriter)
+	if !ok {
+		t.Fatalf("Stdout = %T, want *prefixedWriter", cmd.Stdout)
+	}
+	if _, err := pw.Write([]byte("hello-no-newline")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if sink.String() != "" {
+		t.Errorf("partial line should be buffered until newline / Flush, got %q", sink.String())
+	}
+	flush()
+	if !strings.Contains(sink.String(), "[build]") {
+		t.Errorf("flushed output missing prefix: %q", sink.String())
+	}
+	if !strings.Contains(sink.String(), "hello-no-newline") {
+		t.Errorf("flushed output missing partial line content: %q", sink.String())
+	}
+}
+
+func TestExecuteTasks_concurrentTasksNoMidLineInterleave(t *testing.T) {
+	// End-to-end: two concurrent Shell tasks emit many lines each
+	// into a TTY-stubbed sink. Every line in the sink must be
+	// attributable to exactly one of the two tasks — the shared
+	// outputMu must hold prefix+line+newline atomic across goroutines.
+	if runtime.GOOS == "windows" {
+		t.Skip("test command uses POSIX shell syntax ($(seq ...), for ...; do)")
+	}
+	defer SetPrefixDisabledForTest(false)()
+	defer stubTerminalSink(true)()
+	// NO_COLOR keeps the assertion regex simple.
+	prev, had := os.LookupEnv("NO_COLOR")
+	os.Setenv("NO_COLOR", "1")
+	t.Cleanup(func() {
+		if had {
+			os.Setenv("NO_COLOR", prev)
+		} else {
+			os.Unsetenv("NO_COLOR")
+		}
+	})
+
+	sink := &syncStderr{}
+	restore := SetCommandOutput(sink, sink)
+	defer restore()
+
+	const lines = 30
+	tasks := []Task{
+		{
+			TaskProps:  TaskProps{Name: "a"},
+			Type:       Shell,
+			Cmd:        "for i in $(seq 1 " + fmt.Sprint(lines) + "); do echo a-line-$i; done",
+			Concurrent: true,
+		},
+		{
+			TaskProps:  TaskProps{Name: "b"},
+			Type:       Shell,
+			Cmd:        "for i in $(seq 1 " + fmt.Sprint(lines) + "); do echo b-line-$i; done",
+			Concurrent: true,
+		},
+	}
+	if err := ExecuteTasks(tasks); err != nil {
+		t.Fatalf("ExecuteTasks: %v", err)
+	}
+
+	// Every non-empty line must start with exactly one prefix.
+	for i, line := range strings.Split(strings.TrimSuffix(sink.String(), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "[a] a-line-"):
+		case strings.HasPrefix(line, "[b] b-line-"):
+		default:
+			t.Fatalf("line %d not single-prefix attributed: %q", i, line)
+		}
 	}
 }

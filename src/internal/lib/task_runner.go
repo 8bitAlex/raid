@@ -324,7 +324,8 @@ func execShell(task Task) error {
 		cmd.Dir = sys.ExpandPath(task.Path)
 	}
 	cmd.Env = buildSubprocessEnv()
-	setCmdOutput(cmd)
+	flush := setCmdOutput(cmd, task)
+	defer flush()
 
 	runErr := cmd.Run()
 
@@ -424,7 +425,8 @@ func execScript(task Task) error {
 	}
 
 	cmd.Env = buildSubprocessEnv()
-	setCmdOutput(cmd)
+	flush := setCmdOutput(cmd, task)
+	defer flush()
 
 	err := cmd.Run()
 	if err != nil {
@@ -434,10 +436,50 @@ func execScript(task Task) error {
 	return nil
 }
 
-func setCmdOutput(cmd *exec.Cmd) {
-	cmd.Stdout = commandStdout
-	cmd.Stderr = commandStderr
+// setCmdOutput wires a subprocess's stdout/stderr/stdin. For tasks
+// opted into concurrent execution on a TTY sink, the writers are
+// wrapped with per-line prefixers so output stays attributable when
+// peers interleave; the returned cleanup must be deferred to flush
+// any trailing partial line on subprocess exit. For sequential tasks
+// or non-TTY sinks the cleanup is a no-op and writers pass through
+// to commandStdout/commandStderr unchanged — pipes, file redirects,
+// CI logs, and the MCP server's syncBuffer capture all stay
+// byte-identical to today.
+func setCmdOutput(cmd *exec.Cmd, task Task) func() {
 	cmd.Stdin = os.Stdin
+	wrapOut := shouldPrefix(task, commandStdout)
+	wrapErr := shouldPrefix(task, commandStderr)
+	if !wrapOut && !wrapErr {
+		cmd.Stdout = commandStdout
+		cmd.Stderr = commandStderr
+		return func() {}
+	}
+	color := ""
+	if !colorDisabled() {
+		color = colorForName(task.Label())
+	}
+	prefix := buildPrefix(task.Label(), color)
+	var out, errW *prefixedWriter
+	if wrapOut {
+		out = newPrefixedWriter(commandStdout, prefix)
+		cmd.Stdout = out
+	} else {
+		cmd.Stdout = commandStdout
+	}
+	if wrapErr {
+		errW = newPrefixedWriter(commandStderr, prefix)
+		cmd.Stderr = errW
+	} else {
+		cmd.Stderr = commandStderr
+	}
+	return func() {
+		if out != nil {
+			_ = out.Flush()
+		}
+		if errW != nil {
+			_ = errW.Flush()
+		}
+	}
 }
 
 // buildSubprocessEnv returns the OS environment merged with the current
@@ -726,7 +768,8 @@ func execGit(task Task) error {
 
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	setCmdOutput(cmd)
+	flush := setCmdOutput(cmd, task)
+	defer flush()
 
 	if err := cmd.Run(); err != nil {
 		return liberrs.Newf(liberrs.CodeTaskGitFailed, liberrs.CategoryTask, "git %s failed in '%s': %v", task.Op, dir, err)
@@ -814,14 +857,25 @@ func execPrint(task Task) error {
 		msg = expandRaid(msg)
 	}
 
+	sink := io.Writer(commandStdout)
+	if shouldPrefix(task, commandStdout) {
+		color := ""
+		if !colorDisabled() {
+			color = colorForName(task.Label())
+		}
+		pw := newPrefixedWriter(commandStdout, buildPrefix(task.Label(), color))
+		defer pw.Flush()
+		sink = pw
+	}
+
 	if task.Color != "" {
 		if code, ok := colorCodes[strings.ToLower(task.Color)]; ok {
-			fmt.Fprintf(commandStdout, "%s%s%s\n", code, msg, colorCodes["reset"])
+			fmt.Fprintf(sink, "%s%s%s\n", code, msg, colorCodes["reset"])
 			return nil
 		}
 	}
 
-	fmt.Fprintln(commandStdout, msg)
+	fmt.Fprintln(sink, msg)
 	return nil
 }
 

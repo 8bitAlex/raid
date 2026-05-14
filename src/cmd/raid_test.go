@@ -229,6 +229,55 @@ func TestApplyHeadlessFlag(t *testing.T) {
 	}
 }
 
+// TestApplyNoPrefixFlag mirrors TestApplyHeadlessFlag for the
+// --no-prefix flag: cobra parses the flag, PersistentPreRunE
+// translates it to RAID_NO_PREFIX=1, and lib.PrefixDisabled() reads
+// the env var.
+func TestApplyNoPrefixFlag(t *testing.T) {
+	prev, had := os.LookupEnv(lib.NoPrefixEnvVar)
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(lib.NoPrefixEnvVar, prev)
+		} else {
+			os.Unsetenv(lib.NoPrefixEnvVar)
+		}
+	})
+
+	tests := []struct {
+		name    string
+		argv    []string
+		wantSet bool
+	}{
+		{"absent", []string{}, false},
+		{"--no-prefix", []string{"--no-prefix"}, true},
+		{"--no-prefix=true", []string{"--no-prefix=true"}, true},
+		{"--no-prefix=false", []string{"--no-prefix=false"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Unsetenv(lib.NoPrefixEnvVar)
+
+			cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+			cmd.PersistentFlags().BoolP("yes", "y", false, "")
+			cmd.PersistentFlags().Bool("headless", false, "")
+			cmd.PersistentFlags().Bool("no-prefix", false, "")
+			cmd.PersistentPreRunE = applyPersistentEnvFlags
+			cmd.SetArgs(tt.argv)
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetErr(new(bytes.Buffer))
+
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+
+			_, set := os.LookupEnv(lib.NoPrefixEnvVar)
+			if set != tt.wantSet {
+				t.Errorf("RAID_NO_PREFIX set = %v, want %v", set, tt.wantSet)
+			}
+		})
+	}
+}
+
 func TestBaseVersion(t *testing.T) {
 	tests := []struct {
 		name    string

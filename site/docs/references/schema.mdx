@@ -302,7 +302,7 @@ All tasks share these common fields:
 |---|---|---|---|
 | [`type`](#task-types) | string | Yes | Task type (case-sensitive, Title Case) |
 | `name` | string | No | Human-readable label, surfaced in logs and agent output. Does not affect execution. |
-| `concurrent` | bool | No | Run in parallel with adjacent concurrent tasks |
+| `concurrent` | bool | No | Run in parallel with adjacent concurrent tasks. Concurrent task output is line-prefixed with the task name on TTY sinks so interleaved output stays attributable — see [Output prefixing in concurrent runs](../usage/raid#output-prefixing-in-concurrent-runs). |
 | [`condition`](#condition) | object | No | Conditions that must all pass for the task to run |
 | [`options`](#options) | object | No | Shared options block. Composes across every task type and is also accepted on commands. |
 

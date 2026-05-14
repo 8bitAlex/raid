@@ -55,7 +55,8 @@ func init() {
 	rootCmd.PersistentFlags().Bool("json", false, "Emit JSON output for scriptable / agent consumption (where supported)")
 	rootCmd.PersistentFlags().BoolP("yes", "y", false, "Auto-resolve interactive prompts (Confirm/Prompt tasks). Confirm auto-accepts; Prompt uses its `default:` or fails with HEADLESS_PROMPT_NO_DEFAULT.")
 	rootCmd.PersistentFlags().Bool("headless", false, "Alias for --yes; intended for CI, scheduled runs, and agent hosts. Also enabled by setting RAID_HEADLESS=1 in the environment.")
-	rootCmd.PersistentPreRunE = applyHeadlessFlag
+	rootCmd.PersistentFlags().Bool("no-prefix", false, "Disable per-task output prefixing in concurrent runs. Equivalent to RAID_NO_PREFIX=1.")
+	rootCmd.PersistentPreRunE = applyPersistentEnvFlags
 	// Subcommands
 	rootCmd.AddCommand(profile.Command)
 	rootCmd.AddCommand(install.Command)
@@ -225,26 +226,39 @@ func executeRoot(args []string) int {
 	return 0
 }
 
-// applyHeadlessFlag is rootCmd's PersistentPreRunE. It runs after
-// cobra resolves persistent flags but before any subcommand's RunE,
-// so it's the right hook to translate the --yes/--headless flags
-// into the RAID_HEADLESS env var that lib.IsHeadless() reads.
+// applyPersistentEnvFlags is rootCmd's PersistentPreRunE. It runs
+// after cobra resolves persistent flags but before any subcommand's
+// RunE, so it's the right hook to translate flag-driven toggles
+// into the env vars that lib reads.
 //
 // Setting an env var instead of a Go variable keeps lib free of any
 // cobra dependency — and the env var is also the documented
 // programmatic entry point for callers that bypass the CLI (CI
 // runners, agent hosts) so a single read site in lib serves both.
 //
-// We only set the var when one of the flags is true; existing
-// RAID_HEADLESS=1 in the environment is left untouched so external
-// callers can still flip headless mode on without passing the flag.
-func applyHeadlessFlag(cmd *cobra.Command, _ []string) error {
+// We only set each var when its corresponding flag is true; existing
+// values in the environment are left untouched so external callers
+// can still flip the toggles on without passing flags.
+func applyPersistentEnvFlags(cmd *cobra.Command, _ []string) error {
 	yes, _ := cmd.Flags().GetBool("yes")
 	headless, _ := cmd.Flags().GetBool("headless")
 	if yes || headless {
 		os.Setenv(lib.HeadlessEnvVar, "1")
 	}
+	noPrefix, _ := cmd.Flags().GetBool("no-prefix")
+	if noPrefix {
+		os.Setenv(lib.NoPrefixEnvVar, "1")
+	}
 	return nil
+}
+
+// applyHeadlessFlag is the pre-rename alias kept as a thin shim so
+// existing tests (and any external pinning) continue to work. New
+// code should reference applyPersistentEnvFlags.
+//
+// Deprecated: use applyPersistentEnvFlags.
+func applyHeadlessFlag(cmd *cobra.Command, args []string) error {
+	return applyPersistentEnvFlags(cmd, args)
 }
 
 // isTelemetrySubcommand reports whether the user invoked one of the
