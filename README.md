@@ -85,9 +85,9 @@ Most task runners are built to orchestrate a *single project*. Raid is built for
 
 ## Development Status
 
-Raid is currently in the **prototype stage**. Core functionality is still being explored and iterated on — expect frequent changes and incomplete features.
+Raid is in **active development toward v1.0**. Core functionality is stable and usable today — multi-repo profiles, environments, custom commands, eleven task types, the MCP server, opt-in telemetry, and headless mode all ship behind a documented contract. A small set of v1-milestone issues remains; expect additive changes and a few targeted refinements before the v1 tag.
 
-Feedback, issues, and contributions are welcome as the project takes shape.
+Feedback, issues, and contributions are welcome.
 
 ---
 
@@ -654,7 +654,7 @@ Yes. Raid's profile and repo schemas are published to [SchemaStore](https://www.
 
 ### Is Raid production-ready?
 
-Raid is currently in the **prototype stage**. Core functionality works and is usable today, but APIs and configuration may change as the project evolves. See [Development Status](#development-status).
+Raid is in **active development toward v1.0**. Core functionality is stable enough to use today; a handful of v1-milestone refinements still ship additively before the v1 tag. See [Development Status](#development-status).
 
 ### How is "Raid" pronounced, and where does the name come from?
 

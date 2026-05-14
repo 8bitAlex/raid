@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "serverInfo": {
     "name": "raid",
-    "version": "0.7.4-beta",
+    "version": "0.17.0",
     "description": "Distributed development environment orchestrator. Manages multi-repo workflows, environments, and tasks via an MCP stdio server."
   },
   "transport": [
