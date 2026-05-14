@@ -386,6 +386,8 @@ condition:         # skip this task unless all conditions are met
   cmd: which docker        # only if this command exits 0
 ```
 
+Tasks marked `concurrent: true` have their stdout/stderr line-prefixed with `[task-name]` and a deterministic per-task color on TTY sinks, so interleaved output stays attributable. Prefixing auto-suppresses on pipes, file redirects, and CI logs. Disable via `--no-prefix` / `RAID_NO_PREFIX=1`, or drop just the color with `NO_COLOR=1`. See [Output prefixing in concurrent runs](https://raidcli.dev/docs/usage/raid#output-prefixing-in-concurrent-runs).
+
 ### Confirm
 
 Pause and require explicit confirmation (`y` or `yes`) before continuing. Useful before destructive operations.
