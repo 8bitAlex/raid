@@ -53,6 +53,21 @@ func TestResolveAgent_emptyDescriptionFallsBackToUsage(t *testing.T) {
 	}
 }
 
+func TestResolveAgent_fallsBackToNameWhenUsageAndDescriptionEmpty(t *testing.T) {
+	// Schema only requires name+tasks, so a valid command can have neither
+	// usage nor agent.description. MCP clients still need a non-empty
+	// descriptor, so the command name is the last-resort fallback.
+	got := resolveAgent(Command{Name: "lint"})
+	if got.Description != "lint" {
+		t.Errorf("Description = %q, want fallback to Name", got.Description)
+	}
+
+	got = resolveAgent(Command{Name: "deploy", Agent: &Agent{Safe: false}})
+	if got.Description != "deploy" {
+		t.Errorf("Description = %q, want fallback to Name when Agent present but empty", got.Description)
+	}
+}
+
 func TestResolveAgent_readsWritesPreserved(t *testing.T) {
 	reads := []string{"src/**/*.go", "go.mod"}
 	writes := []string{"dist/"}

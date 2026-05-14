@@ -98,18 +98,26 @@ type WorkspaceAgent struct {
 // MCP clients always see a non-empty descriptor.
 func resolveAgent(cmd Command) WorkspaceAgent {
 	if cmd.Agent == nil {
-		return WorkspaceAgent{Description: cmd.Usage}
+		return WorkspaceAgent{Description: descriptionFallback(cmd, "")}
 	}
-	out := WorkspaceAgent{
+	return WorkspaceAgent{
 		Safe:        cmd.Agent.Safe,
 		Reads:       cmd.Agent.Reads,
 		Writes:      cmd.Agent.Writes,
-		Description: cmd.Agent.Description,
+		Description: descriptionFallback(cmd, cmd.Agent.Description),
 	}
-	if out.Description == "" {
-		out.Description = cmd.Usage
+}
+
+// descriptionFallback guarantees a non-empty descriptor for MCP clients:
+// agent.description → usage → command name.
+func descriptionFallback(cmd Command, desc string) string {
+	if desc != "" {
+		return desc
 	}
-	return out
+	if cmd.Usage != "" {
+		return cmd.Usage
+	}
+	return cmd.Name
 }
 
 // WorkspaceStep describes one named task inside a command's task sequence.
