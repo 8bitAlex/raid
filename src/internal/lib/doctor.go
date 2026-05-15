@@ -96,16 +96,31 @@ func checkProfile() []Finding {
 		return findings
 	}
 
-	if err := ValidateProfile(profile.Path); err != nil {
-		return append(findings, Finding{
+	// Record the schema-validation outcome but DON'T short-circuit on
+	// failure. The whole value of doctor is the all-at-once health
+	// report — a schema error in the wrapping profile shouldn't hide
+	// repo-level findings, verify-block findings, or other downstream
+	// problems the user would want to triage in the same pass. The
+	// behavior mirrors checkVerify, which deliberately walks every
+	// entry and never short-circuits.
+	schemaErr := ValidateProfile(profile.Path)
+	if schemaErr != nil {
+		findings = append(findings, Finding{
 			Severity:   SeverityError,
 			Check:      "profile schema",
-			Message:    err.Error(),
+			Message:    schemaErr.Error(),
 			Suggestion: "fix the profile file to match the schema",
 		})
+	} else {
+		findings = append(findings, Finding{Severity: SeverityOK, Check: "profile schema", Message: "valid"})
 	}
-	findings = append(findings, Finding{Severity: SeverityOK, Check: "profile schema", Message: "valid"})
 
+	// ExtractProfile may itself fail when the schema check failed.
+	// Record the load error too, then stop — there's nothing further
+	// to check without a parsed profile (repos, verify entries, etc.
+	// all live inside it). This is the one short-circuit we keep:
+	// a missing profile struct means no further checks have a
+	// meaningful answer.
 	fullProfile, err := ExtractProfile(profile.Name, profile.Path)
 	if err != nil {
 		return append(findings, Finding{

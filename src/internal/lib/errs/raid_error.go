@@ -206,6 +206,28 @@ func ExitCode(err error) int {
 	return int(CategoryGeneric)
 }
 
+// reservedErrorKeys are JSON keys produced by the structured error
+// envelope itself. Details() entries with these names are skipped so a
+// future error code adding `code: "..."` (or similar) as a detail
+// can't accidentally shadow the canonical envelope field. Shared with
+// emitters in other packages (e.g. cmd/context/serve.go's MCP path)
+// so the CLI and MCP surfaces stay in lockstep — a new reserved key
+// added here propagates everywhere.
+var reservedErrorKeys = map[string]bool{
+	"code":     true,
+	"message":  true,
+	"category": true,
+	"hint":     true,
+}
+
+// IsReservedErrorKey reports whether k is reserved by the structured
+// error envelope. Exported so peer emitters (MCP tool-result builder,
+// future log adapters) can apply the same exclusion when flattening
+// Details() into their own JSON shape.
+func IsReservedErrorKey(k string) bool {
+	return reservedErrorKeys[k]
+}
+
 // EmitJSON writes a structured `{"error": {…}}` document to w. Errors
 // that don't implement Error are auto-wrapped as code UNKNOWN with
 // category Generic, so the shape is always stable. Details() entries
@@ -227,9 +249,7 @@ func EmitJSON(w io.Writer, err error) {
 		payload["hint"] = hint
 	}
 	for k, v := range rErr.Details() {
-		// code / message / category / hint are reserved.
-		switch k {
-		case "code", "message", "category", "hint":
+		if IsReservedErrorKey(k) {
 			continue
 		}
 		payload[k] = v

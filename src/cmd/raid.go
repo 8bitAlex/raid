@@ -597,6 +597,13 @@ func baseVersion(version string) string {
 // applyConfigFlag scans args for --config / -c so the config path is set
 // before the pre-initialization call, matching cobra's later flag parsing.
 // Scanning stops at the first -- end-of-flags marker.
+//
+// When the next token looks like another flag (`-x`-prefixed) we don't
+// claim it as the value AND we emit a warning to stderr so the user
+// notices the silent drop. Cobra will reject the invocation downstream;
+// printing the warning here makes the pre-cobra and cobra layers agree
+// on the cause instead of leaving the user wondering why their config
+// path didn't take effect.
 func applyConfigFlag(args []string) {
 	for i, arg := range args {
 		if arg == "--" {
@@ -610,8 +617,18 @@ func applyConfigFlag(args []string) {
 			*raid.ConfigPath = v
 			return
 		}
-		if (arg == "--config" || arg == "-c") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			*raid.ConfigPath = args[i+1]
+		if arg == "--config" || arg == "-c" {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				*raid.ConfigPath = args[i+1]
+				return
+			}
+			// Bare flag with no value (or a flag-shaped next token).
+			// Diagnose so cobra's later "flag needs an argument"
+			// error has context.
+			fmt.Fprintf(os.Stderr,
+				"raid: warning: %s requires a value; using default config path. "+
+					"Pass `--config=<path>` to attach the value to the flag, "+
+					"or move <path> before any subsequent flags.\n", arg)
 			return
 		}
 	}

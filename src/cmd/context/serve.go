@@ -597,8 +597,12 @@ func mcpStructuredError(toolName string, err error, output string) *mcp.CallTool
 		payload["hint"] = hint
 	}
 	for k, v := range rErr.Details() {
-		switch k {
-		case "tool", "code", "message", "category", "hint", "output":
+		// Shared envelope keys (code/message/category/hint) plus the
+		// two MCP-local additions (tool, output). The shared half
+		// comes from errs.IsReservedErrorKey so a future field added
+		// to the EmitJSON envelope automatically gets respected
+		// here, not silently emitted under the wrong shape.
+		if errs.IsReservedErrorKey(k) || k == "tool" || k == "output" {
 			continue
 		}
 		payload[k] = v

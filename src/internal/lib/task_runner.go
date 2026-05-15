@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"net/http"
@@ -114,6 +115,20 @@ func ExecuteTasks(tasks []Task) error {
 			wg.Add(1)
 			go func(task Task) {
 				defer wg.Done()
+				// Recover any panic so a single misbehaving task
+				// (or a bug in raid's own dispatch path) can't
+				// crash the whole process — particularly important
+				// in the MCP server where one runaway tool call
+				// would tear down the long-lived stdio session.
+				// Recovered panics are reported as a structured
+				// internal error on the same channel as normal
+				// task failures so the aggregate handler treats
+				// them uniformly.
+				defer func() {
+					if r := recover(); r != nil {
+						errorChan <- liberrs.Internal(fmt.Sprintf("panic in task %q: %v", task.Label(), r))
+					}
+				}()
 				if err := ExecuteTask(task); err != nil {
 					if isContinueOnFailure(task) {
 						emitContinueOnFailureWarning(task, err)
@@ -349,10 +364,23 @@ func execShell(task Task) error {
 // previously captured in the session is seen with its baseline value again
 // (i.e. a later task reset it), the entry is removed so the baseline value
 // is used rather than a stale override from an earlier task.
+//
+// Fast path: when consecutive Shell tasks don't touch the env, the
+// dump is byte-identical to the previous invocation's dump. Hash the
+// raw bytes and skip the parse + diff entirely on a cache hit — for a
+// command with many shell tasks this avoids O(env-size × tasks)
+// allocs in the common case.
 func updateSessionFromEnv(data []byte) {
 	if commandSession == nil {
 		return
 	}
+	commandSession.mu.Lock()
+	if commandSession.lastEnvHash != 0 && commandSession.lastEnvHash == hashBytes(data) {
+		commandSession.mu.Unlock()
+		return
+	}
+	commandSession.mu.Unlock()
+
 	after := parseEnvLines(string(data))
 
 	commandSession.mu.Lock()
@@ -367,6 +395,16 @@ func updateSessionFromEnv(data []byte) {
 			delete(commandSession.vars, k)
 		}
 	}
+	commandSession.lastEnvHash = hashBytes(data)
+}
+
+// hashBytes returns a fast non-cryptographic hash of p. FNV-1a chosen
+// for its allocation-free streaming API — we don't need cryptographic
+// guarantees, just "did the env dump change since last time."
+func hashBytes(p []byte) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write(p)
+	return h.Sum64()
 }
 
 // parseEnvLines parses newline-separated KEY=VALUE pairs as produced by `env`.

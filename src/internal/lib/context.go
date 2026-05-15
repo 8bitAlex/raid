@@ -3,6 +3,7 @@ package lib
 import (
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
@@ -198,14 +199,77 @@ func collectSteps(tasks []Task) []WorkspaceStep {
 	return steps
 }
 
+// describeRepoCacheTTL bounds how long a describeRepo result is reused
+// before re-running git. Picked so a polling MCP client (the
+// raid_list_repos hot path) doesn't fork N git subprocesses per
+// invocation while a human still sees fresh state on each interactive
+// `raid context` call. Override in tests via SetDescribeRepoCacheTTL.
+var describeRepoCacheTTL = 1 * time.Second
+
+// describeRepoCache stores recent describeRepo results keyed by
+// expanded path. Protected by its own mutex so the cache lookup
+// doesn't compete with the rest of the workspace snapshot machinery.
+var (
+	describeRepoCacheMu sync.RWMutex
+	describeRepoCache   = map[string]describeRepoCacheEntry{}
+)
+
+type describeRepoCacheEntry struct {
+	wr WorkspaceRepo
+	at time.Time
+}
+
+// SetDescribeRepoCacheTTLForTest overrides the TTL for the duration
+// of a test. Returns a restore function. Set to 0 to disable caching
+// entirely.
+func SetDescribeRepoCacheTTLForTest(d time.Duration) func() {
+	describeRepoCacheMu.Lock()
+	defer describeRepoCacheMu.Unlock()
+	prev := describeRepoCacheTTL
+	describeRepoCacheTTL = d
+	// Clear so the next call doesn't return a stale value from a
+	// prior test's TTL.
+	describeRepoCache = map[string]describeRepoCacheEntry{}
+	return func() {
+		describeRepoCacheMu.Lock()
+		describeRepoCacheTTL = prev
+		describeRepoCache = map[string]describeRepoCacheEntry{}
+		describeRepoCacheMu.Unlock()
+	}
+}
+
 func describeRepo(repo Repo) WorkspaceRepo {
+	expanded := sys.ExpandPath(repo.Path)
+
+	// TTL cache: agents polling raid://workspace/repos via MCP can
+	// hit this path several times per second. Without caching each
+	// call forks `git rev-parse` + `git status` per repo, which is
+	// fast individually but adds up across a profile with many
+	// repos + frequent polls. A 1s TTL keeps human-interactive
+	// freshness intact while bounding the subprocess fan-out for
+	// hot polling.
+	if describeRepoCacheTTL > 0 {
+		describeRepoCacheMu.RLock()
+		entry, ok := describeRepoCache[expanded]
+		describeRepoCacheMu.RUnlock()
+		if ok && time.Since(entry.at) < describeRepoCacheTTL {
+			// Refresh the Name/Path from the live Repo struct in
+			// case a profile rename happened — git state is what's
+			// expensive, identity is free.
+			wr := entry.wr
+			wr.Name = repo.Name
+			wr.Path = repo.Path
+			return wr
+		}
+	}
+
 	wr := WorkspaceRepo{
 		Name: repo.Name,
 		Path: repo.Path,
 	}
 
-	expanded := sys.ExpandPath(repo.Path)
 	if !sys.FileExists(expanded) || !isGitRepository(expanded) {
+		cacheDescribeRepo(expanded, wr)
 		return wr
 	}
 	wr.Cloned = true
@@ -216,5 +280,15 @@ func describeRepo(repo Repo) WorkspaceRepo {
 	if status, err := runGitFn(expanded, "status", "--porcelain"); err == nil {
 		wr.Dirty = strings.TrimSpace(status) != ""
 	}
+	cacheDescribeRepo(expanded, wr)
 	return wr
+}
+
+func cacheDescribeRepo(key string, wr WorkspaceRepo) {
+	if describeRepoCacheTTL <= 0 {
+		return
+	}
+	describeRepoCacheMu.Lock()
+	describeRepoCache[key] = describeRepoCacheEntry{wr: wr, at: time.Now()}
+	describeRepoCacheMu.Unlock()
 }

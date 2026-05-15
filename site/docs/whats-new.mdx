@@ -9,6 +9,42 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.17.2 — upcoming
+
+Eighteen High and Medium pre-v1.0 review fixes. No new features; behavior changes are surgical and called out individually below.
+
+**Concurrent task output stays line-atomic.** Six auxiliary writes in the task runner (`continueOnFailure` warnings, `showExeTime` markers, `Wait` / `Retry` banners, `Prompt` / `Confirm` text) now serialize through the same `outputMu` as the per-task prefix writer. Previously these could interleave mid-line with a peer concurrent task's prefixed output. `Prompt` / `Confirm` release the mutex before the blocking stdin read so concurrent output isn't frozen during user input.
+
+**`raid deploy version` no longer gets misclassified as `raid version`.** `isInfoCommand` now only matches the first non-flag positional against `help` / `version` / `completion`. A user command that takes one of those words as a positional value no longer triggers info-mode's 1.5s version-check wait + spurious "update available" banner.
+
+**`raid profile add` / `remove` / `create` / set-active honor `--json`.** All four subcommands previously printed prose unconditionally; `--json` consumers got unparseable output. The new shapes follow the existing per-command JSON contract (`profile add` → `{action, path, profiles[], existing[], active}`; `profile remove` → `{removed[], errors[]}`; `profile` set-active → `{action, name, path}`). Cobra's `RunE` replaces `Run`, so every failure flows through the root structured-error handler and gets a category-correct exit code (`PROFILE_NOT_FOUND` → 5, `PROFILE_INVALID` → 2, `CLONE_FAILED` → 4, etc.) instead of always exiting 1.
+
+**Deterministic ordering in `profile list`.** Output sorted by name in both text and JSON modes — matching the MCP `raid_list_profiles` tool's existing behavior. `env list` is unchanged (kept in YAML-declaration order for author intent).
+
+**Profile / repo env merging matches `mergeCommands` semantics.** In single-repo mode, environments declared on both the wrapping profile and the repo's `raid.yaml` no longer duplicate. Profile wins on name conflict, same contract used for commands. Removes the silent "duplicate env entries in `ListEnvs`" failure mode where `getEnv` returned the first while `ExecuteEnv` wrote variables from whichever happened first in the slice.
+
+**`runCommand`'s `out:` redirection routes through `SetCommandOutput`.** The pre-fix path mutated the package-level `commandStdout` / `commandStderr` globals directly, bypassing the documented swap entry point. With MCP capturing output via `SetCommandOutput`, a `out: {file: ...}` command whose lifetime overlapped with another MCP tool call had a race window. Both paths now go through the same atomic swap + restore.
+
+**`raid doctor` no longer short-circuits on profile schema failure.** A schema error in the wrapping profile previously stopped the doctor report cold, hiding repo-level and verify-block findings. The schema failure is still recorded as an error finding, but doctor now continues into repo checks so the user sees the full health picture in one pass (matching the existing `checkVerify` contract).
+
+**Telemetry consent prompt uses `term.IsTerminal` instead of `os.ModeCharDevice`.** Agent hosts that wire stdin to `/dev/null` (also a character device) no longer get misclassified as interactive — the prompt is suppressed and consent stays at the "not decided" zero value as intended. Matches the same TTY check the output-prefix code already uses.
+
+**Profile name lookups are case-insensitive end-to-end.** Viper stores map keys lowercased, so a profile registered as `MyProfile` lived under `myprofile` while lookups in `ContainsProfile` / `RemoveProfile` / `GetProfile().Path` used the original case — leading to "profile not found" errors right after a successful add. All lookups now normalize before indexing.
+
+**Multi-document profile YAML uses `yaml.NewDecoder`.** Replaces the literal-string `strings.Split(data, "---")` with the proper streaming decoder. Profile YAML containing `---` as content (e.g. inside a `usage:` description or a multi-line `message:`) no longer gets torn at the substring. The schema validator already used `NewDecoder` — extraction now matches.
+
+**Goroutine panic recovery in clone fan-out and `ExecuteTasks`.** A `CloneRepository` panic could strand the install semaphore and deadlock the parent `wg.Wait()`. A panic inside a concurrent task goroutine took down the whole raid process (and the MCP server's long-lived stdio session). Both paths now `defer recover()` and surface the panic as a structured `INTERNAL` error to the aggregate handler.
+
+**Shared reserved-key list across error JSON emitters.** `EmitJSON` (CLI `--json` errors) and `mcpStructuredError` (MCP tool-result errors) previously hand-maintained their own reserved-key lists. They now both consult `errs.IsReservedErrorKey`, so a future error code adding a new envelope field automatically propagates everywhere.
+
+**`raid_list_repos` MCP path caches git state for 1 second.** Each call previously forked N `git rev-parse` + `git status` subprocesses synchronously. Agents that poll the resource at sub-second intervals no longer hammer git; human-interactive `raid context` calls still see fresh state within 1s.
+
+**`parseEnvLines` fast-path on unchanged env.** Consecutive Shell tasks that don't touch the env produce byte-identical dumps. An FNV-1a hash of the dump lets `updateSessionFromEnv` skip the parse + diff entirely on a cache hit — meaningful for commands with many Shell tasks and a static env baseline.
+
+**`applyConfigFlag` warns instead of silently dropping bad values.** `raid --config -mypath …` no longer silently drops `-mypath` (and falls through to cobra's "flag needs an argument" later). A diagnostic on stderr explains the cause so the user can correct the invocation.
+
+**Other:** stdin-buffer behavior between the telemetry prompt and the first `Prompt`/`Confirm` task documented (no real-world impact); `runCommand`'s exe-time emission matrix vs. `out: {stdout, stderr, file}` documented inline.
+
 ## 0.17.1 — upcoming
 
 Three pre-v1.0 hardening fixes from the release-readiness review. No behavior change for happy paths; all three are correctness/security bugs with regression tests now in place.

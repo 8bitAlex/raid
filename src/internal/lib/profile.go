@@ -2,8 +2,10 @@ package lib
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,9 +75,13 @@ func GetProfile() Profile {
 
 	name := viper.GetString(activeProfileKey)
 	paths := getProfilePaths()
+	// Lookup is case-insensitive: viper.GetStringMapString lowercases
+	// keys, so a profile registered as `MyProfile` lives in `paths`
+	// under `myprofile`. Without the fold, GetProfile().Path returns
+	// "" right after a successful add.
 	return Profile{
 		Name: name,
-		Path: paths[name],
+		Path: paths[strings.ToLower(name)],
 	}
 }
 
@@ -117,16 +123,20 @@ func getProfilePaths() map[string]string {
 	return profiles
 }
 
-// RemoveProfile removes a registered profile by name.
+// RemoveProfile removes a registered profile by name. Case-insensitive
+// lookup mirrors ContainsProfile — viper lowercases keys internally,
+// so a name typed as `MyProfile` is stored as `myprofile` and must be
+// looked up the same way.
 func RemoveProfile(name string) error {
 	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		return liberrs.Newf(liberrs.CodeProfileNotFound, liberrs.CategoryNotFound, "no profiles found")
 	}
-	if _, exists := profiles[name]; !exists {
+	key := strings.ToLower(name)
+	if _, exists := profiles[key]; !exists {
 		return liberrs.ProfileNotFound(name)
 	}
-	delete(profiles, name)
+	delete(profiles, key)
 	return Set(allProfilesKey, profiles)
 }
 
@@ -175,22 +185,32 @@ func ExtractProfiles(path string) ([]Profile, error) {
 }
 
 func extractProfilesFromYAML(data []byte, path string) ([]Profile, error) {
+	// yaml.NewDecoder respects the multi-document stream marker
+	// without doing a string-level split. The earlier strings.Split
+	// on "---" corrupted legitimate content that happened to contain
+	// the substring (e.g. `usage: "---- separator ----"` inside a
+	// command description, or a commit-message-style usage field).
+	// ValidateProfile already uses NewDecoder on its side, so the
+	// validation path and the extraction path can't disagree anymore.
 	var profiles []Profile
-
-	documents := strings.Split(string(data), yamlSep)
-
-	for _, doc := range documents {
-		doc = strings.TrimSpace(doc)
-		if doc == "" {
-			continue
-		}
-
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	for {
 		var profile Profile
-		if err := yaml.Unmarshal([]byte(doc), &profile); err != nil {
+		err := dec.Decode(&profile)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
 			return nil, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig, "invalid YAML document in %s: %v", path, err)
 		}
+		// Skip explicitly-empty documents (e.g. trailing `---\n` with
+		// no fields). Detected by an empty Name — Path hasn't been
+		// stamped yet, so Profile.IsZero (which requires non-empty
+		// Path) is too strict here.
+		if profile.Name == "" {
+			continue
+		}
 		profile.Path = path
-
 		profiles = append(profiles, profile)
 	}
 
@@ -219,13 +239,16 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 }
 
 // ContainsProfile reports whether a profile with the given name is registered.
+// Case-insensitive: viper's GetStringMapString lowercases keys at storage
+// time, so a name typed as `MyProfile` is stored under `myprofile`. Without
+// the lowercase comparison here, `raid profile MyProfile` would fail
+// even though `MyProfile` was just registered.
 func ContainsProfile(name string) bool {
 	profiles := viper.GetStringMapString(allProfilesKey)
 	if profiles == nil {
 		return false
 	}
-
-	_, exists := profiles[name]
+	_, exists := profiles[strings.ToLower(name)]
 	return exists
 }
 
