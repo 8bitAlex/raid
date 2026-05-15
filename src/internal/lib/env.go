@@ -46,12 +46,13 @@ func GetEnv() string {
 
 // ListEnvs returns the names of all environments in the active profile.
 func ListEnvs() []string {
-	if context == nil || len(context.Profile.Environments) == 0 {
+	ctx := loadContext()
+	if ctx == nil || len(ctx.Profile.Environments) == 0 {
 		return []string{}
 	}
 
-	names := make([]string, 0, len(context.Profile.Environments))
-	for _, env := range context.Profile.Environments {
+	names := make([]string, 0, len(ctx.Profile.Environments))
+	for _, env := range ctx.Profile.Environments {
 		names = append(names, env.Name)
 	}
 	return names
@@ -69,20 +70,21 @@ func ContainsEnv(name string) bool {
 
 // ExecuteEnv writes environment variables to each repo's .env file and runs the environment's tasks.
 func ExecuteEnv(name string) error {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return liberrs.Internal("raid context is not initialized")
 	}
-	if err := setEnvVariablesForRepos(name); err != nil {
+	if err := setEnvVariablesForRepos(ctx, name); err != nil {
 		return liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "failed to set env variables: %v", err)
 	}
-	if err := runTasksForEnv(name); err != nil {
+	if err := runTasksForEnv(ctx, name); err != nil {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to run env tasks: %v", err)
 	}
 	return nil
 }
 
-func setEnvVariablesForRepos(name string) error {
-	for _, repo := range context.Profile.Repositories {
+func setEnvVariablesForRepos(ctx *Context, name string) error {
+	for _, repo := range ctx.Profile.Repositories {
 		fmt.Fprintf(commandStdout, "Setting up environment for repo: %s\n", repo.Name)
 
 		path, err := buildEnvPath(repo.Path)
@@ -90,7 +92,7 @@ func setEnvVariablesForRepos(name string) error {
 			return liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "invalid path for repo '%s': %v", repo.Name, err)
 		}
 
-		if err := setEnvVariables(context.Profile.getEnv(name).Variables, repo.getEnv(name).Variables, path); err != nil {
+		if err := setEnvVariables(ctx.Profile.getEnv(name).Variables, repo.getEnv(name).Variables, path); err != nil {
 			return liberrs.Newf(liberrs.CodeConfigInvalid, liberrs.CategoryConfig, "failed to set env variables for repo '%s': %v", repo.Name, err)
 		}
 	}
@@ -123,8 +125,8 @@ func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
 	return godotenv.Write(envMap, path)
 }
 
-func runTasksForEnv(name string) error {
-	env := context.Profile.getEnv(name)
+func runTasksForEnv(ctx *Context, name string) error {
+	env := ctx.Profile.getEnv(name)
 	if env.IsZero() || len(env.Tasks) == 0 {
 		return nil
 	}
@@ -133,12 +135,13 @@ func runTasksForEnv(name string) error {
 
 // LoadEnv loads .env files from all repositories in the active profile into the process environment.
 func LoadEnv() error {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return liberrs.Internal("context not initialized")
 	}
 
 	var paths []string
-	for _, r := range context.Profile.Repositories {
+	for _, r := range ctx.Profile.Repositories {
 		p := filepath.Join(sys.ExpandPath(r.Path), ".env")
 		if sys.FileExists(p) {
 			paths = append(paths, p)

@@ -70,14 +70,14 @@ func TestExecuteTask_prompt_readError(t *testing.T) {
 // --- Group parallel/retry group not found ---
 
 func TestExecuteTask_group_parallel_groupNotFound(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"other": {{Type: Shell, Cmd: "exit 0"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "nonexistent", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
@@ -86,14 +86,14 @@ func TestExecuteTask_group_parallel_groupNotFound(t *testing.T) {
 }
 
 func TestExecuteTask_group_retry_groupNotFound(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"other": {{Type: Shell, Cmd: "exit 0"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "nonexistent", Attempts: 1}
 	if err := ExecuteTask(task); err == nil {
@@ -767,7 +767,7 @@ func TestExecuteTask_setVar_createFileError(t *testing.T) {
 // --- installRepo ---
 
 func TestInstallRepo_cloneError(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -779,8 +779,8 @@ func TestInstallRepo_cloneError(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	err := InstallRepo("badrepo")
 	if err == nil {

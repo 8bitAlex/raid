@@ -668,11 +668,12 @@ func execGroup(task Task) error {
 	if task.Ref == "" {
 		return liberrs.ArgInvalid("ref is required for Group task")
 	}
-	if context == nil || context.Profile.Groups == nil {
+	ctx := loadContext()
+	if ctx == nil || ctx.Profile.Groups == nil {
 		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "no task_groups defined in the active profile")
 	}
 
-	tasks, ok := context.Profile.Groups[task.Ref]
+	tasks, ok := ctx.Profile.Groups[task.Ref]
 	if !ok {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "task group '%s' not found in profile", task.Ref)
 	}

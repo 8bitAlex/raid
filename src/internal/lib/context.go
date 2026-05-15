@@ -155,12 +155,13 @@ func GetWorkspaceContext() WorkspaceContext {
 			Vars:     snapshotRaidVars(),
 		},
 	}
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return wc
 	}
-	wc.Workspace.Env = context.Env
+	wc.Workspace.Env = ctx.Env
 
-	profile := context.Profile
+	profile := ctx.Profile
 	if profile.IsZero() {
 		return wc
 	}

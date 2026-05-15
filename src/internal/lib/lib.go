@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/8bitalex/raid/schemas"
@@ -39,7 +40,37 @@ type OnInstall struct {
 	Tasks []Task `json:"tasks"`
 }
 
-var context *Context
+// contextPtr is the active workspace context. Replaced wholly via
+// storeContext on Load/ForceLoad; never mutated in-place. Reads go
+// through loadContext.
+//
+// Atomic.Pointer is the right primitive here: writes are rare
+// (Load / ForceLoad / Reset only), reads are frequent (every
+// command/task dispatch + every MCP read), and the value is always
+// wholly replaced rather than partially mutated. mcp-go runs tool
+// handlers from a 5-worker pool, so a mutating handler that calls
+// ForceLoad can race with a read handler that reads context.Profile —
+// the atomic pointer makes the swap+read interleave well-defined.
+//
+// Callers must use loadContext() once per logical operation and bind
+// to a local. "Check nil then read field" patterns must NOT re-call
+// loadContext between the check and the read — otherwise a swap
+// could land in between.
+var contextPtr atomic.Pointer[Context]
+
+// loadContext returns the current active context, or nil when no
+// profile has been loaded yet. Safe for concurrent reads; consumers
+// should bind the result to a local before nil-checking + reading.
+func loadContext() *Context {
+	return contextPtr.Load()
+}
+
+// storeContext atomically replaces the active context. Passing nil
+// resets the context to "not loaded" (Load / Reset paths). Callers
+// outside lib should not need this — use Load / ForceLoad instead.
+func storeContext(c *Context) {
+	contextPtr.Store(c)
+}
 
 const raidVarsFileName = "vars"
 
@@ -318,12 +349,12 @@ func QuietLoad() []Command {
 // ResetContext clears the cached load context, forcing the next Load or ForceLoad to
 // rebuild from the current viper configuration.
 func ResetContext() {
-	context = nil
+	storeContext(nil)
 }
 
 // Load initializes the context from the active profile, using cached results if available.
 func Load() error {
-	if context == nil {
+	if loadContext() == nil {
 		return ForceLoad()
 	}
 	return nil
@@ -337,7 +368,7 @@ func ForceLoad() error {
 	loadRaidVars()
 	p := GetProfile()
 	if p.IsZero() {
-		context = &Context{Env: GetEnv()}
+		storeContext(&Context{Env: GetEnv()})
 		return nil
 	}
 
@@ -375,10 +406,10 @@ func ForceLoad() error {
 
 	setRepoVars(profile.Repositories)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: profile,
 		Env:     GetEnv(),
-	}
+	})
 	return nil
 }
 
@@ -489,10 +520,11 @@ func installRepo(repo Repo) error {
 // InstallRepo clones a single named repository and runs its install tasks.
 // The profile-level install tasks are not run.
 func InstallRepo(name string) error {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return liberrs.Internal("raid context is not initialized")
 	}
-	profile := context.Profile
+	profile := ctx.Profile
 	if profile.IsZero() {
 		return liberrs.Newf(liberrs.CodeProfileNotActive, liberrs.CategoryNotFound, "profile not found")
 	}
@@ -513,10 +545,11 @@ func InstallRepo(name string) error {
 
 // Install clones all repositories in the active profile and runs install tasks.
 func Install(maxThreads int) error {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return liberrs.Internal("raid context is not initialized")
 	}
-	profile := context.Profile
+	profile := ctx.Profile
 	if profile.IsZero() {
 		return liberrs.Newf(liberrs.CodeProfileNotActive, liberrs.CategoryNotFound, "profile not found")
 	}

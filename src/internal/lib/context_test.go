@@ -8,13 +8,13 @@ import (
 
 func resetWorkspaceContextState(t *testing.T) {
 	t.Helper()
-	prevCtx := context
+	prevCtx := loadContext()
 	prevGit := runGitFn
 	t.Cleanup(func() {
-		context = prevCtx
+		storeContext(prevCtx)
 		runGitFn = prevGit
 	})
-	context = nil
+	storeContext(nil)
 }
 
 // makeFakeGitDir creates a directory with a `.git` subdirectory so isGitRepository returns true.
@@ -44,7 +44,7 @@ func TestGetWorkspaceContext_noContext(t *testing.T) {
 
 func TestGetWorkspaceContext_zeroProfile(t *testing.T) {
 	resetWorkspaceContextState(t)
-	context = &Context{Env: "dev"}
+	storeContext(&Context{Env: "dev"})
 
 	got := GetWorkspaceContext()
 	if got.Workspace.Profile != "" {
@@ -100,7 +100,7 @@ func TestGetWorkspaceContext_omitsEmptyVars(t *testing.T) {
 
 func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 	resetWorkspaceContextState(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -109,7 +109,7 @@ func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 				{Name: "test", Usage: "Run tests"},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Commands) != 2 {
@@ -124,7 +124,7 @@ func TestGetWorkspaceContext_includesCommands(t *testing.T) {
 // command's agent block flows into the WorkspaceCommand snapshot.
 func TestGetWorkspaceContext_populatesAgentForProfileCommands(t *testing.T) {
 	resetWorkspaceContextState(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -133,7 +133,7 @@ func TestGetWorkspaceContext_populatesAgentForProfileCommands(t *testing.T) {
 				{Name: "deploy", Usage: "Deploy"}, // no Agent block
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Commands) != 2 {
@@ -159,13 +159,13 @@ func TestGetWorkspaceContext_populatesAgentForRepoMergedCommands(t *testing.T) {
 		Agent: &Agent{Safe: true, Description: "Idempotent smoke test, safe to auto-run"},
 	}
 	merged := mergeCommands(nil, []Command{repoCommand})
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name:     "demo",
 			Path:     "/tmp/demo.raid.yaml",
 			Commands: merged,
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Commands) != 1 {
@@ -185,7 +185,7 @@ func TestGetWorkspaceContext_populatesAgentForRepoMergedCommands(t *testing.T) {
 // task order.
 func TestGetWorkspaceContext_commandStepsOnlyNamedTasks(t *testing.T) {
 	resetWorkspaceContextState(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -202,7 +202,7 @@ func TestGetWorkspaceContext_commandStepsOnlyNamedTasks(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Commands) != 1 {
@@ -225,7 +225,7 @@ func TestGetWorkspaceContext_commandStepsOnlyNamedTasks(t *testing.T) {
 // JSON tight.
 func TestGetWorkspaceContext_commandStepsOmittedWhenNoneNamed(t *testing.T) {
 	resetWorkspaceContextState(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -240,7 +240,7 @@ func TestGetWorkspaceContext_commandStepsOmittedWhenNoneNamed(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Commands) != 1 {
@@ -257,9 +257,9 @@ func TestGetWorkspaceContext_includesRecent(t *testing.T) {
 
 	started := RecordRecentStart("deploy")
 	RecordRecentEnd("deploy", nil, started)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{Name: "demo", Path: "/tmp/demo.raid.yaml"},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Recent) != 1 || got.Workspace.Recent[0].Command != "deploy" {
@@ -272,7 +272,7 @@ func TestGetWorkspaceContext_includesRecent(t *testing.T) {
 
 func TestGetWorkspaceContext_repoNotCloned(t *testing.T) {
 	resetWorkspaceContextState(t)
-	context = &Context{
+	storeContext(&Context{
 		Env: "dev",
 		Profile: Profile{
 			Name: "demo",
@@ -281,7 +281,7 @@ func TestGetWorkspaceContext_repoNotCloned(t *testing.T) {
 				{Name: "missing", Path: "/nonexistent/path/abc123", URL: "https://example.com/r.git"},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if got.Workspace.Profile != "demo" {
@@ -319,7 +319,7 @@ func TestGetWorkspaceContext_repoClean(t *testing.T) {
 		return "", nil
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Env: "dev",
 		Profile: Profile{
 			Name: "demo",
@@ -328,7 +328,7 @@ func TestGetWorkspaceContext_repoClean(t *testing.T) {
 				{Name: "api", Path: dir, URL: "https://example.com/api.git"},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	if len(got.Workspace.Repos) != 1 {
@@ -363,7 +363,7 @@ func TestGetWorkspaceContext_repoDirty(t *testing.T) {
 		return "", nil
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -371,7 +371,7 @@ func TestGetWorkspaceContext_repoDirty(t *testing.T) {
 				{Name: "api", Path: dir, URL: "https://example.com/api.git"},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	r := got.Workspace.Repos[0]
@@ -396,7 +396,7 @@ func TestGetWorkspaceContext_directoryWithoutGit(t *testing.T) {
 		return "", nil
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -404,7 +404,7 @@ func TestGetWorkspaceContext_directoryWithoutGit(t *testing.T) {
 				{Name: "scratch", Path: dir, URL: "https://example.com/s.git"},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	r := got.Workspace.Repos[0]
@@ -421,7 +421,7 @@ func TestGetWorkspaceContext_gitErrorsLeaveFieldsZeroed(t *testing.T) {
 		return "", os.ErrNotExist
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "demo",
 			Path: "/tmp/demo.raid.yaml",
@@ -429,7 +429,7 @@ func TestGetWorkspaceContext_gitErrorsLeaveFieldsZeroed(t *testing.T) {
 				{Name: "broken", Path: dir, URL: "https://example.com/b.git"},
 			},
 		},
-	}
+	})
 
 	got := GetWorkspaceContext()
 	r := got.Workspace.Repos[0]

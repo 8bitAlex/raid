@@ -1042,7 +1042,7 @@ func TestExecuteTask_condition_cmd_fails(t *testing.T) {
 // --- Group tasks ---
 
 func TestExecuteTask_group_noContext(t *testing.T) {
-	context = nil
+	storeContext(nil)
 	task := Task{Type: Group, Ref: "mygroup"}
 	err := ExecuteTask(task)
 	if err == nil {
@@ -1051,8 +1051,8 @@ func TestExecuteTask_group_noContext(t *testing.T) {
 }
 
 func TestExecuteTask_group_noGroups(t *testing.T) {
-	context = &Context{Profile: Profile{}}
-	defer func() { context = nil }()
+	storeContext(&Context{Profile: Profile{}})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "mygroup"}
 	err := ExecuteTask(task)
@@ -1062,14 +1062,14 @@ func TestExecuteTask_group_noGroups(t *testing.T) {
 }
 
 func TestExecuteTask_group_missingRef(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"other": {{Type: Shell, Cmd: "exit 0"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "missing"}
 	err := ExecuteTask(task)
@@ -1083,7 +1083,7 @@ func TestExecuteTask_group_missingRef(t *testing.T) {
 
 func TestExecuteTask_group_success(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "group-ran")
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"mygroup": {
@@ -1091,8 +1091,8 @@ func TestExecuteTask_group_success(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "mygroup"}
 	if err := ExecuteTask(task); err != nil {
@@ -1104,7 +1104,7 @@ func TestExecuteTask_group_success(t *testing.T) {
 }
 
 func TestExecuteTask_group_propagatesFailure(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"failgroup": {
@@ -1112,8 +1112,8 @@ func TestExecuteTask_group_propagatesFailure(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "failgroup"}
 	if err := ExecuteTask(task); err == nil {
@@ -1506,7 +1506,7 @@ func TestExecuteTask_prompt_headlessOverEnvVar(t *testing.T) {
 // --- Group parallel mode ---
 
 func TestExecuteTask_group_parallel_noContext(t *testing.T) {
-	context = nil
+	storeContext(nil)
 	task := Task{Type: Group, Ref: "mygroup", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error when context is nil, got nil")
@@ -1523,7 +1523,7 @@ func TestExecuteTask_group_parallel_missingRef(t *testing.T) {
 func TestExecuteTask_group_parallel_success(t *testing.T) {
 	markerA := filepath.Join(t.TempDir(), "a")
 	markerB := filepath.Join(t.TempDir(), "b")
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"workers": {
@@ -1532,8 +1532,8 @@ func TestExecuteTask_group_parallel_success(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "workers", Parallel: true}
 	if err := ExecuteTask(task); err != nil {
@@ -1547,7 +1547,7 @@ func TestExecuteTask_group_parallel_success(t *testing.T) {
 }
 
 func TestExecuteTask_group_parallel_propagatesFailure(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"broken": {
@@ -1555,8 +1555,8 @@ func TestExecuteTask_group_parallel_propagatesFailure(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "broken", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
@@ -1574,7 +1574,7 @@ func TestExecuteTask_group_retry_missingRef(t *testing.T) {
 }
 
 func TestExecuteTask_group_retry_noContext(t *testing.T) {
-	context = nil
+	storeContext(nil)
 	task := Task{Type: Group, Ref: "mygroup", Attempts: 1}
 	if err := ExecuteTask(task); err == nil {
 		t.Fatal("expected error when context is nil, got nil")
@@ -1583,14 +1583,14 @@ func TestExecuteTask_group_retry_noContext(t *testing.T) {
 
 func TestExecuteTask_group_retry_succeedsOnFirstAttempt(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "ran")
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"work": {{Type: Shell, Cmd: "echo done > " + marker}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "work", Attempts: 3}
 	if err := ExecuteTask(task); err != nil {
@@ -1602,14 +1602,14 @@ func TestExecuteTask_group_retry_succeedsOnFirstAttempt(t *testing.T) {
 }
 
 func TestExecuteTask_group_retry_exhaustsAllAttempts(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"always-fail": {{Type: Shell, Cmd: "exit 1"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "always-fail", Attempts: 2, Delay: "1ms"}
 	err := ExecuteTask(task)
@@ -1622,14 +1622,14 @@ func TestExecuteTask_group_retry_exhaustsAllAttempts(t *testing.T) {
 }
 
 func TestExecuteTask_group_retry_invalidDelay(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"work": {{Type: Shell, Cmd: "exit 0"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "work", Attempts: 1, Delay: "not-a-duration"}
 	if err := ExecuteTask(task); err == nil {

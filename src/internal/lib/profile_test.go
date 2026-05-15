@@ -175,9 +175,9 @@ func TestSetAndGetProfile(t *testing.T) {
 func TestGetProfile_fromContext(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{Name: "ctx-profile", Path: "/ctx/path"},
-	}
+	})
 
 	got := GetProfile()
 	if got.Name != "ctx-profile" {
@@ -1290,29 +1290,29 @@ func TestForceLoad_singleRepoProfile(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Fatalf("ForceLoad: %v", err)
 	}
-	if context == nil || context.Profile.Name != "mono" {
-		t.Fatalf("context.Profile.Name = %q, want mono", context.Profile.Name)
+	if loadContext() == nil || loadContext().Profile.Name != "mono" {
+		t.Fatalf("loadContext().Profile.Name = %q, want mono", loadContext().Profile.Name)
 	}
-	if !context.Profile.IsSingleRepo() {
+	if !loadContext().Profile.IsSingleRepo() {
 		t.Error("IsSingleRepo() = false on loaded profile")
 	}
-	if len(context.Profile.Repositories) != 1 || context.Profile.Repositories[0].Path != dir {
-		t.Errorf("Repositories = %+v, want one repo with path %q", context.Profile.Repositories, dir)
+	if len(loadContext().Profile.Repositories) != 1 || loadContext().Profile.Repositories[0].Path != dir {
+		t.Errorf("Repositories = %+v, want one repo with path %q", loadContext().Profile.Repositories, dir)
 	}
 	// Repo-level environments should be promoted to profile level so `raid env`
 	// can find them without a wrapping profile YAML.
-	if len(context.Profile.Environments) != 1 || context.Profile.Environments[0].Name != "dev" {
-		t.Errorf("Environments = %+v, want one named 'dev'", context.Profile.Environments)
+	if len(loadContext().Profile.Environments) != 1 || loadContext().Profile.Environments[0].Name != "dev" {
+		t.Errorf("Environments = %+v, want one named 'dev'", loadContext().Profile.Environments)
 	}
 	// Repo commands should have been merged into top-level commands.
 	found := false
-	for _, c := range context.Profile.Commands {
+	for _, c := range loadContext().Profile.Commands {
 		if c.Name == "greet" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("Commands missing 'greet': %+v", context.Profile.Commands)
+		t.Errorf("Commands missing 'greet': %+v", loadContext().Profile.Commands)
 	}
 }
 

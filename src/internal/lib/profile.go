@@ -67,8 +67,8 @@ func SetProfile(name string) error {
 
 // GetProfile returns the currently active profile.
 func GetProfile() Profile {
-	if context != nil && !context.Profile.IsZero() {
-		return context.Profile
+	if ctx := loadContext(); ctx != nil && !ctx.Profile.IsZero() {
+		return ctx.Profile
 	}
 
 	name := viper.GetString(activeProfileKey)

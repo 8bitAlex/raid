@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -63,13 +64,13 @@ func TestLoad_noContext(t *testing.T) {
 func TestLoad_withExistingContext(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{Profile: Profile{Name: "test", Path: "/path"}}
+	storeContext(&Context{Profile: Profile{Name: "test", Path: "/path"}})
 
 	if err := Load(); err != nil {
 		t.Errorf("Load() with existing context error: %v", err)
 	}
 	// Should not reload — cached context must be preserved.
-	if context.Profile.Name != "test" {
+	if loadContext().Profile.Name != "test" {
 		t.Errorf("Load() modified existing context unexpectedly")
 	}
 }
@@ -131,8 +132,69 @@ func TestForceLoad_noActiveProfile(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Errorf("ForceLoad() with no active profile error: %v", err)
 	}
-	if context == nil {
+	if loadContext() == nil {
 		t.Fatal("ForceLoad() did not set context")
+	}
+}
+
+// TestContextRaceForceLoadVsReads pins bug C3: ForceLoad is called
+// from mutating MCP handlers (raid_install, raid_env_switch, …) while
+// read handlers (raid_list_repos, raid_describe_repo, raid_list_profiles)
+// concurrently read the package-global context pointer. Before the
+// atomic.Pointer refactor this was an undefined-behavior race that
+// `go test -race` would flag. The test stresses that interleave —
+// many readers + one writer hammering the pointer — and relies on the
+// race detector to surface a regression if anyone reintroduces a
+// non-atomic write to the context.
+func TestContextRaceForceLoadVsReads(t *testing.T) {
+	setupTestConfig(t)
+
+	// Seed an initial context so reads have something to walk.
+	storeContext(&Context{Profile: Profile{Name: "race-test", Repositories: []Repo{
+		{Name: "a", Path: "/tmp/a"},
+		{Name: "b", Path: "/tmp/b"},
+	}}})
+
+	const readers = 8
+	const iterations = 200
+	done := make(chan struct{})
+	go func() {
+		// Writer: replaces the context wholesale. Doesn't go through
+		// ForceLoad (which requires viper state) — emulates the same
+		// atomic-pointer swap path.
+		for i := 0; i < iterations; i++ {
+			storeContext(&Context{Profile: Profile{
+				Name: "race-test",
+				Repositories: []Repo{
+					{Name: "a", Path: "/tmp/a"},
+					{Name: "b", Path: "/tmp/b"},
+				},
+			}})
+		}
+		close(done)
+	}()
+
+	// Readers: walk fields the way GetCommands / GetRepos /
+	// GetWorkspaceContext do.
+	var wg sync.WaitGroup
+	wg.Add(readers)
+	for r := 0; r < readers; r++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				_ = GetRepos()
+				_ = GetCommands()
+				_ = GetProfile()
+			}
+		}()
+	}
+	wg.Wait()
+	<-done
+
+	// If we got here under -race without a fatal, the atomic-pointer
+	// contract held. The assertion is implicit in the race detector.
+	if loadContext() == nil {
+		t.Fatal("context unexpectedly nil after race test")
 	}
 }
 
@@ -168,8 +230,8 @@ func TestForceLoad_withValidProfile(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Errorf("ForceLoad() with valid profile error: %v", err)
 	}
-	if context == nil || context.Profile.Name != "testprofile" {
-		t.Errorf("ForceLoad() context = %v, want profile named testprofile", context)
+	if loadContext() == nil || loadContext().Profile.Name != "testprofile" {
+		t.Errorf("ForceLoad() context = %v, want profile named testprofile", loadContext())
 	}
 }
 
@@ -284,7 +346,7 @@ func TestValidateSchema_schemaViolation(t *testing.T) {
 func TestInstall_noProfile(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{Profile: Profile{}}
+	storeContext(&Context{Profile: Profile{}})
 
 	err := Install(1)
 	if err == nil {
@@ -295,9 +357,9 @@ func TestInstall_noProfile(t *testing.T) {
 func TestInstall_noRepos(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{Name: "test", Path: "/path"},
-	}
+	})
 
 	if err := Install(0); err != nil {
 		t.Errorf("Install() with no repos error: %v", err)
@@ -311,7 +373,7 @@ func TestInstall_withSemaphoreAndExistingRepo(t *testing.T) {
 	// Fake git repo — CloneRepository will skip cloning.
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -319,7 +381,7 @@ func TestInstall_withSemaphoreAndExistingRepo(t *testing.T) {
 				{Name: "repo1", Path: dir, URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	// maxThreads=1 exercises the semaphore acquisition/release paths.
 	if err := Install(1); err != nil {
@@ -332,7 +394,7 @@ func TestInstall_cloneFailure(t *testing.T) {
 
 	dir := t.TempDir()
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -341,7 +403,7 @@ func TestInstall_cloneFailure(t *testing.T) {
 				{Name: "repo1", Path: filepath.Join(dir, "newrepo"), URL: "file:///nonexistent/repo.git"},
 			},
 		},
-	}
+	})
 
 	err := Install(0)
 	if err == nil {
@@ -352,7 +414,7 @@ func TestInstall_cloneFailure(t *testing.T) {
 func TestInstall_installTaskFailure(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -360,7 +422,7 @@ func TestInstall_installTaskFailure(t *testing.T) {
 				Tasks: []Task{{Type: Shell, Cmd: "exit 1"}},
 			},
 		},
-	}
+	})
 
 	err := Install(0)
 	if err == nil {
@@ -374,7 +436,7 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -389,7 +451,7 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	err := Install(0)
 	if err == nil {
@@ -399,7 +461,7 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 
 func TestInstallRepo_notFound(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -407,7 +469,7 @@ func TestInstallRepo_notFound(t *testing.T) {
 				{Name: "repo1", Path: t.TempDir(), URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	err := InstallRepo("doesnotexist")
 	if err == nil {
@@ -436,7 +498,7 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 		raidVarsMu.Unlock()
 	})
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -453,7 +515,7 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 				{Name: "other", Path: t.TempDir(), URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	if err := InstallRepo("target"); err != nil {
 		t.Fatalf("InstallRepo() error: %v", err)
@@ -483,7 +545,7 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 		raidVarsMu.Unlock()
 	})
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -494,7 +556,7 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 				{Name: "repo1", Path: dir, URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	if err := InstallRepo("repo1"); err != nil {
 		t.Fatalf("InstallRepo() error: %v", err)
@@ -509,7 +571,7 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 
 func TestInstallRepo_noContext(t *testing.T) {
 	setupTestConfig(t)
-	context = nil
+	storeContext(nil)
 
 	if err := InstallRepo("any"); err == nil {
 		t.Fatal("InstallRepo() expected error when context is nil")
@@ -518,7 +580,7 @@ func TestInstallRepo_noContext(t *testing.T) {
 
 func TestInstallRepo_noProfile(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{Profile: Profile{}}
+	storeContext(&Context{Profile: Profile{}})
 
 	if err := InstallRepo("any"); err == nil {
 		t.Fatal("InstallRepo() expected error when profile is zero")
@@ -573,10 +635,10 @@ func TestForceLoad_mergesRepoCommands(t *testing.T) {
 
 func TestResetContext_nilsContext(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{Profile: Profile{Name: "foo"}}
+	storeContext(&Context{Profile: Profile{Name: "foo"}})
 	ResetContext()
-	if context != nil {
-		t.Errorf("ResetContext() did not nil context, got %v", context)
+	if loadContext() != nil {
+		t.Errorf("ResetContext() did not nil context, got %v", loadContext())
 	}
 }
 
@@ -894,7 +956,7 @@ func TestRaidVarsPath_default(t *testing.T) {
 // TestInstall_nilContext tests the early return branch when context is nil.
 func TestInstall_nilContext(t *testing.T) {
 	setupTestConfig(t)
-	context = nil
+	storeContext(nil)
 
 	if err := Install(0); err == nil {
 		t.Error("Install() expected error when context is nil")
@@ -960,8 +1022,8 @@ func TestForceLoad_withGroups(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Fatalf("ForceLoad with groups: %v", err)
 	}
-	if context == nil || len(context.Profile.Groups) != 2 {
-		t.Errorf("ForceLoad: expected 2 groups, got %v", context)
+	if loadContext() == nil || len(loadContext().Profile.Groups) != 2 {
+		t.Errorf("ForceLoad: expected 2 groups, got %v", loadContext())
 	}
 }
 
@@ -973,7 +1035,7 @@ func TestInstallRepo_installTaskError(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -988,8 +1050,8 @@ func TestInstallRepo_installTaskError(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	err := InstallRepo("repo1")
 	if err == nil {

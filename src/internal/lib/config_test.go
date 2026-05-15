@@ -17,19 +17,19 @@ func setupTestConfig(t *testing.T) {
 	configPath := filepath.Join(dir, "config.toml")
 
 	oldCfgPath := CfgPath
-	oldContext := context
+	oldContext := loadContext()
 	oldRecent := RecentPathOverride
 	oldLock := LockPathOverride
 	t.Cleanup(func() {
 		CfgPath = oldCfgPath
-		context = oldContext
+		storeContext(oldContext)
 		RecentPathOverride = oldRecent
 		LockPathOverride = oldLock
 		viper.Reset()
 	})
 
 	CfgPath = configPath
-	context = nil
+	storeContext(nil)
 	// Redirect recent.json so tests that exercise ExecuteCommand don't
 	// pollute the developer's real ~/.raid/recent.json.
 	RecentPathOverride = filepath.Join(dir, "recent.json")
