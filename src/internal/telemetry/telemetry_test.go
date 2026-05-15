@@ -1023,3 +1023,43 @@ func TestCapture_emptyID(t *testing.T) {
 
 	Capture("test_event", nil)
 }
+
+func TestPurgeID_emptyPath(t *testing.T) {
+	setupTestEnv(t)
+	os.Unsetenv(IDFileEnv)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+
+	if err := PurgeID(); err != nil {
+		t.Errorf("PurgeID() with empty path = %v, want nil", err)
+	}
+}
+
+func TestPurgeID_alreadyAbsent(t *testing.T) {
+	setupTestEnv(t)
+	if err := PurgeID(); err != nil {
+		t.Errorf("PurgeID() when file absent = %v, want nil", err)
+	}
+}
+
+func TestWriteIDExclusive_mkdirFailure(t *testing.T) {
+	setupTestEnv(t)
+	_, err := writeIDExclusive("/dev/null/impossible/path/id", "test-id")
+	if err == nil {
+		t.Fatal("writeIDExclusive() with impossible path should error")
+	}
+}
+
+func TestLoadOrCreateID_emptyPath(t *testing.T) {
+	setupTestEnv(t)
+	os.Unsetenv(IDFileEnv)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+
+	id := loadOrCreateID()
+	if id != "" {
+		t.Errorf("loadOrCreateID() with empty path = %q, want empty", id)
+	}
+}
