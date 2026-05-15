@@ -134,6 +134,30 @@ func TestStatusCmd_textOutputShowsStateAndIDPath(t *testing.T) {
 	}
 }
 
+func TestStatusCmd_enabledState(t *testing.T) {
+	root, out := setupCmdTestEnv(t)
+	if err := libtelemetry.SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := runCmd(t, root, "telemetry", "status"); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out.String(), "on") {
+		t.Errorf("expected 'on' in output: %s", out.String())
+	}
+}
+
+func TestStatusCmd_doNotTrackOverride(t *testing.T) {
+	root, out := setupCmdTestEnv(t)
+	os.Setenv(libtelemetry.DoNotTrackEnvVar, "1")
+	if err := runCmd(t, root, "telemetry", "status"); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out.String(), "DO_NOT_TRACK") {
+		t.Errorf("expected DO_NOT_TRACK mention in output: %s", out.String())
+	}
+}
+
 func TestStatusCmd_jsonOutputIsParseable(t *testing.T) {
 	root, out := setupCmdTestEnv(t)
 	if err := runCmd(t, root, "--json", "telemetry", "status"); err != nil {

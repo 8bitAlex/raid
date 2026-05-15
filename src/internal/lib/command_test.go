@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	liberrs "github.com/8bitalex/raid/src/internal/lib/errs"
 )
 
 // --- Command.IsZero ---
@@ -761,5 +764,65 @@ func TestExecuteRepoCommand_nilContext(t *testing.T) {
 
 	if err := ExecuteRepoCommand("any", "any", nil, nil); err == nil {
 		t.Fatal("expected error with nil context, got nil")
+	}
+}
+
+// --- errorCodeFor ---
+
+func TestErrorCodeFor_structuredError(t *testing.T) {
+	err := liberrs.Newf("TEST_CODE", liberrs.CategoryNotFound, "test message")
+	got := errorCodeFor(err)
+	if got != "TEST_CODE" {
+		t.Errorf("errorCodeFor(structured) = %q, want %q", got, "TEST_CODE")
+	}
+}
+
+func TestErrorCodeFor_plainError(t *testing.T) {
+	err := fmt.Errorf("plain error")
+	got := errorCodeFor(err)
+	if got != "UNKNOWN" {
+		t.Errorf("errorCodeFor(plain) = %q, want %q", got, "UNKNOWN")
+	}
+}
+
+// --- lockPath ---
+
+func TestLockPath_override(t *testing.T) {
+	old := LockPathOverride
+	defer func() { LockPathOverride = old }()
+
+	LockPathOverride = "/tmp/custom-lock"
+	if got := lockPath(); got != "/tmp/custom-lock" {
+		t.Errorf("lockPath() = %q, want /tmp/custom-lock", got)
+	}
+}
+
+func TestLockPath_default(t *testing.T) {
+	old := LockPathOverride
+	defer func() { LockPathOverride = old }()
+
+	LockPathOverride = ""
+	got := lockPath()
+	if got == "" {
+		t.Error("lockPath() returned empty string")
+	}
+}
+
+// TestLockPath_defaultShape asserts the default path lives under the raid
+// config dir and ends in the lock filename, not just that it's non-empty.
+func TestLockPath_defaultShape(t *testing.T) {
+	old := LockPathOverride
+	defer func() { LockPathOverride = old }()
+
+	LockPathOverride = ""
+	got := lockPath()
+	if got == "" {
+		t.Fatal("lockPath() returned empty string")
+	}
+	if !strings.HasSuffix(got, string(filepath.Separator)+".lock") {
+		t.Errorf("lockPath() = %q, want suffix /.lock", got)
+	}
+	if !strings.Contains(got, ConfigDirName) {
+		t.Errorf("lockPath() = %q, want it to contain ConfigDirName %q", got, ConfigDirName)
 	}
 }

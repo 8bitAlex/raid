@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -870,5 +871,214 @@ func TestSetEnabled_persistsBothKeys(t *testing.T) {
 	st = LoadState()
 	if !st.Decided || st.Enabled {
 		t.Errorf("state after off = %+v, want decided=true enabled=false", st)
+	}
+}
+
+func TestDoNotTrackActive(t *testing.T) {
+	orig := os.Getenv(DoNotTrackEnvVar)
+	defer os.Setenv(DoNotTrackEnvVar, orig)
+
+	os.Setenv(DoNotTrackEnvVar, "1")
+	if !DoNotTrackActive() {
+		t.Error("DoNotTrackActive() = false when DO_NOT_TRACK=1")
+	}
+	os.Unsetenv(DoNotTrackEnvVar)
+	if DoNotTrackActive() {
+		t.Error("DoNotTrackActive() = true when DO_NOT_TRACK unset")
+	}
+}
+
+func TestHasAPIKey(t *testing.T) {
+	origKey := APIKey
+	defer func() { APIKey = origKey }()
+
+	APIKey = ""
+	if HasAPIKey() {
+		t.Error("HasAPIKey() = true with empty key")
+	}
+	APIKey = "phc_test"
+	if !HasAPIKey() {
+		t.Error("HasAPIKey() = false with key set")
+	}
+}
+
+func TestLoadIDIfExists_missing(t *testing.T) {
+	setupTestEnv(t)
+	// No ID file written — should return empty
+	id := LoadIDIfExists()
+	if id != "" {
+		t.Errorf("LoadIDIfExists() = %q, want empty", id)
+	}
+}
+
+func TestLoadIDIfExists_present(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	if path == "" {
+		t.Skip("IDPath() returned empty")
+	}
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte("test-uuid-1234\n"), 0644)
+
+	id := LoadIDIfExists()
+	if id != "test-uuid-1234" {
+		t.Errorf("LoadIDIfExists() = %q, want %q", id, "test-uuid-1234")
+	}
+}
+
+func TestLoadIDIfExists_emptyFile(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte(""), 0644)
+
+	id := LoadIDIfExists()
+	if id != "" {
+		t.Errorf("LoadIDIfExists() with empty file = %q, want empty", id)
+	}
+}
+
+func TestIDPath_homeDirError(t *testing.T) {
+	setupTestEnv(t)
+	os.Unsetenv(IDFileEnv)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+
+	if got := IDPath(); got != "" {
+		t.Errorf("IDPath() with failing homeDirFn = %q, want empty", got)
+	}
+}
+
+func TestLoadOrCreateID_createsNewFile(t *testing.T) {
+	setupTestEnv(t)
+	id := loadOrCreateID()
+	if id == "" {
+		t.Fatal("loadOrCreateID() returned empty")
+	}
+	if len(id) != 36 {
+		t.Errorf("loadOrCreateID() = %q, want UUID format (36 chars)", id)
+	}
+}
+
+func TestLoadOrCreateID_reusesExisting(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte("existing-id\n"), 0644)
+
+	id := loadOrCreateID()
+	if id != "existing-id" {
+		t.Errorf("loadOrCreateID() = %q, want %q", id, "existing-id")
+	}
+}
+
+func TestWriteIDExclusive_raceLoserReadsExisting(t *testing.T) {
+	setupTestEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id")
+	os.WriteFile(path, []byte("winner-id\n"), 0600)
+
+	got, err := writeIDExclusive(path, "loser-id")
+	if err != nil {
+		t.Fatalf("writeIDExclusive() error: %v", err)
+	}
+	if got != "winner-id" {
+		t.Errorf("writeIDExclusive() = %q, want %q", got, "winner-id")
+	}
+}
+
+func TestWriteIDExclusive_raceLoserEmptyFile(t *testing.T) {
+	setupTestEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id")
+	os.WriteFile(path, []byte(""), 0600)
+
+	_, err := writeIDExclusive(path, "new-id")
+	if err == nil {
+		t.Fatal("writeIDExclusive() with empty existing file should error")
+	}
+}
+
+func TestNewID_format(t *testing.T) {
+	id, err := newID()
+	if err != nil {
+		t.Fatalf("newID() error: %v", err)
+	}
+	if len(id) != 36 {
+		t.Errorf("newID() = %q, want 36-char UUID", id)
+	}
+	parts := strings.Split(id, "-")
+	if len(parts) != 5 {
+		t.Errorf("newID() has %d parts, want 5", len(parts))
+	}
+}
+
+func TestCapture_emptyID(t *testing.T) {
+	setupTestEnv(t)
+	// Enable telemetry so we reach the loadOrCreateID() branch (otherwise
+	// IsActive() short-circuits and we never exercise empty-ID handling).
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	// Force loadOrCreateID() to fail: no env override and no home dir.
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	os.Unsetenv(IDFileEnv)
+	resetIDCacheForTest()
+
+	// Stand up a recording server so we can prove Capture made zero
+	// network calls when the ID resolves to empty.
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
+
+	Capture("test_event", nil)
+	Flush(500 * time.Millisecond)
+
+	if got := atomic.LoadInt32(&hits); got != 0 {
+		t.Errorf("Capture with empty ID made %d network calls, want 0", got)
+	}
+}
+
+func TestPurgeID_emptyPath(t *testing.T) {
+	setupTestEnv(t)
+	os.Unsetenv(IDFileEnv)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+
+	if err := PurgeID(); err != nil {
+		t.Errorf("PurgeID() with empty path = %v, want nil", err)
+	}
+}
+
+func TestPurgeID_alreadyAbsent(t *testing.T) {
+	setupTestEnv(t)
+	if err := PurgeID(); err != nil {
+		t.Errorf("PurgeID() when file absent = %v, want nil", err)
+	}
+}
+
+func TestWriteIDExclusive_mkdirFailure(t *testing.T) {
+	setupTestEnv(t)
+	_, err := writeIDExclusive("/dev/null/impossible/path/id", "test-id")
+	if err == nil {
+		t.Fatal("writeIDExclusive() with impossible path should error")
+	}
+}
+
+func TestLoadOrCreateID_emptyPath(t *testing.T) {
+	setupTestEnv(t)
+	os.Unsetenv(IDFileEnv)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+
+	id := loadOrCreateID()
+	if id != "" {
+		t.Errorf("loadOrCreateID() with empty path = %q, want empty", id)
 	}
 }

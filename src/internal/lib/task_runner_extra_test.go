@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -911,5 +912,93 @@ func TestExecuteTask_template_success(t *testing.T) {
 	data, _ := os.ReadFile(destPath)
 	if !strings.Contains(string(data), "hello") {
 		t.Errorf("template output = %q, expected 'hello'", string(data))
+	}
+}
+
+// --- validEnvPair ---
+
+func TestValidEnvPair(t *testing.T) {
+	tests := []struct {
+		key, value string
+		want       bool
+	}{
+		{"VAR", "value", true},
+		{"", "value", false},
+		{"K=V", "value", false},
+		{"K\x00V", "value", false},
+		{"KEY", "val\x00ue", false},
+	}
+	for _, tt := range tests {
+		if got := validEnvPair(tt.key, tt.value); got != tt.want {
+			t.Errorf("validEnvPair(%q, %q) = %v, want %v", tt.key, tt.value, got, tt.want)
+		}
+	}
+}
+
+// --- execPrint ---
+
+func TestExecPrint_withColor(t *testing.T) {
+	var buf bytes.Buffer
+	origOut := commandStdout
+	commandStdout = &buf
+	t.Cleanup(func() { commandStdout = origOut })
+
+	task := Task{Type: Print, Message: "colored", Color: "green"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("execPrint: %v", err)
+	}
+	if !strings.Contains(buf.String(), "colored") {
+		t.Errorf("output = %q, want 'colored'", buf.String())
+	}
+}
+
+// --- SetCommandOutput ---
+
+// TestSetCommandOutput_redirectsAndRestores asserts the real behaviour of
+// SetCommandOutput: writes to commandStdout/commandStderr land in the
+// caller-provided buffers, and after restore() the original writers are
+// back in place. Copilot flagged the raid-package wrapper test for not
+// asserting this — we own the strong assertion here, where the
+// unexported writers are reachable.
+func TestSetCommandOutput_redirectsAndRestores(t *testing.T) {
+	origOut, origErr := commandStdout, commandStderr
+	t.Cleanup(func() { commandStdout, commandStderr = origOut, origErr })
+
+	var outBuf, errBuf bytes.Buffer
+	restore := SetCommandOutput(&outBuf, &errBuf)
+
+	if commandStdout != &outBuf {
+		t.Fatalf("commandStdout = %p, want %p (the passed-in buffer)", commandStdout, &outBuf)
+	}
+	if commandStderr != &errBuf {
+		t.Fatalf("commandStderr = %p, want %p (the passed-in buffer)", commandStderr, &errBuf)
+	}
+
+	// Writes through the package writers must land in the buffers.
+	commandStdout.Write([]byte("hello-out"))
+	commandStderr.Write([]byte("hello-err"))
+	if got := outBuf.String(); got != "hello-out" {
+		t.Errorf("outBuf = %q, want %q", got, "hello-out")
+	}
+	if got := errBuf.String(); got != "hello-err" {
+		t.Errorf("errBuf = %q, want %q", got, "hello-err")
+	}
+
+	restore()
+
+	if commandStdout != origOut {
+		t.Errorf("after restore, commandStdout = %p, want original %p", commandStdout, origOut)
+	}
+	if commandStderr != origErr {
+		t.Errorf("after restore, commandStderr = %p, want original %p", commandStderr, origErr)
+	}
+
+	// Subsequent writes must not land in the original buffers.
+	outBuf.Reset()
+	errBuf.Reset()
+	commandStdout.Write([]byte("post-restore"))
+	commandStderr.Write([]byte("post-restore"))
+	if outBuf.Len() != 0 || errBuf.Len() != 0 {
+		t.Errorf("post-restore writes leaked into buffers: out=%q err=%q", outBuf.String(), errBuf.String())
 	}
 }

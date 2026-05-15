@@ -423,3 +423,14 @@ func TestMergeEnvironments_emptyAdditional(t *testing.T) {
 		t.Errorf("merge with nil additional = %+v, want [{Name:dev}]", got)
 	}
 }
+
+func TestExecuteEnv_nilContext(t *testing.T) {
+	old := loadContext()
+	storeContext(nil)
+	defer func() { storeContext(old) }()
+
+	err := ExecuteEnv("dev")
+	if err == nil {
+		t.Fatal("ExecuteEnv() expected error with nil context, got nil")
+	}
+}

@@ -88,9 +88,6 @@ func GetProfile() Profile {
 // AddProfile registers a profile in the config store.
 func AddProfile(profile Profile) error {
 	profiles := viper.GetStringMapString(allProfilesKey)
-	if profiles == nil {
-		profiles = make(map[string]string)
-	}
 	profiles[profile.Name] = profile.Path
 	return Set(allProfilesKey, profiles)
 }
@@ -116,11 +113,7 @@ func ListProfiles() []Profile {
 }
 
 func getProfilePaths() map[string]string {
-	profiles := viper.GetStringMapString(allProfilesKey)
-	if profiles == nil {
-		return make(map[string]string)
-	}
-	return profiles
+	return viper.GetStringMapString(allProfilesKey)
 }
 
 // RemoveProfile removes a registered profile by name. Case-insensitive
@@ -129,9 +122,6 @@ func getProfilePaths() map[string]string {
 // looked up the same way.
 func RemoveProfile(name string) error {
 	profiles := viper.GetStringMapString(allProfilesKey)
-	if profiles == nil {
-		return liberrs.Newf(liberrs.CodeProfileNotFound, liberrs.CategoryNotFound, "no profiles found")
-	}
 	key := strings.ToLower(name)
 	if _, exists := profiles[key]; !exists {
 		return liberrs.ProfileNotFound(name)
@@ -244,11 +234,7 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 // the lowercase comparison here, `raid profile MyProfile` would fail
 // even though `MyProfile` was just registered.
 func ContainsProfile(name string) bool {
-	profiles := viper.GetStringMapString(allProfilesKey)
-	if profiles == nil {
-		return false
-	}
-	_, exists := profiles[strings.ToLower(name)]
+	_, exists := viper.GetStringMapString(allProfilesKey)[strings.ToLower(name)]
 	return exists
 }
 

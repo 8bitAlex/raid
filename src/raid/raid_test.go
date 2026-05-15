@@ -1,10 +1,13 @@
 package raid
 
 import (
+	"bytes"
 	stdctx "context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
@@ -391,4 +394,60 @@ func TestInitialize_profileLoadError(t *testing.T) {
 
 	// Initialize should not panic — Load error is non-fatal.
 	Initialize()
+}
+
+func TestSetCommandOutput(t *testing.T) {
+	// raid.SetCommandOutput is a thin wrapper over lib.SetCommandOutput;
+	// the behavioural test (writes actually land in buf, restore reverts)
+	// lives in lib/task_runner_extra_test.go where the unexported
+	// commandStdout/commandStderr are reachable. Here we assert the
+	// delegation: a non-nil restore is returned and is safe to call
+	// repeatedly without panicking.
+	var buf bytes.Buffer
+	restore := SetCommandOutput(&buf, io.Discard)
+	if restore == nil {
+		t.Fatal("SetCommandOutput returned a nil restore func")
+	}
+	restore()
+	restore() // idempotent — second call must not panic
+}
+
+func TestWithMutationLock(t *testing.T) {
+	setupConfig(t)
+	lib.LockPathOverride = filepath.Join(t.TempDir(), "test.lock")
+	t.Cleanup(func() { lib.LockPathOverride = "" })
+
+	called := false
+	err := WithMutationLock(func() error {
+		called = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithMutationLock() error: %v", err)
+	}
+	if !called {
+		t.Error("inner function was not called")
+	}
+}
+
+func TestScrubURL(t *testing.T) {
+	got := ScrubURL("https://user:pass@github.com/org/repo.git")
+	if strings.Contains(got, "pass") {
+		t.Errorf("ScrubURL() did not strip credentials: %s", got)
+	}
+	plain := ScrubURL("https://github.com/org/repo.git")
+	if plain != "https://github.com/org/repo.git" {
+		t.Errorf("ScrubURL() mangled plain URL: %s", plain)
+	}
+}
+
+func TestRunVerify_emptyTasks(t *testing.T) {
+	setupConfig(t)
+	outcome, err := RunVerify(Verify{})
+	if err != nil {
+		t.Fatalf("RunVerify(empty) error = %v, want nil", err)
+	}
+	if outcome != VerifyOutcomeOK {
+		t.Errorf("RunVerify(empty) outcome = %v, want VerifyOutcomeOK", outcome)
+	}
 }

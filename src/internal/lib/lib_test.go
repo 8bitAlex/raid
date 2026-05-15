@@ -1369,3 +1369,68 @@ func TestForceLoad_seedsRepoVars(t *testing.T) {
 		}
 	}
 }
+
+// --- loadRaidVars ---
+
+func TestLoadRaidVars_missingFile(t *testing.T) {
+	setupTestConfig(t)
+	overrideRaidVarsPath(t)
+
+	raidVarsMu.Lock()
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+
+	loadRaidVars()
+	raidVarsMu.RLock()
+	defer raidVarsMu.RUnlock()
+	if len(raidVars) != 0 {
+		t.Errorf("loadRaidVars() with missing file should leave raidVars empty, got %v", raidVars)
+	}
+}
+
+// --- validateFile ---
+
+func TestValidateFile_emptyYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.yaml")
+	os.WriteFile(path, []byte(""), 0644)
+
+	err := ValidateProfile(path)
+	if err == nil {
+		t.Fatal("validateFile() with empty YAML should return error")
+	}
+}
+
+func TestValidateFile_malformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	os.WriteFile(path, []byte(":\n  - invalid: [\n"), 0644)
+
+	err := ValidateProfile(path)
+	if err == nil {
+		t.Fatal("validateFile() with malformed YAML should return error")
+	}
+}
+
+func TestValidateFile_JSONArray(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profiles.json")
+	data := `[{"name":"a","repositories":[{"name":"r","path":"~/r","url":"https://x.com/r.git"}]},{"name":"b","repositories":[{"name":"s","path":"~/s","url":"https://x.com/s.git"}]}]`
+	os.WriteFile(path, []byte(data), 0644)
+
+	err := ValidateProfile(path)
+	if err != nil {
+		t.Fatalf("validateFile() with valid JSON array should pass: %v", err)
+	}
+}
+
+func TestValidateFile_invalidJSONSingleObject(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.json")
+	os.WriteFile(path, []byte(`{"name":"test","extra_field_xyz":123}`), 0644)
+
+	err := ValidateProfile(path)
+	if err == nil {
+		t.Fatal("validateFile() with invalid JSON (unknown field) should return error")
+	}
+}

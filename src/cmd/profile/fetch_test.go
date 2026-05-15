@@ -90,6 +90,21 @@ func TestIsGitURL_jsonExtension(t *testing.T) {
 	}
 }
 
+func TestIsGitURL_invalidURL(t *testing.T) {
+	if isGitURL("://invalid-url") {
+		t.Error("invalid URL should not be detected as git")
+	}
+}
+
+func TestIsGitURL_plainHTTPFallsThroughToProbe(t *testing.T) {
+	// A plain HTTPS URL with no recognized extension falls through to
+	// DetectGitDefaultBranch. For a non-existent domain, the probe
+	// returns "" so isGitURL returns false.
+	if isGitURL("https://nonexistent.example.com/repo") {
+		t.Error("non-existent domain should not be detected as git")
+	}
+}
+
 // --- findProfileFilesInDir ---
 
 func TestFindProfileFilesInDir_empty(t *testing.T) {

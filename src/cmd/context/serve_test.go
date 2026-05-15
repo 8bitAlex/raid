@@ -880,3 +880,70 @@ func TestServeCmd_runDelegatesToServeStdioFn(t *testing.T) {
 		t.Error("startVarsWatcherFn was not invoked")
 	}
 }
+
+func TestHandleInstall_singleRepo(t *testing.T) {
+	loadTestProfile(t, `
+name: test-fixture
+repositories:
+  - name: myrepo
+    path: `+t.TempDir()+`
+    url: https://example.com/repo.git
+`)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"repo": "myrepo"}
+
+	res, err := handleInstall(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleInstall: %v", err)
+	}
+	text := toolResultText(res)
+	if !strings.Contains(text, "myrepo") {
+		t.Errorf("expected repo name in output, got: %s", text)
+	}
+}
+
+func TestHandleInstall_allRepos(t *testing.T) {
+	dir := t.TempDir()
+	loadTestProfile(t, `
+name: test-fixture
+repositories:
+  - name: repo1
+    path: `+dir+`/repo1
+    url: https://example.com/r1.git
+`)
+
+	req := mcp.CallToolRequest{}
+	res, err := handleInstall(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleInstall: %v", err)
+	}
+	text := toolResultText(res)
+	if !strings.Contains(text, "all repos") && !res.IsError {
+		t.Errorf("expected 'all repos' in success output, got: %s", text)
+	}
+}
+
+func TestHandleRunTask_executableCommand(t *testing.T) {
+	loadTestProfile(t, `
+name: test-fixture
+repositories:
+  - name: r
+    path: /tmp/r
+    url: https://example.com/r.git
+commands:
+  - name: noop
+    tasks:
+      - type: Shell
+        cmd: "exit 0"
+`)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"command": "noop"}
+
+	res, err := handleRunTask(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunTask: %v", err)
+	}
+	if res.IsError {
+		t.Errorf("expected success, got error: %s", toolResultText(res))
+	}
+}

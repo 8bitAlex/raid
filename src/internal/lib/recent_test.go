@@ -2,6 +2,7 @@ package lib
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -239,5 +240,40 @@ func TestExitCodeFromError(t *testing.T) {
 	err := cmd.Run()
 	if got := exitCodeFromError(err); got != 42 {
 		t.Errorf("exec.ExitError(42) = %d, want 42", got)
+	}
+}
+
+func TestReadRecent_corruptJSON(t *testing.T) {
+	setupRecentTempPath(t)
+	path := recentPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte("{invalid json"), 0644)
+
+	got := ReadRecent()
+	if got != nil {
+		t.Errorf("ReadRecent() with corrupt JSON = %v, want nil", got)
+	}
+}
+
+func TestRecordRecent_writeError(t *testing.T) {
+	// Place a regular file where writeRecent expects a directory so
+	// MkdirAll(filepath.Dir(path)) returns ENOTDIR and the function
+	// bails before writing. The contract is that recording must never
+	// break command execution (errors are silenced) AND that nothing
+	// gets persisted — so ReadRecent must still return nil afterwards.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("not-a-dir"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := RecentPathOverride
+	t.Cleanup(func() { RecentPathOverride = old })
+	RecentPathOverride = filepath.Join(blocker, "recent.json")
+
+	started := RecordRecentStart("cmd")
+	RecordRecentEnd("cmd", nil, started)
+
+	if got := ReadRecent(); got != nil {
+		t.Errorf("ReadRecent() after failed writes = %v, want nil (nothing persisted)", got)
 	}
 }
