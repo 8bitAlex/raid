@@ -489,3 +489,66 @@ func stubTerminalSink(v bool) func() {
 	isTerminalSinkFn = func(io.Writer) bool { return v }
 	return func() { isTerminalSinkFn = prev }
 }
+
+func TestLockedFprint_writesUnderMutex(t *testing.T) {
+	var buf bytes.Buffer
+	lockedFprint(&buf, "hello", " ", "world")
+	if got := buf.String(); got != "hello world" {
+		t.Errorf("lockedFprint = %q, want %q", got, "hello world")
+	}
+}
+
+func TestLockedFprintln_writesUnderMutex(t *testing.T) {
+	var buf bytes.Buffer
+	lockedFprintln(&buf, "line1")
+	if got := buf.String(); got != "line1\n" {
+		t.Errorf("lockedFprintln = %q, want %q", got, "line1\n")
+	}
+}
+
+func TestLockedHelpers_serializeWithPrefixedWriter(t *testing.T) {
+	// Concurrent lockedFprintln + a prefixedWriter sharing outputMu must
+	// not interleave mid-line. Each goroutine writes a long line; we
+	// assert every output line is complete (no torn writes).
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	safeWrite := io.Writer(&syncWriter{w: &buf, mu: &mu})
+	pw := newPrefixedWriter(safeWrite, "[pw] ")
+
+	const N = 50
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < N; i++ {
+			lockedFprintln(safeWrite, "[aux] auxiliary-line-with-some-payload")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < N; i++ {
+			_, _ = pw.Write([]byte("prefixed-line-with-payload\n"))
+		}
+		_ = pw.Flush()
+	}()
+	wg.Wait()
+
+	// Every line must be either "[aux] ..." or "[pw] prefixed-..." — no
+	// mid-line merges.
+	for _, line := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n") {
+		if !strings.HasPrefix(line, "[aux] ") && !strings.HasPrefix(line, "[pw] ") {
+			t.Errorf("torn line detected: %q", line)
+		}
+	}
+}
+
+type syncWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}

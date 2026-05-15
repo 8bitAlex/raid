@@ -105,6 +105,77 @@ func TestCommand_noArgs_withActiveProfile(t *testing.T) {
 	}
 }
 
+func TestCommand_noArgs_json_noProfile(t *testing.T) {
+	setupConfig(t)
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile"})
+	root.SetOut(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"action": "active"`) {
+		t.Errorf("expected action=active in JSON, got %q", buf.String())
+	}
+}
+
+func TestCommand_noArgs_json_withActiveProfile(t *testing.T) {
+	setupConfig(t)
+	if err := lib.AddProfile(lib.Profile{Name: "jprof", Path: "/p"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("jprof"); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile"})
+	root.SetOut(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, `"jprof"`) || !strings.Contains(body, `"active"`) {
+		t.Errorf("expected jprof + active in JSON, got %q", body)
+	}
+}
+
+func TestCommand_switch_json(t *testing.T) {
+	setupConfig(t)
+	if err := lib.AddProfile(lib.Profile{Name: "p1", Path: "/p1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "p2", Path: "/p2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("p1"); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile", "p2"})
+	root.SetOut(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, `"switched"`) || !strings.Contains(body, `"p2"`) {
+		t.Errorf("expected switched + p2 in JSON, got %q", body)
+	}
+}
+
 // --- ListProfileCmd ---
 
 func TestListProfileCmd_noProfiles(t *testing.T) {

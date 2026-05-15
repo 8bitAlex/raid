@@ -379,3 +379,47 @@ func TestLoadEnv_emptyRepositories(t *testing.T) {
 		t.Errorf("LoadEnv() with empty repositories error: %v", err)
 	}
 }
+
+func TestMergeEnvironments_baseWinsOnConflict(t *testing.T) {
+	base := []Env{
+		{Name: "dev", Tasks: []Task{{Cmd: "echo base-dev"}}},
+		{Name: "prod"},
+	}
+	additional := []Env{
+		// "dev" conflicts — base must win, additional dropped.
+		{Name: "dev", Tasks: []Task{{Cmd: "echo additional-dev"}}},
+		// "staging" is new — appended.
+		{Name: "staging"},
+	}
+
+	got := mergeEnvironments(base, additional)
+
+	if len(got) != 3 {
+		t.Fatalf("merged len = %d, want 3", len(got))
+	}
+	if got[0].Name != "dev" || len(got[0].Tasks) == 0 || got[0].Tasks[0].Cmd != "echo base-dev" {
+		t.Errorf("base.dev not preserved on conflict: %+v", got[0])
+	}
+	if got[1].Name != "prod" {
+		t.Errorf("got[1].Name = %q, want prod", got[1].Name)
+	}
+	if got[2].Name != "staging" {
+		t.Errorf("got[2].Name = %q, want staging (non-conflict appended)", got[2].Name)
+	}
+}
+
+func TestMergeEnvironments_emptyBase(t *testing.T) {
+	additional := []Env{{Name: "dev"}}
+	got := mergeEnvironments(nil, additional)
+	if len(got) != 1 || got[0].Name != "dev" {
+		t.Errorf("merge into nil base = %+v, want [{Name:dev}]", got)
+	}
+}
+
+func TestMergeEnvironments_emptyAdditional(t *testing.T) {
+	base := []Env{{Name: "dev"}}
+	got := mergeEnvironments(base, nil)
+	if len(got) != 1 || got[0].Name != "dev" {
+		t.Errorf("merge with nil additional = %+v, want [{Name:dev}]", got)
+	}
+}
