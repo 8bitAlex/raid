@@ -133,6 +133,26 @@ func runTasksForEnv(ctx *Context, name string) error {
 	return ExecuteTasks(withDefaultDir(env.Tasks, sys.GetHomeDir()))
 }
 
+// mergeEnvironments merges additional into base by Name. On name conflicts
+// base wins, mirroring the mergeCommands contract — the wrapping profile
+// is canonical, and a per-repo raid.yaml can't silently override an env
+// the profile author chose to expose. Used by ForceLoad's single-repo
+// hoist path so a wrapping profile + raid.yaml each declaring "dev"
+// don't surface as two entries.
+func mergeEnvironments(base, additional []Env) []Env {
+	existing := make(map[string]bool, len(base))
+	for _, e := range base {
+		existing[e.Name] = true
+	}
+	result := append([]Env(nil), base...)
+	for _, e := range additional {
+		if !existing[e.Name] {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
 // LoadEnv loads .env files from all repositories in the active profile into the process environment.
 func LoadEnv() error {
 	ctx := loadContext()

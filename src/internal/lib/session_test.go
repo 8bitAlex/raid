@@ -142,6 +142,43 @@ func TestUpdateSessionFromEnv_removesStaleEntryOnReversion(t *testing.T) {
 	}
 }
 
+func TestUpdateSessionFromEnv_cacheHitShortCircuits(t *testing.T) {
+	startSession()
+	defer endSession()
+
+	data := []byte("RAID_CACHE_HIT_VAR=v1\n")
+	updateSessionFromEnv(data)
+
+	commandSession.mu.RLock()
+	firstHash := commandSession.lastEnvHash
+	commandSession.mu.RUnlock()
+	if firstHash == 0 {
+		t.Fatal("lastEnvHash should be set after first update")
+	}
+
+	// Mutate session.vars under the same key in a way parseEnvLines
+	// would overwrite. If the second call short-circuits on the hash
+	// match, our mutation survives; if it parses again, the value gets
+	// reset back to "v1".
+	commandSession.mu.Lock()
+	commandSession.vars["RAID_CACHE_HIT_VAR"] = "mutated"
+	commandSession.mu.Unlock()
+
+	updateSessionFromEnv(data)
+
+	commandSession.mu.RLock()
+	gotVal := commandSession.vars["RAID_CACHE_HIT_VAR"]
+	gotHash := commandSession.lastEnvHash
+	commandSession.mu.RUnlock()
+
+	if gotVal != "mutated" {
+		t.Errorf("cache hit should skip parse/diff, but vars were rewritten: got %q, want %q", gotVal, "mutated")
+	}
+	if gotHash != firstHash {
+		t.Errorf("hash should be unchanged across identical inputs: got %d, want %d", gotHash, firstHash)
+	}
+}
+
 func TestUpdateSessionFromEnv_nilSession(t *testing.T) {
 	// Should be a no-op without panicking.
 	commandSession = nil

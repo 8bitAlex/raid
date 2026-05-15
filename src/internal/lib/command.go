@@ -301,29 +301,38 @@ func runCommand(cmd Command) error {
 		return err
 	}
 
-	origOut, origErr := commandStdout, commandStderr
-	var outFile *os.File
-	defer func() {
-		// Emit the exe-time line BEFORE the file is closed and the
-		// original writers are restored, so it lands in the same place
-		// as the task output (file capture, stderr suppression).
-		if showExeTime {
-			emitExeTime(cmd.Name, timeNowFn().Sub(start))
-		}
-		if outFile != nil {
-			outFile.Close()
-		}
-		commandStdout = origOut
-		commandStderr = origErr
-	}()
-
+	// Build the desired stdout/stderr writers locally, then route the
+	// swap through SetCommandOutput so the package's official
+	// "writers in flight" contract is honored. Direct mutation of the
+	// package globals (the pre-fix shape) bypasses the entry point
+	// and races against concurrent MCP read handlers + future callers
+	// that introspect the active sinks. The restore closure returned
+	// by SetCommandOutput puts the writers back in one atomic step.
+	desiredOut := commandStdout
+	desiredErr := commandStderr
 	if !cmd.Out.Stdout {
-		commandStdout = io.Discard
+		desiredOut = io.Discard
 	}
 	if !cmd.Out.Stderr {
-		commandStderr = io.Discard
+		desiredErr = io.Discard
 	}
 
+	// Exe-time emission follows whatever desiredErr resolves to here:
+	//   - `out: {stderr: true,  file: ""}` (default)  → terminal stderr
+	//   - `out: {stderr: false, file: ""}`            → io.Discard
+	//                                                   (timing line is
+	//                                                   intentionally
+	//                                                   suppressed alongside
+	//                                                   the task's own stderr)
+	//   - `out: {stderr: false, file: path}`          → file only (MultiWriter
+	//                                                   below wraps Discard
+	//                                                   with the file sink)
+	//   - `out: {stderr: true,  file: path}`          → terminal stderr + file
+	//
+	// The middle case is the "no echo" mode — users who set both
+	// `stderr: false` and no file are explicitly opting out of seeing
+	// the run, including the diagnostic timing line.
+	var outFile *os.File
 	if cmd.Out.File != "" {
 		expanded := sys.ExpandPath(cmd.Out.File)
 		if err := os.MkdirAll(filepath.Dir(expanded), 0755); err != nil {
@@ -334,9 +343,23 @@ func runCommand(cmd Command) error {
 			return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to open output file '%s': %v", cmd.Out.File, err)
 		}
 		outFile = f
-		commandStdout = io.MultiWriter(commandStdout, f)
-		commandStderr = io.MultiWriter(commandStderr, f)
+		desiredOut = io.MultiWriter(desiredOut, f)
+		desiredErr = io.MultiWriter(desiredErr, f)
 	}
+
+	restore := SetCommandOutput(desiredOut, desiredErr)
+	defer func() {
+		// Emit the exe-time line BEFORE the file is closed and the
+		// writers are restored, so it lands in the same place as the
+		// task output (file capture, stderr suppression).
+		if showExeTime {
+			emitExeTime(cmd.Name, timeNowFn().Sub(start))
+		}
+		if outFile != nil {
+			outFile.Close()
+		}
+		restore()
+	}()
 
 	return ExecuteTasks(cmd.Tasks)
 }

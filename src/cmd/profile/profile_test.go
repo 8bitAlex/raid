@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid/errs"
 	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -101,6 +102,77 @@ func TestCommand_noArgs_withActiveProfile(t *testing.T) {
 	})
 	if !strings.Contains(out, "myprofile") {
 		t.Errorf("Command with active profile: got %q, want 'myprofile'", out)
+	}
+}
+
+func TestCommand_noArgs_json_noProfile(t *testing.T) {
+	setupConfig(t)
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile"})
+	root.SetOut(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"action": "active"`) {
+		t.Errorf("expected action=active in JSON, got %q", buf.String())
+	}
+}
+
+func TestCommand_noArgs_json_withActiveProfile(t *testing.T) {
+	setupConfig(t)
+	if err := lib.AddProfile(lib.Profile{Name: "jprof", Path: "/p"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("jprof"); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile"})
+	root.SetOut(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, `"jprof"`) || !strings.Contains(body, `"active"`) {
+		t.Errorf("expected jprof + active in JSON, got %q", body)
+	}
+}
+
+func TestCommand_switch_json(t *testing.T) {
+	setupConfig(t)
+	if err := lib.AddProfile(lib.Profile{Name: "p1", Path: "/p1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddProfile(lib.Profile{Name: "p2", Path: "/p2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.SetProfile("p1"); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(Command)
+	root.SetArgs([]string{"profile", "p2"})
+	root.SetOut(&buf)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, `"switched"`) || !strings.Contains(body, `"p2"`) {
+		t.Errorf("expected switched + p2 in JSON, got %q", body)
 	}
 }
 
@@ -259,6 +331,57 @@ func TestRemoveProfileCmd_multipleArgs(t *testing.T) {
 	}
 	if !strings.Contains(out, "not found") {
 		t.Errorf("RemoveProfileCmd multi not found: got %q", out)
+	}
+}
+
+func TestRemoveProfileCmd_jsonAllMissing_returnsStructuredError(t *testing.T) {
+	setupConfig(t)
+	// JSON mode + every requested profile missing should still propagate
+	// a PROFILE_NOT_FOUND structured error so the process exits non-zero.
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(RemoveProfileCmd)
+	root.SetArgs([]string{"remove", "ghost1", "ghost2"})
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected structured error when all requested profiles are missing in JSON mode, got nil")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("expected structured Error, got %T: %v", err, err)
+	}
+	if rErr.Code() != errs.CodeProfileNotFound {
+		t.Errorf("error code = %q, want %q", rErr.Code(), errs.CodeProfileNotFound)
+	}
+	// JSON envelope of the removeResult is still emitted on stdout.
+	if !strings.Contains(stdout.String(), "\"errors\"") {
+		t.Errorf("expected removeResult JSON on stdout, got %q", stdout.String())
+	}
+}
+
+func TestRemoveProfileCmd_jsonMixedSuccess_exitsZero(t *testing.T) {
+	setupConfig(t)
+	if err := lib.AddProfile(lib.Profile{Name: "keepme", Path: "/p"}); err != nil {
+		t.Fatal(err)
+	}
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(RemoveProfileCmd)
+	root.SetArgs([]string{"remove", "keepme", "ghost"})
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+
+	if err := root.Execute(); err != nil {
+		t.Errorf("mixed success should not return error, got %v", err)
 	}
 }
 
@@ -427,7 +550,12 @@ func TestAddProfileCmd_fileNotFound_subprocess(t *testing.T) {
 		root := &cobra.Command{Use: "raid"}
 		root.AddCommand(AddProfileCmd)
 		root.SetArgs([]string{"add", "/nonexistent/path.yaml"})
-		_ = root.Execute()
+		if err := root.Execute(); err != nil {
+			// Match the root-cmd error-handler exit-code mapping
+			// from cmd/raid.go: structured errors return their
+			// category code, everything else maps to 1.
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -453,7 +581,9 @@ func TestAddProfileCmd_invalidProfile_subprocess(t *testing.T) {
 		root := &cobra.Command{Use: "raid"}
 		root.AddCommand(AddProfileCmd)
 		root.SetArgs([]string{"add", path})
-		_ = root.Execute()
+		if err := root.Execute(); err != nil {
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -823,38 +953,27 @@ func TestRunCreateWizardCore_noReposSkipsConfig(t *testing.T) {
 	})
 }
 
-// TestAddProfileCmd_wrapperExits verifies the wrapper calls osExit on error.
-func TestAddProfileCmd_wrapperExits(t *testing.T) {
+// TestAddProfileCmd_wrapperReturnsError verifies that the RunE wrapper
+// returns a structured error for a missing file. The root cmd handler
+// in cmd/raid.go is responsible for mapping that to an exit code +
+// JSON envelope; this test asserts the contract at the cobra-RunE
+// boundary so the categorization stays correct.
+func TestAddProfileCmd_wrapperReturnsError(t *testing.T) {
 	setupConfig(t)
-	oldExit := osExit
-	defer func() { osExit = oldExit }()
 
-	exitCode := 0
-	osExit = func(code int) { exitCode = code }
-
-	_ = captureStdout(t, func() {
-		AddProfileCmd.Run(&cobra.Command{}, []string{"/nonexistent/file.yaml"})
-	})
-	if exitCode != 1 {
-		t.Errorf("AddProfileCmd wrapper: exitCode = %d, want 1", exitCode)
+	err := AddProfileCmd.RunE(&cobra.Command{}, []string{"/nonexistent/file.yaml"})
+	if err == nil {
+		t.Fatal("AddProfileCmd.RunE: expected error for missing file, got nil")
 	}
 }
 
-// TestAddProfileCmd_wrapperSuccess verifies the wrapper does not call osExit on success.
+// TestAddProfileCmd_wrapperSuccess verifies RunE returns nil for the happy path.
 func TestAddProfileCmd_wrapperSuccess(t *testing.T) {
 	setupConfig(t)
-	oldExit := osExit
-	defer func() { osExit = oldExit }()
-
-	exitCode := -1
-	osExit = func(code int) { exitCode = code }
 
 	path := validProfileFile(t, "wrappersuccess")
-	_ = captureStdout(t, func() {
-		AddProfileCmd.Run(&cobra.Command{}, []string{path})
-	})
-	if exitCode != -1 {
-		t.Errorf("AddProfileCmd wrapper: osExit should not be called, got code %d", exitCode)
+	if err := AddProfileCmd.RunE(&cobra.Command{}, []string{path}); err != nil {
+		t.Errorf("AddProfileCmd.RunE: unexpected error: %v", err)
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // PromptResult describes what the first-run prompt resolved to. Used
@@ -41,12 +43,16 @@ var promptOutFn = func() io.Writer { return os.Stderr }
 
 // isInteractiveFn reports whether stdin is a TTY. Tests stub this so
 // they don't depend on the runner's stdin state.
+//
+// Uses golang.org/x/term.IsTerminal rather than a raw ModeCharDevice
+// check — agent hosts that wire stdin to /dev/null (also a char
+// device) would otherwise be misclassified as interactive, render
+// the prompt, see EOF on the read, and persist Decided=true,
+// Enabled=false against the user's intent. lib/prefix.go uses the
+// same check on the output side; honouring it here keeps the TTY
+// definition consistent across the binary.
 var isInteractiveFn = func() bool {
-	stat, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return stat.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // MaybePromptForConsent runs the first-run consent flow when
@@ -107,6 +113,16 @@ func MaybePromptForConsent(skipPersistent, skipTransient bool) PromptResult {
 	// One bufio reader threaded through the explainer loop so a fresh
 	// bufio per attempt can't strand input buffered after the first
 	// newline.
+	//
+	// Known trade-off: this reader is local to MaybePromptForConsent
+	// and not shared with lib.getStdinReader (telemetry can't import
+	// lib — lib imports telemetry for the Capture hook). Bytes that
+	// the user piped past the consent answer's newline would be lost
+	// when this function returns, instead of being seen by the first
+	// Prompt/Confirm task that runs afterward. In practice the
+	// answer is one or two chars + Enter and the OS only delivers up
+	// to the newline before re-enabling cooked-mode read, so the
+	// buffer is empty after the read — no real-world data loss.
 	reader := bufio.NewReader(promptInFn())
 	for {
 		answer := readPromptAnswer(reader)

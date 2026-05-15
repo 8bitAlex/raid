@@ -66,20 +66,67 @@ func init() {
 	rootCmd.AddCommand(telemetrycmd.Command)
 }
 
-// isInfoCommand reports whether the invocation is for a built-in informational
-// command (help, version, completion) that does not require a loaded profile.
+// isInfoCommand reports whether the invocation is for a built-in
+// informational command (help, version, completion) that doesn't
+// need a loaded profile. Two acceptance paths:
+//
+//  1. The first non-flag positional matches `help`, `version`, or
+//     `completion`. Critically: only the FIRST positional — a user
+//     command like `raid deploy version` (where `version` is a
+//     positional value, not a subcommand) must NOT be misclassified
+//     as informational, otherwise the version-check goroutine waits
+//     up to 1.5s and the update notice gets appended to rootCmd.Long.
+//  2. Anywhere in the arg list (still before `--`), the flag form
+//     `--help` / `-h` / `--version` / `-v` appears. These are
+//     cobra-managed flags that flip into info-style behavior
+//     regardless of position.
+//
+// Flag-aware token walking mirrors isTelemetrySubcommand: persistent
+// flags that take a value (`--config <path>` / `-c <path>`) consume
+// the next token, so `raid --config version some-cmd` should
+// resolve to `some-cmd`, not be classified as info because the value
+// happens to be `version`.
 func isInfoCommand(args []string) bool {
 	if len(args) <= 1 {
 		return true
 	}
-	for _, arg := range args[1:] {
-		if arg == "--" {
+	skipNext := false
+	firstPositional := ""
+	for _, a := range args[1:] {
+		if a == "--" {
 			break
 		}
-		switch arg {
-		case "help", "version", "completion", "--help", "-h", "--version", "-v":
-			return true
+		if skipNext {
+			skipNext = false
+			continue
 		}
+		if strings.HasPrefix(a, "-") {
+			// Standalone info-style flags trigger regardless of
+			// position — cobra accepts `raid mycmd --help` as a
+			// help-for-mycmd invocation, so we keep scanning after
+			// a non-info first positional in case one of these
+			// shows up.
+			switch a {
+			case "--help", "-h", "--version", "-v":
+				return true
+			}
+			// Value-taking persistent flags consume the next token
+			// (only in bare form; `--config=path` keeps the value
+			// attached).
+			if a == "--config" || a == "-c" {
+				skipNext = true
+			}
+			continue
+		}
+		// Latch the first non-flag positional but DON'T return yet —
+		// trailing `--help` after a real subcommand is still info.
+		if firstPositional == "" {
+			firstPositional = a
+		}
+	}
+	switch firstPositional {
+	case "help", "version", "completion":
+		return true
 	}
 	return false
 }
@@ -550,6 +597,13 @@ func baseVersion(version string) string {
 // applyConfigFlag scans args for --config / -c so the config path is set
 // before the pre-initialization call, matching cobra's later flag parsing.
 // Scanning stops at the first -- end-of-flags marker.
+//
+// When the next token looks like another flag (`-x`-prefixed) we don't
+// claim it as the value AND we emit a warning to stderr so the user
+// notices the silent drop. Cobra will reject the invocation downstream;
+// printing the warning here makes the pre-cobra and cobra layers agree
+// on the cause instead of leaving the user wondering why their config
+// path didn't take effect.
 func applyConfigFlag(args []string) {
 	for i, arg := range args {
 		if arg == "--" {
@@ -563,8 +617,18 @@ func applyConfigFlag(args []string) {
 			*raid.ConfigPath = v
 			return
 		}
-		if (arg == "--config" || arg == "-c") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			*raid.ConfigPath = args[i+1]
+		if arg == "--config" || arg == "-c" {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				*raid.ConfigPath = args[i+1]
+				return
+			}
+			// Bare flag with no value (or a flag-shaped next token).
+			// Diagnose so cobra's later "flag needs an argument"
+			// error has context.
+			fmt.Fprintf(os.Stderr,
+				"raid: warning: %s requires a value; using default config path. "+
+					"Pass `--config=<path>` to attach the value to the flag, "+
+					"or move <path> before any subsequent flags.\n", arg)
 			return
 		}
 	}

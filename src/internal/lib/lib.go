@@ -86,6 +86,12 @@ type commandSessionStore struct {
 	mu       sync.RWMutex
 	vars     map[string]string
 	baseline map[string]string // env+raidVars snapshot taken at session start
+	// lastEnvHash is the FNV-1a hash of the last env dump
+	// updateSessionFromEnv processed. Lets the next call skip the
+	// parse + diff entirely when consecutive Shell tasks don't touch
+	// the env (the common case for tasks that just run a binary).
+	// Zero means "no prior dump seen."
+	lastEnvHash uint64
 }
 
 var commandSession *commandSessionStore
@@ -407,8 +413,12 @@ func ForceLoad() error {
 	// In single-repo mode the raid.yaml is the only source of configuration,
 	// so its environments need to surface at profile level for `raid env`
 	// and friends — there's no wrapping profile YAML to host them.
+	// Merged by name so a duplicate doesn't create two entries with the
+	// same Name (getEnv would return the first, ExecuteEnv would write
+	// variables from whichever, etc.). The wrapper profile wins on
+	// conflict, mirroring the mergeCommands contract used for commands.
 	if profile.IsSingleRepo() && len(profile.Repositories) == 1 {
-		profile.Environments = append(profile.Environments, profile.Repositories[0].Environments...)
+		profile.Environments = mergeEnvironments(profile.Environments, profile.Repositories[0].Environments)
 	}
 
 	setRepoVars(profile.Repositories)
@@ -583,12 +593,23 @@ func Install(maxThreads int) error {
 			defer wg.Done()
 			if semaphore != nil {
 				semaphore <- struct{}{}
+				// Release via defer so a CloneRepository panic
+				// (or any unanticipated runtime crash) can't strand
+				// the slot, deadlocking subsequent acquires and the
+				// parent wg.Wait().
+				defer func() { <-semaphore }()
 			}
-			err := CloneRepository(repo)
-			if semaphore != nil {
-				<-semaphore
-			}
-			if err != nil {
+			// Recover any panic from CloneRepository so a single
+			// runaway goroutine doesn't crash the whole raid process
+			// (or the MCP server). The recovered panic is reported
+			// as a structured error so the aggregate below surfaces
+			// it like any other clone failure.
+			defer func() {
+				if r := recover(); r != nil {
+					cloneErrs <- liberrs.Internal(fmt.Sprintf("panic cloning %q: %v", repo.Name, r))
+				}
+			}()
+			if err := CloneRepository(repo); err != nil {
 				// Preserve the structured error from CloneRepository
 				// (CLONE_FAILED, GIT_NOT_INSTALLED, REPO_NOT_CLONED, etc.)
 				// so the aggregate below can expose each per-repo cause.

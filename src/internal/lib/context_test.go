@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func resetWorkspaceContextState(t *testing.T) {
@@ -410,6 +411,98 @@ func TestGetWorkspaceContext_directoryWithoutGit(t *testing.T) {
 	r := got.Workspace.Repos[0]
 	if r.Cloned {
 		t.Errorf("Cloned = true, want false (no .git dir)")
+	}
+}
+
+func TestDescribeRepo_cacheHitSkipsGit(t *testing.T) {
+	resetWorkspaceContextState(t)
+	restore := SetDescribeRepoCacheTTLForTest(1 * time.Second)
+	defer restore()
+
+	dir := makeFakeGitDir(t)
+	calls := 0
+	runGitFn = func(_ string, args ...string) (string, error) {
+		calls++
+		switch args[0] {
+		case "rev-parse":
+			return "main", nil
+		case "status":
+			return "", nil
+		}
+		return "", nil
+	}
+
+	repo := Repo{Name: "api", Path: dir, URL: "https://example.com/api.git"}
+	_ = describeRepo(repo)
+	firstCalls := calls
+
+	// Second call inside TTL: should be served from cache, no new git invocations.
+	wr := describeRepo(repo)
+	if calls != firstCalls {
+		t.Errorf("cache miss: git was invoked %d more time(s) than expected (cache should have hit)", calls-firstCalls)
+	}
+	if !wr.Cloned || wr.Branch != "main" {
+		t.Errorf("cached result wrong: %+v", wr)
+	}
+
+	// Renaming the repo struct should refresh Name/Path without re-running git.
+	renamed := Repo{Name: "api-renamed", Path: dir, URL: repo.URL}
+	wr2 := describeRepo(renamed)
+	if calls != firstCalls {
+		t.Errorf("rename should not re-invoke git (got %d extra calls)", calls-firstCalls)
+	}
+	if wr2.Name != "api-renamed" {
+		t.Errorf("Name = %q, want %q (cache should refresh identity)", wr2.Name, "api-renamed")
+	}
+}
+
+func TestDescribeRepo_cacheDisabledAlwaysRunsGit(t *testing.T) {
+	resetWorkspaceContextState(t)
+	restore := SetDescribeRepoCacheTTLForTest(0)
+	defer restore()
+
+	dir := makeFakeGitDir(t)
+	calls := 0
+	runGitFn = func(_ string, args ...string) (string, error) {
+		calls++
+		switch args[0] {
+		case "rev-parse":
+			return "main", nil
+		case "status":
+			return "", nil
+		}
+		return "", nil
+	}
+
+	repo := Repo{Name: "api", Path: dir}
+	_ = describeRepo(repo)
+	_ = describeRepo(repo)
+	if calls != 4 {
+		t.Errorf("git calls = %d, want 4 (cache disabled — each describeRepo runs rev-parse+status)", calls)
+	}
+}
+
+func TestDescribeRepo_cacheSkipsNonGitDir(t *testing.T) {
+	resetWorkspaceContextState(t)
+	restore := SetDescribeRepoCacheTTLForTest(1 * time.Second)
+	defer restore()
+
+	dir := t.TempDir() // no .git inside
+	calls := 0
+	runGitFn = func(_ string, _ ...string) (string, error) {
+		calls++
+		return "", nil
+	}
+
+	repo := Repo{Name: "scratch", Path: dir}
+	wr := describeRepo(repo)
+	if wr.Cloned {
+		t.Errorf("Cloned = true, want false (no .git)")
+	}
+	// Second call within TTL: cache should serve the not-cloned result.
+	_ = describeRepo(repo)
+	if calls != 0 {
+		t.Errorf("git was invoked %d times for non-git path", calls)
 	}
 }
 

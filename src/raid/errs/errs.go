@@ -65,6 +65,13 @@ const (
 // AsError walks the wrapped-error chain and returns the first Error.
 func AsError(err error) (Error, bool) { return liberrs.AsError(err) }
 
+// IsReservedErrorKey reports whether k is reserved by the structured
+// error envelope (code/message/category/hint). Peer emitters that
+// flatten Details() into their own JSON shape (e.g. the MCP tool-
+// result builder) should consult this so envelope keys don't get
+// overwritten by accidental Details collisions.
+func IsReservedErrorKey(k string) bool { return liberrs.IsReservedErrorKey(k) }
+
 // ExitCode returns the raid CLI exit code for an error. Nil → 0.
 func ExitCode(err error) int { return liberrs.ExitCode(err) }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"net/http"
@@ -114,6 +115,20 @@ func ExecuteTasks(tasks []Task) error {
 			wg.Add(1)
 			go func(task Task) {
 				defer wg.Done()
+				// Recover any panic so a single misbehaving task
+				// (or a bug in raid's own dispatch path) can't
+				// crash the whole process — particularly important
+				// in the MCP server where one runaway tool call
+				// would tear down the long-lived stdio session.
+				// Recovered panics are reported as a structured
+				// internal error on the same channel as normal
+				// task failures so the aggregate handler treats
+				// them uniformly.
+				defer func() {
+					if r := recover(); r != nil {
+						errorChan <- liberrs.Internal(fmt.Sprintf("panic in task %q: %v", task.Label(), r))
+					}
+				}()
 				if err := ExecuteTask(task); err != nil {
 					if isContinueOnFailure(task) {
 						emitContinueOnFailureWarning(task, err)
@@ -166,12 +181,14 @@ func isContinueOnFailure(t Task) bool {
 // (continueOnFailure): <err>" line to commandStderr so the ignored
 // failure remains visible to the operator. Matches the dim styling
 // used by showExeTime so the auxiliary lines read consistently.
+// Serialized through outputMu so the warning can't land mid-line
+// inside a peer concurrent task's prefixed output.
 func emitContinueOnFailureWarning(t Task, err error) {
 	const (
 		dim   = "\033[2m"
 		reset = "\033[0m"
 	)
-	fmt.Fprintf(commandStderr, "%swarning: %s failed (continueOnFailure): %v%s\n", dim, t.Label(), err, reset)
+	lockedFprintf(commandStderr, "%swarning: %s failed (continueOnFailure): %v%s\n", dim, t.Label(), err, reset)
 }
 
 func ExecuteTask(task Task) error {
@@ -263,7 +280,7 @@ func emitExeTime(label string, d time.Duration) {
 		dim   = "\033[2m"
 		reset = "\033[0m"
 	)
-	fmt.Fprintf(commandStderr, "%s%s complete in %s%s\n", dim, label, formatExeDuration(d), reset)
+	lockedFprintf(commandStderr, "%s%s complete in %s%s\n", dim, label, formatExeDuration(d), reset)
 }
 
 // formatExeDuration renders a duration as a short, human-readable string
@@ -347,10 +364,28 @@ func execShell(task Task) error {
 // previously captured in the session is seen with its baseline value again
 // (i.e. a later task reset it), the entry is removed so the baseline value
 // is used rather than a stale override from an earlier task.
+//
+// Fast path: when consecutive Shell tasks don't touch the env, the
+// dump is byte-identical to the previous invocation's dump. Hash the
+// raw bytes and skip the parse + diff entirely on a cache hit — for a
+// command with many shell tasks this avoids O(env-size × tasks)
+// allocs in the common case.
 func updateSessionFromEnv(data []byte) {
 	if commandSession == nil {
 		return
 	}
+	// Hash outside the lock — it's O(len(data)) and other tasks that
+	// only need RLock to start (buildSubprocessEnv, expandRaid) would
+	// otherwise block behind the hash.
+	h := hashBytes(data)
+
+	commandSession.mu.RLock()
+	cached := commandSession.lastEnvHash != 0 && commandSession.lastEnvHash == h
+	commandSession.mu.RUnlock()
+	if cached {
+		return
+	}
+
 	after := parseEnvLines(string(data))
 
 	commandSession.mu.Lock()
@@ -365,6 +400,17 @@ func updateSessionFromEnv(data []byte) {
 			delete(commandSession.vars, k)
 		}
 	}
+	commandSession.lastEnvHash = h
+}
+
+// hashBytes returns a fast non-cryptographic hash of p. FNV-1a is
+// chosen for its small fixed state and minimal per-call overhead —
+// we don't need cryptographic guarantees, just "did the env dump
+// change since last time."
+func hashBytes(p []byte) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write(p)
+	return h.Sum64()
 }
 
 // parseEnvLines parses newline-separated KEY=VALUE pairs as produced by `env`.
@@ -592,7 +638,7 @@ func execWait(task Task) error {
 		timeout = d
 	}
 
-	fmt.Fprintf(commandStdout, "Waiting for %s (timeout: %s)...\n", task.URL, timeout)
+	lockedFprintf(commandStdout, "Waiting for %s (timeout: %s)...\n", task.URL, timeout)
 
 	check := checkHTTP
 	if !strings.HasPrefix(task.URL, "http://") && !strings.HasPrefix(task.URL, "https://") {
@@ -707,7 +753,7 @@ func execGroupWithRetry(tasks []Task, attempts int, delayStr string) error {
 	var lastErr error
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			fmt.Fprintf(commandStdout, "Retrying... (attempt %d/%d)\n", i+1, attempts)
+			lockedFprintf(commandStdout, "Retrying... (attempt %d/%d)\n", i+1, attempts)
 			time.Sleep(delay)
 		}
 		if err := ExecuteTasks(tasks); err != nil {
@@ -804,7 +850,10 @@ func execPrompt(task Task) error {
 	stdinMu.Lock()
 	defer stdinMu.Unlock()
 
-	fmt.Fprint(commandStdout, message+" ")
+	// outputMu held only for the banner write; releasing before the
+	// stdin read so a blocking ReadString can't freeze concurrent
+	// task output.
+	lockedFprint(commandStdout, message+" ")
 
 	value, err := getStdinReader().ReadString('\n')
 	if err != nil {
@@ -838,7 +887,9 @@ func execConfirm(task Task) error {
 	stdinMu.Lock()
 	defer stdinMu.Unlock()
 
-	fmt.Fprint(commandStdout, message+" [y/N] ")
+	// Banner held under outputMu but released before the stdin read
+	// (which can block indefinitely); see execPrompt for rationale.
+	lockedFprint(commandStdout, message+" [y/N] ")
 
 	answer, err := getStdinReader().ReadString('\n')
 	if err != nil {
