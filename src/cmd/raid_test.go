@@ -320,6 +320,22 @@ func TestIsInfoCommand(t *testing.T) {
 		{"doctor command", []string{"raid", "doctor"}, false},
 		{"profile subcommand", []string{"raid", "profile", "create"}, false},
 		{"flag after end-of-flags marker", []string{"raid", "--", "--help"}, false},
+		// H2 regression: positional values that happen to match info
+		// keywords must NOT misclassify the invocation. Pre-fix, any
+		// of these triggered info-mode (1.5s version-check wait + a
+		// spurious update banner).
+		{"positional value 'version'", []string{"raid", "deploy", "version"}, false},
+		{"positional value 'help'", []string{"raid", "deploy", "help"}, false},
+		{"positional value 'completion'", []string{"raid", "deploy", "completion"}, false},
+		{"--config value 'version' then real cmd", []string{"raid", "--config", "version", "install"}, false},
+		{"-c value 'help' then real cmd", []string{"raid", "-c", "help", "install"}, false},
+		// `--help` after a real subcommand is still info-style; cobra
+		// dispatches it as help-for-subcommand.
+		{"--help after subcommand", []string{"raid", "deploy", "--help"}, true},
+		{"-h after subcommand", []string{"raid", "deploy", "-h"}, true},
+		// Persistent value flags consume the next token; their value
+		// shouldn't be evaluated as a positional.
+		{"--config attached value then info", []string{"raid", "--config=path", "version"}, true},
 	}
 
 	for _, tt := range tests {

@@ -13,7 +13,9 @@ import (
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
+	"github.com/8bitalex/raid/src/raid/errs"
 	pro "github.com/8bitalex/raid/src/raid/profile"
+	"github.com/spf13/cobra"
 )
 
 // Injectable for testing.
@@ -71,48 +73,47 @@ func isGitURL(rawURL string) bool {
 	return sys.DetectGitDefaultBranch(rawURL) != ""
 }
 
-// runAddProfileFromURL is the entry point when the add argument is a URL.
-func runAddProfileFromURL(rawURL string) int {
+// runAddProfileFromURLE is the entry point when the add argument is a URL.
+// Returns a structured error on failure so the root handler can emit the
+// right exit-code category and JSON envelope.
+func runAddProfileFromURLE(cmd *cobra.Command, rawURL string) error {
 	if detectGitURL(rawURL) {
-		return addProfilesFromGitURL(rawURL)
+		return addProfilesFromGitURLE(cmd, rawURL)
 	}
-	return addProfilesFromHTTPURL(rawURL)
+	return addProfilesFromHTTPURLE(cmd, rawURL)
 }
 
-func addProfilesFromGitURL(repoURL string) int {
+func addProfilesFromGitURLE(cmd *cobra.Command, repoURL string) error {
 	tmpDir, err := os.MkdirTemp("", "raid-profile-*")
 	if err != nil {
-		fmt.Printf("Failed to create temp directory: %v\n", err)
-		return 1
+		return errs.Unknown(fmt.Errorf("failed to create temp directory: %v", err))
 	}
 	defer os.RemoveAll(tmpDir)
 
-	fmt.Printf("Cloning %s...\n", repoURL)
+	if !jsonMode(cmd) {
+		fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s...\n", repoURL)
+	}
 	if err := gitCloneFunc(repoURL, tmpDir); err != nil {
-		fmt.Printf("Failed to clone repository: %v\n", err)
-		return 1
+		return errs.CloneFailed("url-profile", repoURL, err)
 	}
 
 	paths := findProfileFilesInDir(tmpDir)
 	if len(paths) == 0 {
-		fmt.Println("No profile files found in repository")
-		return 1
+		return errs.ProfileInvalid(repoURL, fmt.Errorf("No profile files found in repository"))
 	}
 
-	return processProfileFiles(paths)
+	return processProfileFilesE(cmd, repoURL, paths)
 }
 
-func addProfilesFromHTTPURL(rawURL string) int {
+func addProfilesFromHTTPURLE(cmd *cobra.Command, rawURL string) error {
 	data, err := httpGetFunc(rawURL)
 	if err != nil {
-		fmt.Printf("Failed to download profile: %v\n", err)
-		return 1
+		return errs.Newf(errs.CodeTaskHTTPFailed, errs.CategoryNetwork, "failed to download profile: %v", err)
 	}
 
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		fmt.Printf("Invalid URL: %v\n", err)
-		return 1
+		return errs.ArgInvalid(fmt.Sprintf("invalid URL: %v", err))
 	}
 	ext := strings.ToLower(filepath.Ext(u.Path))
 	if ext == "" {
@@ -121,20 +122,161 @@ func addProfilesFromHTTPURL(rawURL string) int {
 
 	tmpFile, err := os.CreateTemp("", "raid-profile-*"+ext)
 	if err != nil {
-		fmt.Printf("Failed to create temp file: %v\n", err)
-		return 1
+		return errs.Unknown(fmt.Errorf("failed to create temp file: %v", err))
 	}
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
 
 	if _, err := tmpFile.Write(data); err != nil {
 		tmpFile.Close()
-		fmt.Printf("Failed to write temp file: %v\n", err)
-		return 1
+		return errs.Unknown(fmt.Errorf("failed to write temp file: %v", err))
 	}
 	tmpFile.Close()
 
-	return processProfileFiles([]string{tmpPath})
+	return processProfileFilesE(cmd, rawURL, []string{tmpPath})
+}
+
+// processProfileFilesE validates, saves, and registers profiles from
+// downloaded paths. Emits text-mode progress prose by default; under
+// --json collapses to one addResult envelope at the end.
+func processProfileFilesE(cmd *cobra.Command, source string, paths []string) error {
+	type pending struct {
+		p       pro.Profile
+		srcPath string
+	}
+
+	out := cmd.OutOrStdout()
+	json := jsonMode(cmd)
+
+	var queued []pending
+	var existingNames []string
+	var skipped []string
+	seenQueued := map[string]bool{}
+
+	for _, srcPath := range paths {
+		if err := proValidate(srcPath); err != nil {
+			if !json {
+				fmt.Fprintf(out, "Skipping %s: invalid profile (%v)\n", filepath.Base(srcPath), err)
+			}
+			skipped = append(skipped, filepath.Base(srcPath))
+			continue
+		}
+		profiles, err := proUnmarshal(srcPath)
+		if err != nil {
+			if !json {
+				fmt.Fprintf(out, "Skipping %s: could not read profiles (%v)\n", filepath.Base(srcPath), err)
+			}
+			skipped = append(skipped, filepath.Base(srcPath))
+			continue
+		}
+		for _, p := range profiles {
+			if err := sys.ValidateFileName(p.Name); err != nil {
+				if !json {
+					fmt.Fprintf(out, "Skipping profile with invalid name %q: %v\n", p.Name, err)
+				}
+				skipped = append(skipped, p.Name)
+				continue
+			}
+			if proContains(p.Name) {
+				existingNames = append(existingNames, p.Name)
+				continue
+			}
+			if seenQueued[p.Name] {
+				if !json {
+					fmt.Fprintf(out, "Skipping duplicate profile name %q\n", p.Name)
+				}
+				continue
+			}
+			seenQueued[p.Name] = true
+			queued = append(queued, pending{p: p, srcPath: srcPath})
+		}
+	}
+
+	if !json && len(existingNames) > 0 {
+		fmt.Fprintf(out, "Profiles already exist with names:\n\t%s\n\n", strings.Join(existingNames, ",\n\t"))
+	}
+
+	if len(queued) == 0 {
+		// Differentiate "all profiles already registered" (fine, exit 0)
+		// from "we found candidate files but none validated as profiles"
+		// (a real failure — exit code config so callers and CI catch it).
+		if len(existingNames) == 0 {
+			return errs.ProfileInvalid(source, fmt.Errorf("No valid profiles found"))
+		}
+		if json {
+			return emitJSON(cmd, addResult{Action: "skipped", Path: source, Existing: existingNames})
+		}
+		fmt.Fprintln(out, "No new profiles found")
+		return nil
+	}
+
+	// Copy each profile to a stable home-dir path before registering.
+	home := getHomeDir()
+	var toRegister []pro.Profile
+	var destPaths []string
+	for _, q := range queued {
+		destPath := filepath.Join(home, q.p.Name+".raid.yaml")
+		if err := sys.CopyFile(q.srcPath, destPath); err != nil {
+			if !json {
+				fmt.Fprintf(out, "Failed to save profile '%s': %v\n", q.p.Name, err)
+			}
+			skipped = append(skipped, q.p.Name)
+			continue
+		}
+		q.p.Path = destPath
+		toRegister = append(toRegister, q.p)
+		destPaths = append(destPaths, destPath)
+	}
+
+	if len(toRegister) == 0 {
+		if json {
+			return emitJSON(cmd, addResult{Action: "skipped", Path: source, Existing: existingNames})
+		}
+		fmt.Fprintln(out, "No new profiles found")
+		return nil
+	}
+
+	var activeAfter string
+	writeErr := raid.WithMutationLock(func() error {
+		if err := proAddAll(toRegister); err != nil {
+			return err
+		}
+		if proGet().IsZero() {
+			if err := proSet(toRegister[0].Name); err != nil {
+				return err
+			}
+			activeAfter = toRegister[0].Name
+		} else {
+			activeAfter = proGet().Name
+		}
+		return nil
+	})
+	if writeErr != nil {
+		return errs.ConfigInvalid(writeErr)
+	}
+
+	addedNames := make([]string, 0, len(toRegister))
+	for _, p := range toRegister {
+		addedNames = append(addedNames, p.Name)
+	}
+
+	if json {
+		return emitJSON(cmd, addResult{
+			Action:   "added",
+			Path:     source,
+			Profiles: addedNames,
+			Existing: existingNames,
+			Active:   activeAfter,
+		})
+	}
+
+	for i, p := range toRegister {
+		fmt.Fprintf(out, "Profile '%s' added from URL, saved to %s\n", p.Name, destPaths[i])
+	}
+	if activeAfter != "" && activeAfter == toRegister[0].Name && len(existingNames) == 0 {
+		fmt.Fprintf(out, "Profile '%s' set as active\n", activeAfter)
+	}
+	return nil
 }
 
 // findProfileFilesInDir returns profile YAML/JSON files found at the root of dir.
@@ -194,106 +336,4 @@ func findProfileFilesInDir(dir string) []string {
 	}
 
 	return found
-}
-
-// processProfileFiles validates, saves, and registers profiles from the given local paths.
-func processProfileFiles(paths []string) int {
-	type pending struct {
-		p       pro.Profile
-		srcPath string
-	}
-
-	var queued []pending
-	var existingNames []string
-	seenQueued := map[string]bool{}
-
-	for _, srcPath := range paths {
-		if err := proValidate(srcPath); err != nil {
-			fmt.Printf("Skipping %s: invalid profile (%v)\n", filepath.Base(srcPath), err)
-			continue
-		}
-		profiles, err := proUnmarshal(srcPath)
-		if err != nil {
-			fmt.Printf("Skipping %s: could not read profiles (%v)\n", filepath.Base(srcPath), err)
-			continue
-		}
-		for _, p := range profiles {
-			if err := sys.ValidateFileName(p.Name); err != nil {
-				fmt.Printf("Skipping profile with invalid name %q: %v\n", p.Name, err)
-				continue
-			}
-			if proContains(p.Name) {
-				existingNames = append(existingNames, p.Name)
-				continue
-			}
-			if seenQueued[p.Name] {
-				fmt.Printf("Skipping duplicate profile name %q\n", p.Name)
-				continue
-			}
-			seenQueued[p.Name] = true
-			queued = append(queued, pending{p: p, srcPath: srcPath})
-		}
-	}
-
-	if len(existingNames) > 0 {
-		fmt.Printf("Profiles already exist with names:\n\t%s\n\n", strings.Join(existingNames, ",\n\t"))
-	}
-
-	if len(queued) == 0 {
-		// Differentiate "all profiles already registered" (fine, exit 0)
-		// from "we found candidate files but none validated as profiles"
-		// (a real failure — exit 1 so callers and CI catch it). The
-		// fallback in findProfileFilesInDir can pull in plain root yamls
-		// like docker-compose.yaml from gists/scratch repos; without
-		// this branch `raid profile add <url>` would exit 0 even though
-		// nothing was imported.
-		if len(existingNames) == 0 {
-			fmt.Println("No valid profiles found")
-			return 1
-		}
-		fmt.Println("No new profiles found")
-		return 0
-	}
-
-	// Copy each profile to a stable home-dir path before registering.
-	home := getHomeDir()
-	var toRegister []pro.Profile
-	var destPaths []string
-	for _, q := range queued {
-		destPath := filepath.Join(home, q.p.Name+".raid.yaml")
-		if err := sys.CopyFile(q.srcPath, destPath); err != nil {
-			fmt.Printf("Failed to save profile '%s': %v\n", q.p.Name, err)
-			continue
-		}
-		q.p.Path = destPath
-		toRegister = append(toRegister, q.p)
-		destPaths = append(destPaths, destPath)
-	}
-
-	if len(toRegister) == 0 {
-		fmt.Println("No new profiles found")
-		return 0
-	}
-
-	writeErr := raid.WithMutationLock(func() error {
-		if err := proAddAll(toRegister); err != nil {
-			return fmt.Errorf("save: %w", err)
-		}
-		if proGet().IsZero() {
-			if err := proSet(toRegister[0].Name); err != nil {
-				return fmt.Errorf("set active: %w", err)
-			}
-			fmt.Printf("Profile '%s' set as active\n", toRegister[0].Name)
-		}
-		return nil
-	})
-	if writeErr != nil {
-		fmt.Printf("Failed to save profiles: %v\n", writeErr)
-		return 1
-	}
-
-	for i, p := range toRegister {
-		fmt.Printf("Profile '%s' added from URL, saved to %s\n", p.Name, destPaths[i])
-	}
-	return 0
 }

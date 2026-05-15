@@ -156,6 +156,35 @@ func newPrefixedWriter(sink io.Writer, prefix string) *prefixedWriter {
 	return &prefixedWriter{sink: sink, prefix: prefix, mu: &outputMu}
 }
 
+// lockedFprintf serialises a single Fprintf through the same
+// outputMu prefixedWriter uses, so auxiliary lines (continueOnFailure
+// warnings, showExeTime markers, Wait banners, retry banners, the
+// prompt text for Prompt/Confirm tasks) can't interleave mid-line
+// with a peer concurrent task's prefixed stdout/stderr.
+//
+// The lock is held only for the duration of the format + write —
+// it must not span any operation that could block (e.g. a stdin
+// read), otherwise concurrent task output would freeze.
+func lockedFprintf(w io.Writer, format string, args ...any) {
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	fmt.Fprintf(w, format, args...)
+}
+
+// lockedFprint is the no-format variant. Same semantics.
+func lockedFprint(w io.Writer, a ...any) {
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	fmt.Fprint(w, a...)
+}
+
+// lockedFprintln mirrors fmt.Fprintln under the shared mutex.
+func lockedFprintln(w io.Writer, a ...any) {
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	fmt.Fprintln(w, a...)
+}
+
 // Write satisfies io.Writer. The byte count returned is len(p) on
 // success so callers (and exec.Cmd's internal pump) don't see a
 // short write — the bytes are either flushed to the sink or held

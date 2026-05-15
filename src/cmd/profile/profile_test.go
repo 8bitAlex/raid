@@ -427,7 +427,12 @@ func TestAddProfileCmd_fileNotFound_subprocess(t *testing.T) {
 		root := &cobra.Command{Use: "raid"}
 		root.AddCommand(AddProfileCmd)
 		root.SetArgs([]string{"add", "/nonexistent/path.yaml"})
-		_ = root.Execute()
+		if err := root.Execute(); err != nil {
+			// Match the root-cmd error-handler exit-code mapping
+			// from cmd/raid.go: structured errors return their
+			// category code, everything else maps to 1.
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -453,7 +458,9 @@ func TestAddProfileCmd_invalidProfile_subprocess(t *testing.T) {
 		root := &cobra.Command{Use: "raid"}
 		root.AddCommand(AddProfileCmd)
 		root.SetArgs([]string{"add", path})
-		_ = root.Execute()
+		if err := root.Execute(); err != nil {
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -823,38 +830,27 @@ func TestRunCreateWizardCore_noReposSkipsConfig(t *testing.T) {
 	})
 }
 
-// TestAddProfileCmd_wrapperExits verifies the wrapper calls osExit on error.
-func TestAddProfileCmd_wrapperExits(t *testing.T) {
+// TestAddProfileCmd_wrapperReturnsError verifies that the RunE wrapper
+// returns a structured error for a missing file. The root cmd handler
+// in cmd/raid.go is responsible for mapping that to an exit code +
+// JSON envelope; this test asserts the contract at the cobra-RunE
+// boundary so the categorization stays correct.
+func TestAddProfileCmd_wrapperReturnsError(t *testing.T) {
 	setupConfig(t)
-	oldExit := osExit
-	defer func() { osExit = oldExit }()
 
-	exitCode := 0
-	osExit = func(code int) { exitCode = code }
-
-	_ = captureStdout(t, func() {
-		AddProfileCmd.Run(&cobra.Command{}, []string{"/nonexistent/file.yaml"})
-	})
-	if exitCode != 1 {
-		t.Errorf("AddProfileCmd wrapper: exitCode = %d, want 1", exitCode)
+	err := AddProfileCmd.RunE(&cobra.Command{}, []string{"/nonexistent/file.yaml"})
+	if err == nil {
+		t.Fatal("AddProfileCmd.RunE: expected error for missing file, got nil")
 	}
 }
 
-// TestAddProfileCmd_wrapperSuccess verifies the wrapper does not call osExit on success.
+// TestAddProfileCmd_wrapperSuccess verifies RunE returns nil for the happy path.
 func TestAddProfileCmd_wrapperSuccess(t *testing.T) {
 	setupConfig(t)
-	oldExit := osExit
-	defer func() { osExit = oldExit }()
-
-	exitCode := -1
-	osExit = func(code int) { exitCode = code }
 
 	path := validProfileFile(t, "wrappersuccess")
-	_ = captureStdout(t, func() {
-		AddProfileCmd.Run(&cobra.Command{}, []string{path})
-	})
-	if exitCode != -1 {
-		t.Errorf("AddProfileCmd wrapper: osExit should not be called, got code %d", exitCode)
+	if err := AddProfileCmd.RunE(&cobra.Command{}, []string{path}); err != nil {
+		t.Errorf("AddProfileCmd.RunE: unexpected error: %v", err)
 	}
 }
 

@@ -613,7 +613,9 @@ func TestAddProfileCmd_urlCloneFail_subprocess(t *testing.T) {
 		root := &cobra.Command{Use: "raid"}
 		root.AddCommand(AddProfileCmd)
 		root.SetArgs([]string{"add", "https://github.com/example/repo"})
-		_ = root.Execute()
+		if err := root.Execute(); err != nil {
+			os.Exit(1)
+		}
 		return
 	}
 
