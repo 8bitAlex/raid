@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid/errs"
 	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -259,6 +260,57 @@ func TestRemoveProfileCmd_multipleArgs(t *testing.T) {
 	}
 	if !strings.Contains(out, "not found") {
 		t.Errorf("RemoveProfileCmd multi not found: got %q", out)
+	}
+}
+
+func TestRemoveProfileCmd_jsonAllMissing_returnsStructuredError(t *testing.T) {
+	setupConfig(t)
+	// JSON mode + every requested profile missing should still propagate
+	// a PROFILE_NOT_FOUND structured error so the process exits non-zero.
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(RemoveProfileCmd)
+	root.SetArgs([]string{"remove", "ghost1", "ghost2"})
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected structured error when all requested profiles are missing in JSON mode, got nil")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("expected structured Error, got %T: %v", err, err)
+	}
+	if rErr.Code() != errs.CodeProfileNotFound {
+		t.Errorf("error code = %q, want %q", rErr.Code(), errs.CodeProfileNotFound)
+	}
+	// JSON envelope of the removeResult is still emitted on stdout.
+	if !strings.Contains(stdout.String(), "\"errors\"") {
+		t.Errorf("expected removeResult JSON on stdout, got %q", stdout.String())
+	}
+}
+
+func TestRemoveProfileCmd_jsonMixedSuccess_exitsZero(t *testing.T) {
+	setupConfig(t)
+	if err := lib.AddProfile(lib.Profile{Name: "keepme", Path: "/p"}); err != nil {
+		t.Fatal(err)
+	}
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(RemoveProfileCmd)
+	root.SetArgs([]string{"remove", "keepme", "ghost"})
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+
+	if err := root.Execute(); err != nil {
+		t.Errorf("mixed success should not return error, got %v", err)
 	}
 }
 

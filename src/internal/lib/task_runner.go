@@ -374,12 +374,17 @@ func updateSessionFromEnv(data []byte) {
 	if commandSession == nil {
 		return
 	}
-	commandSession.mu.Lock()
-	if commandSession.lastEnvHash != 0 && commandSession.lastEnvHash == hashBytes(data) {
-		commandSession.mu.Unlock()
+	// Hash outside the lock — it's O(len(data)) and other tasks that
+	// only need RLock to start (buildSubprocessEnv, expandRaid) would
+	// otherwise block behind the hash.
+	h := hashBytes(data)
+
+	commandSession.mu.RLock()
+	cached := commandSession.lastEnvHash != 0 && commandSession.lastEnvHash == h
+	commandSession.mu.RUnlock()
+	if cached {
 		return
 	}
-	commandSession.mu.Unlock()
 
 	after := parseEnvLines(string(data))
 
@@ -395,12 +400,13 @@ func updateSessionFromEnv(data []byte) {
 			delete(commandSession.vars, k)
 		}
 	}
-	commandSession.lastEnvHash = hashBytes(data)
+	commandSession.lastEnvHash = h
 }
 
-// hashBytes returns a fast non-cryptographic hash of p. FNV-1a chosen
-// for its allocation-free streaming API — we don't need cryptographic
-// guarantees, just "did the env dump change since last time."
+// hashBytes returns a fast non-cryptographic hash of p. FNV-1a is
+// chosen for its small fixed state and minimal per-call overhead —
+// we don't need cryptographic guarantees, just "did the env dump
+// change since last time."
 func hashBytes(p []byte) uint64 {
 	h := fnv.New64a()
 	_, _ = h.Write(p)

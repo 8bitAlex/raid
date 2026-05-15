@@ -150,7 +150,6 @@ func processProfileFilesE(cmd *cobra.Command, source string, paths []string) err
 
 	var queued []pending
 	var existingNames []string
-	var skipped []string
 	seenQueued := map[string]bool{}
 
 	for _, srcPath := range paths {
@@ -158,7 +157,6 @@ func processProfileFilesE(cmd *cobra.Command, source string, paths []string) err
 			if !json {
 				fmt.Fprintf(out, "Skipping %s: invalid profile (%v)\n", filepath.Base(srcPath), err)
 			}
-			skipped = append(skipped, filepath.Base(srcPath))
 			continue
 		}
 		profiles, err := proUnmarshal(srcPath)
@@ -166,7 +164,6 @@ func processProfileFilesE(cmd *cobra.Command, source string, paths []string) err
 			if !json {
 				fmt.Fprintf(out, "Skipping %s: could not read profiles (%v)\n", filepath.Base(srcPath), err)
 			}
-			skipped = append(skipped, filepath.Base(srcPath))
 			continue
 		}
 		for _, p := range profiles {
@@ -174,7 +171,6 @@ func processProfileFilesE(cmd *cobra.Command, source string, paths []string) err
 				if !json {
 					fmt.Fprintf(out, "Skipping profile with invalid name %q: %v\n", p.Name, err)
 				}
-				skipped = append(skipped, p.Name)
 				continue
 			}
 			if proContains(p.Name) {
@@ -220,7 +216,6 @@ func processProfileFilesE(cmd *cobra.Command, source string, paths []string) err
 			if !json {
 				fmt.Fprintf(out, "Failed to save profile '%s': %v\n", q.p.Name, err)
 			}
-			skipped = append(skipped, q.p.Name)
 			continue
 		}
 		q.p.Path = destPath
