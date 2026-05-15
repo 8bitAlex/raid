@@ -79,3 +79,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          # Injected via -X ldflag into src/internal/telemetry.APIKey by
+          # .goreleaser.preview.yaml. Without this env wiring the ldflag
+          # resolves to the empty string and preview binaries can't fire
+          # telemetry — keep parity with the stable channel so opted-in
+          # preview users contribute the same signal.
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}

@@ -97,3 +97,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          # Injected via -X ldflag into src/internal/telemetry.APIKey by
+          # .goreleaser.yaml. Without this env wiring the ldflag resolves
+          # to the empty string and shipped binaries silently no-op every
+          # Capture call — telemetry would be dead code for release users.
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
