@@ -951,3 +951,54 @@ func TestExecPrint_withColor(t *testing.T) {
 		t.Errorf("output = %q, want 'colored'", buf.String())
 	}
 }
+
+// --- SetCommandOutput ---
+
+// TestSetCommandOutput_redirectsAndRestores asserts the real behaviour of
+// SetCommandOutput: writes to commandStdout/commandStderr land in the
+// caller-provided buffers, and after restore() the original writers are
+// back in place. Copilot flagged the raid-package wrapper test for not
+// asserting this — we own the strong assertion here, where the
+// unexported writers are reachable.
+func TestSetCommandOutput_redirectsAndRestores(t *testing.T) {
+	origOut, origErr := commandStdout, commandStderr
+	t.Cleanup(func() { commandStdout, commandStderr = origOut, origErr })
+
+	var outBuf, errBuf bytes.Buffer
+	restore := SetCommandOutput(&outBuf, &errBuf)
+
+	if commandStdout != &outBuf {
+		t.Fatalf("commandStdout = %p, want %p (the passed-in buffer)", commandStdout, &outBuf)
+	}
+	if commandStderr != &errBuf {
+		t.Fatalf("commandStderr = %p, want %p (the passed-in buffer)", commandStderr, &errBuf)
+	}
+
+	// Writes through the package writers must land in the buffers.
+	commandStdout.Write([]byte("hello-out"))
+	commandStderr.Write([]byte("hello-err"))
+	if got := outBuf.String(); got != "hello-out" {
+		t.Errorf("outBuf = %q, want %q", got, "hello-out")
+	}
+	if got := errBuf.String(); got != "hello-err" {
+		t.Errorf("errBuf = %q, want %q", got, "hello-err")
+	}
+
+	restore()
+
+	if commandStdout != origOut {
+		t.Errorf("after restore, commandStdout = %p, want original %p", commandStdout, origOut)
+	}
+	if commandStderr != origErr {
+		t.Errorf("after restore, commandStderr = %p, want original %p", commandStderr, origErr)
+	}
+
+	// Subsequent writes must not land in the original buffers.
+	outBuf.Reset()
+	errBuf.Reset()
+	commandStdout.Write([]byte("post-restore"))
+	commandStderr.Write([]byte("post-restore"))
+	if outBuf.Len() != 0 || errBuf.Len() != 0 {
+		t.Errorf("post-restore writes leaked into buffers: out=%q err=%q", outBuf.String(), errBuf.String())
+	}
+}

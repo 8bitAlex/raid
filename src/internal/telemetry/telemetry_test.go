@@ -1016,12 +1016,31 @@ func TestNewID_format(t *testing.T) {
 
 func TestCapture_emptyID(t *testing.T) {
 	setupTestEnv(t)
-	old := homeDirFn
+	// Enable telemetry so we reach the loadOrCreateID() branch (otherwise
+	// IsActive() short-circuits and we never exercise empty-ID handling).
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	// Force loadOrCreateID() to fail: no env override and no home dir.
 	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
-	defer func() { homeDirFn = old }()
 	os.Unsetenv(IDFileEnv)
+	resetIDCacheForTest()
+
+	// Stand up a recording server so we can prove Capture made zero
+	// network calls when the ID resolves to empty.
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	CaptureEndpoint = srv.URL
 
 	Capture("test_event", nil)
+	Flush(500 * time.Millisecond)
+
+	if got := atomic.LoadInt32(&hits); got != 0 {
+		t.Errorf("Capture with empty ID made %d network calls, want 0", got)
+	}
 }
 
 func TestPurgeID_emptyPath(t *testing.T) {

@@ -397,11 +397,19 @@ func TestInitialize_profileLoadError(t *testing.T) {
 }
 
 func TestSetCommandOutput(t *testing.T) {
+	// raid.SetCommandOutput is a thin wrapper over lib.SetCommandOutput;
+	// the behavioural test (writes actually land in buf, restore reverts)
+	// lives in lib/task_runner_extra_test.go where the unexported
+	// commandStdout/commandStderr are reachable. Here we assert the
+	// delegation: a non-nil restore is returned and is safe to call
+	// repeatedly without panicking.
 	var buf bytes.Buffer
 	restore := SetCommandOutput(&buf, io.Discard)
-	defer restore()
-	// After restore, writes go back to original. Just exercise the function.
+	if restore == nil {
+		t.Fatal("SetCommandOutput returned a nil restore func")
+	}
 	restore()
+	restore() // idempotent — second call must not panic
 }
 
 func TestWithMutationLock(t *testing.T) {
@@ -436,7 +444,10 @@ func TestScrubURL(t *testing.T) {
 func TestRunVerify_emptyTasks(t *testing.T) {
 	setupConfig(t)
 	outcome, err := RunVerify(Verify{})
-	// Empty verify should pass (no tasks to fail).
-	_ = outcome
-	_ = err
+	if err != nil {
+		t.Fatalf("RunVerify(empty) error = %v, want nil", err)
+	}
+	if outcome != VerifyOutcomeOK {
+		t.Errorf("RunVerify(empty) outcome = %v, want VerifyOutcomeOK", outcome)
+	}
 }

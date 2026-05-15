@@ -258,9 +258,17 @@ func TestReadRecent_corruptJSON(t *testing.T) {
 func TestRecordRecent_writeError(t *testing.T) {
 	setupRecentTempPath(t)
 	path := recentPath()
+	// Create a directory where the recent file should live so every write
+	// attempt fails. The contract is that recording must never break
+	// command execution (errors are silenced) AND that nothing gets
+	// persisted — so ReadRecent must still return nil afterwards.
 	os.MkdirAll(path, 0755)
 	defer os.RemoveAll(path)
 
 	started := RecordRecentStart("cmd")
 	RecordRecentEnd("cmd", nil, started)
+
+	if got := ReadRecent(); got != nil {
+		t.Errorf("ReadRecent() after failed writes = %v, want nil (nothing persisted)", got)
+	}
 }

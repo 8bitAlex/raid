@@ -808,15 +808,21 @@ func TestLockPath_default(t *testing.T) {
 	}
 }
 
-// --- lockPath ---
-
-func TestLockPath_defaultPath(t *testing.T) {
+// TestLockPath_defaultShape asserts the default path lives under the raid
+// config dir and ends in the lock filename, not just that it's non-empty.
+func TestLockPath_defaultShape(t *testing.T) {
 	old := LockPathOverride
 	defer func() { LockPathOverride = old }()
 
 	LockPathOverride = ""
 	got := lockPath()
 	if got == "" {
-		t.Error("lockPath() returned empty string")
+		t.Fatal("lockPath() returned empty string")
+	}
+	if !strings.HasSuffix(got, string(filepath.Separator)+".lock") {
+		t.Errorf("lockPath() = %q, want suffix /.lock", got)
+	}
+	if !strings.Contains(got, ConfigDirName) {
+		t.Errorf("lockPath() = %q, want it to contain ConfigDirName %q", got, ConfigDirName)
 	}
 }
