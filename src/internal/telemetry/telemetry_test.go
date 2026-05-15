@@ -515,7 +515,7 @@ func TestPreviewPayload_redactsAPIKey(t *testing.T) {
 func TestMaybePromptForConsent_skipsWhenAPIKeyEmpty(t *testing.T) {
 	setupTestEnv(t)
 	APIKey = ""
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptSkipped {
 		t.Errorf("outcome = %v, want PromptSkipped", got)
 	}
@@ -527,7 +527,7 @@ func TestMaybePromptForConsent_skipsWhenAPIKeyEmpty(t *testing.T) {
 func TestMaybePromptForConsent_skipsAndPersistsOffOnNonTTY(t *testing.T) {
 	setupTestEnv(t)
 	isInteractiveFn = func() bool { return false }
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptSkipped {
 		t.Errorf("outcome = %v, want PromptSkipped", got)
 	}
@@ -542,7 +542,7 @@ func TestMaybePromptForConsent_skipsAndPersistsOffOnNonTTY(t *testing.T) {
 func TestMaybePromptForConsent_skipsAndPersistsOffOnHeadless(t *testing.T) {
 	setupTestEnv(t)
 	isInteractiveFn = func() bool { return true }
-	got := MaybePromptForConsent(true) // skipInteractive=true (e.g. --yes)
+	got := MaybePromptForConsent(true, false) // skipPersistent=true (e.g. --yes)
 	if got != PromptSkipped {
 		t.Errorf("outcome = %v, want PromptSkipped", got)
 	}
@@ -551,11 +551,54 @@ func TestMaybePromptForConsent_skipsAndPersistsOffOnHeadless(t *testing.T) {
 	}
 }
 
+// TestMaybePromptForConsent_transientSkipDoesNotPersist pins the two-tier
+// skip contract. A transient skip signal (today: --json) must suppress
+// the prompt for the current invocation without writing consent state,
+// so a later interactive run without --json still gets prompted. The
+// prior single-bool API conflated these and silently opted users out
+// for life after one `raid context --json | jq` invocation.
+func TestMaybePromptForConsent_transientSkipDoesNotPersist(t *testing.T) {
+	setupTestEnv(t)
+	isInteractiveFn = func() bool { return true }
+	got := MaybePromptForConsent(false, true) // skipTransient=true (e.g. --json)
+	if got != PromptSkipped {
+		t.Errorf("outcome = %v, want PromptSkipped", got)
+	}
+	if LoadState().Decided {
+		t.Error("transient skip should NOT persist consent state — bug C1 regression")
+	}
+}
+
+// TestMaybePromptForConsent_transientSkipDoesNotOverridePersistent
+// confirms the ordering: when both signals are set, persistent wins
+// (state persisted). Belt-and-suspenders against future callers that
+// might pass both.
+func TestMaybePromptForConsent_transientSkipDoesNotOverridePersistent(t *testing.T) {
+	setupTestEnv(t)
+	isInteractiveFn = func() bool { return true }
+	got := MaybePromptForConsent(false, true)
+	if got != PromptSkipped {
+		t.Fatalf("outcome = %v, want PromptSkipped", got)
+	}
+	if LoadState().Decided {
+		t.Fatal("transient-only skip persisted state; aborting subsequent assertions")
+	}
+
+	// Now flip persistent on for the second call — must persist.
+	got = MaybePromptForConsent(true, true)
+	if got != PromptSkipped {
+		t.Errorf("outcome = %v, want PromptSkipped", got)
+	}
+	if !LoadState().Decided {
+		t.Error("persistent skip should persist even when transient also true")
+	}
+}
+
 func TestMaybePromptForConsent_skipsWhenDoNotTrack(t *testing.T) {
 	setupTestEnv(t)
 	isInteractiveFn = func() bool { return true }
 	os.Setenv(DoNotTrackEnvVar, "1")
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptSkipped {
 		t.Errorf("outcome = %v, want PromptSkipped", got)
 	}
@@ -567,7 +610,7 @@ func TestMaybePromptForConsent_skipsWhenAlreadyDecided(t *testing.T) {
 		t.Fatal(err)
 	}
 	isInteractiveFn = func() bool { return true }
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptSkipped {
 		t.Errorf("outcome = %v, want PromptSkipped (already decided)", got)
 	}
@@ -579,7 +622,7 @@ func TestMaybePromptForConsent_acceptsOnYes(t *testing.T) {
 	r := strings.NewReader("y\n")
 	promptInFn = func() io.Reader { return r }
 	promptOutFn = func() io.Writer { return io.Discard }
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptAccepted {
 		t.Errorf("outcome = %v, want PromptAccepted", got)
 	}
@@ -595,7 +638,7 @@ func TestMaybePromptForConsent_declinesOnEmpty(t *testing.T) {
 	r := strings.NewReader("\n")
 	promptInFn = func() io.Reader { return r }
 	promptOutFn = func() io.Writer { return io.Discard }
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptDeclined {
 		t.Errorf("outcome = %v, want PromptDeclined (capital-N default)", got)
 	}
@@ -616,7 +659,7 @@ func TestMaybePromptForConsent_explainerThenAccept(t *testing.T) {
 	r := strings.NewReader("?\ny\n")
 	promptInFn = func() io.Reader { return r }
 	promptOutFn = func() io.Writer { return io.Discard }
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptAccepted {
 		t.Errorf("outcome = %v, want PromptAccepted after explainer", got)
 	}
@@ -646,7 +689,7 @@ func TestMaybePromptForConsent_declineThenConsentToOptOutEvent(t *testing.T) {
 	defer srv.Close()
 	CaptureEndpoint = srv.URL
 
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptDeclined {
 		t.Errorf("outcome = %v, want PromptDeclined", got)
 	}
@@ -678,7 +721,7 @@ func TestMaybePromptForConsent_declineRefuseOptOutEventSendsNothing(t *testing.T
 	defer srv.Close()
 	CaptureEndpoint = srv.URL
 
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptDeclined {
 		t.Errorf("outcome = %v, want PromptDeclined", got)
 	}
@@ -707,7 +750,7 @@ func TestMaybePromptForConsent_declineEmptyFollowUpSendsNothing(t *testing.T) {
 	defer srv.Close()
 	CaptureEndpoint = srv.URL
 
-	if got := MaybePromptForConsent(false); got != PromptDeclined {
+	if got := MaybePromptForConsent(false, false); got != PromptDeclined {
 		t.Errorf("outcome = %v, want PromptDeclined", got)
 	}
 	if h := atomic.LoadInt32(&hits); h != 0 {
@@ -729,7 +772,7 @@ func TestMaybePromptForConsent_acceptSkipsFollowUp(t *testing.T) {
 	out := &strings.Builder{}
 	promptOutFn = func() io.Writer { return out }
 
-	got := MaybePromptForConsent(false)
+	got := MaybePromptForConsent(false, false)
 	if got != PromptAccepted {
 		t.Errorf("outcome = %v, want PromptAccepted", got)
 	}
