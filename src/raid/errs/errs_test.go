@@ -103,3 +103,14 @@ func TestPublicSurface_helpers(t *testing.T) {
 		t.Errorf("code = %v", doc.Error["code"])
 	}
 }
+
+func TestIsReservedErrorKey(t *testing.T) {
+	for _, k := range []string{"code", "message", "category", "hint"} {
+		if !IsReservedErrorKey(k) {
+			t.Errorf("IsReservedErrorKey(%q) = false, want true", k)
+		}
+	}
+	if IsReservedErrorKey("custom_field") {
+		t.Error("IsReservedErrorKey(custom_field) = true, want false")
+	}
+}

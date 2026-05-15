@@ -2,6 +2,7 @@ package lib
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -240,4 +241,26 @@ func TestExitCodeFromError(t *testing.T) {
 	if got := exitCodeFromError(err); got != 42 {
 		t.Errorf("exec.ExitError(42) = %d, want 42", got)
 	}
+}
+
+func TestReadRecent_corruptJSON(t *testing.T) {
+	setupRecentTempPath(t)
+	path := recentPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte("{invalid json"), 0644)
+
+	got := ReadRecent()
+	if got != nil {
+		t.Errorf("ReadRecent() with corrupt JSON = %v, want nil", got)
+	}
+}
+
+func TestRecordRecent_writeError(t *testing.T) {
+	setupRecentTempPath(t)
+	path := recentPath()
+	os.MkdirAll(path, 0755)
+	defer os.RemoveAll(path)
+
+	started := RecordRecentStart("cmd")
+	RecordRecentEnd("cmd", nil, started)
 }

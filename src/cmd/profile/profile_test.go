@@ -1331,3 +1331,36 @@ func TestRunAddProfile_nonRaidYamlFallbackFailsBasenameGuard(t *testing.T) {
 		t.Errorf("expected 'Invalid Profile' in output, got %q", out)
 	}
 }
+
+// --- emitJSON ---
+
+type failMarshal struct{}
+
+func (failMarshal) MarshalJSON() ([]byte, error) {
+	return nil, fmt.Errorf("marshal boom")
+}
+
+func TestEmitJSON_success(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := emitJSON(cmd, map[string]string{"key": "value"})
+	if err != nil {
+		t.Fatalf("emitJSON() error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "key") {
+		t.Errorf("output missing key: %s", buf.String())
+	}
+}
+
+func TestEmitJSON_encodingError(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := emitJSON(cmd, failMarshal{})
+	if err == nil {
+		t.Fatal("emitJSON() expected error for unencodable value, got nil")
+	}
+}

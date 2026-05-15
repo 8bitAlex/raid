@@ -1439,3 +1439,40 @@ func TestWriteProfileFile_error(t *testing.T) {
 		t.Error("WriteProfileFile expected error for invalid path")
 	}
 }
+
+func TestExtractProfilesFromYAML_emptyNameSkipped(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "multi.yaml")
+	content := "---\nname: \"\"\n---\nname: real\nrepositories:\n  - name: r\n    path: ~/r\n    url: https://x.com/r.git\n"
+	os.WriteFile(path, []byte(content), 0644)
+
+	profiles, err := ExtractProfiles(path)
+	if err != nil {
+		t.Fatalf("ExtractProfiles() error: %v", err)
+	}
+	if len(profiles) != 1 || profiles[0].Name != "real" {
+		t.Errorf("expected 1 profile named 'real', got %v", profiles)
+	}
+}
+
+func TestExtractProfilesFromYAML_malformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	os.WriteFile(path, []byte(":\n  invalid: [\n"), 0644)
+
+	_, err := ExtractProfiles(path)
+	if err == nil {
+		t.Fatal("ExtractProfiles() with malformed YAML should return error")
+	}
+}
+
+func TestGetProfilePaths_emptyConfig(t *testing.T) {
+	setupTestConfig(t)
+	paths := getProfilePaths()
+	if paths == nil {
+		t.Error("getProfilePaths() should return empty map, not nil")
+	}
+	if len(paths) != 0 {
+		t.Errorf("getProfilePaths() expected empty map, got %v", paths)
+	}
+}

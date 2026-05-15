@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -871,4 +872,154 @@ func TestSetEnabled_persistsBothKeys(t *testing.T) {
 	if !st.Decided || st.Enabled {
 		t.Errorf("state after off = %+v, want decided=true enabled=false", st)
 	}
+}
+
+func TestDoNotTrackActive(t *testing.T) {
+	orig := os.Getenv(DoNotTrackEnvVar)
+	defer os.Setenv(DoNotTrackEnvVar, orig)
+
+	os.Setenv(DoNotTrackEnvVar, "1")
+	if !DoNotTrackActive() {
+		t.Error("DoNotTrackActive() = false when DO_NOT_TRACK=1")
+	}
+	os.Unsetenv(DoNotTrackEnvVar)
+	if DoNotTrackActive() {
+		t.Error("DoNotTrackActive() = true when DO_NOT_TRACK unset")
+	}
+}
+
+func TestHasAPIKey(t *testing.T) {
+	origKey := APIKey
+	defer func() { APIKey = origKey }()
+
+	APIKey = ""
+	if HasAPIKey() {
+		t.Error("HasAPIKey() = true with empty key")
+	}
+	APIKey = "phc_test"
+	if !HasAPIKey() {
+		t.Error("HasAPIKey() = false with key set")
+	}
+}
+
+func TestLoadIDIfExists_missing(t *testing.T) {
+	setupTestEnv(t)
+	// No ID file written — should return empty
+	id := LoadIDIfExists()
+	if id != "" {
+		t.Errorf("LoadIDIfExists() = %q, want empty", id)
+	}
+}
+
+func TestLoadIDIfExists_present(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	if path == "" {
+		t.Skip("IDPath() returned empty")
+	}
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte("test-uuid-1234\n"), 0644)
+
+	id := LoadIDIfExists()
+	if id != "test-uuid-1234" {
+		t.Errorf("LoadIDIfExists() = %q, want %q", id, "test-uuid-1234")
+	}
+}
+
+func TestLoadIDIfExists_emptyFile(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte(""), 0644)
+
+	id := LoadIDIfExists()
+	if id != "" {
+		t.Errorf("LoadIDIfExists() with empty file = %q, want empty", id)
+	}
+}
+
+func TestIDPath_homeDirError(t *testing.T) {
+	setupTestEnv(t)
+	os.Unsetenv(IDFileEnv)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+
+	if got := IDPath(); got != "" {
+		t.Errorf("IDPath() with failing homeDirFn = %q, want empty", got)
+	}
+}
+
+func TestLoadOrCreateID_createsNewFile(t *testing.T) {
+	setupTestEnv(t)
+	id := loadOrCreateID()
+	if id == "" {
+		t.Fatal("loadOrCreateID() returned empty")
+	}
+	if len(id) != 36 {
+		t.Errorf("loadOrCreateID() = %q, want UUID format (36 chars)", id)
+	}
+}
+
+func TestLoadOrCreateID_reusesExisting(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte("existing-id\n"), 0644)
+
+	id := loadOrCreateID()
+	if id != "existing-id" {
+		t.Errorf("loadOrCreateID() = %q, want %q", id, "existing-id")
+	}
+}
+
+func TestWriteIDExclusive_raceLoserReadsExisting(t *testing.T) {
+	setupTestEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id")
+	os.WriteFile(path, []byte("winner-id\n"), 0600)
+
+	got, err := writeIDExclusive(path, "loser-id")
+	if err != nil {
+		t.Fatalf("writeIDExclusive() error: %v", err)
+	}
+	if got != "winner-id" {
+		t.Errorf("writeIDExclusive() = %q, want %q", got, "winner-id")
+	}
+}
+
+func TestWriteIDExclusive_raceLoserEmptyFile(t *testing.T) {
+	setupTestEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id")
+	os.WriteFile(path, []byte(""), 0600)
+
+	_, err := writeIDExclusive(path, "new-id")
+	if err == nil {
+		t.Fatal("writeIDExclusive() with empty existing file should error")
+	}
+}
+
+func TestNewID_format(t *testing.T) {
+	id, err := newID()
+	if err != nil {
+		t.Fatalf("newID() error: %v", err)
+	}
+	if len(id) != 36 {
+		t.Errorf("newID() = %q, want 36-char UUID", id)
+	}
+	parts := strings.Split(id, "-")
+	if len(parts) != 5 {
+		t.Errorf("newID() has %d parts, want 5", len(parts))
+	}
+}
+
+func TestCapture_emptyID(t *testing.T) {
+	setupTestEnv(t)
+	old := homeDirFn
+	homeDirFn = func() (string, error) { return "", fmt.Errorf("no home") }
+	defer func() { homeDirFn = old }()
+	os.Unsetenv(IDFileEnv)
+
+	Capture("test_event", nil)
 }

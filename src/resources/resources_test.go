@@ -44,3 +44,23 @@ func TestGetProperty_skipsComments(t *testing.T) {
 	// Any successful call to GetProperty exercises the comment-skipping logic.
 	_, _ = GetProperty(PropertyVersion)
 }
+
+func TestProfileTemplate(t *testing.T) {
+	tmpl := ProfileTemplate()
+	if tmpl == "" {
+		t.Fatal("ProfileTemplate() returned empty string")
+	}
+	if !strings.Contains(tmpl, "name") {
+		t.Error("ProfileTemplate() should contain 'name'")
+	}
+}
+
+func TestRepoTemplate(t *testing.T) {
+	tmpl := RepoTemplate()
+	if tmpl == "" {
+		t.Fatal("RepoTemplate() returned empty string")
+	}
+	if !strings.Contains(tmpl, "name") {
+		t.Error("RepoTemplate() should contain 'name'")
+	}
+}

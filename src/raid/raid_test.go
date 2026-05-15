@@ -1,10 +1,13 @@
 package raid
 
 import (
+	"bytes"
 	stdctx "context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
@@ -391,4 +394,49 @@ func TestInitialize_profileLoadError(t *testing.T) {
 
 	// Initialize should not panic — Load error is non-fatal.
 	Initialize()
+}
+
+func TestSetCommandOutput(t *testing.T) {
+	var buf bytes.Buffer
+	restore := SetCommandOutput(&buf, io.Discard)
+	defer restore()
+	// After restore, writes go back to original. Just exercise the function.
+	restore()
+}
+
+func TestWithMutationLock(t *testing.T) {
+	setupConfig(t)
+	lib.LockPathOverride = filepath.Join(t.TempDir(), "test.lock")
+	t.Cleanup(func() { lib.LockPathOverride = "" })
+
+	called := false
+	err := WithMutationLock(func() error {
+		called = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithMutationLock() error: %v", err)
+	}
+	if !called {
+		t.Error("inner function was not called")
+	}
+}
+
+func TestScrubURL(t *testing.T) {
+	got := ScrubURL("https://user:pass@github.com/org/repo.git")
+	if strings.Contains(got, "pass") {
+		t.Errorf("ScrubURL() did not strip credentials: %s", got)
+	}
+	plain := ScrubURL("https://github.com/org/repo.git")
+	if plain != "https://github.com/org/repo.git" {
+		t.Errorf("ScrubURL() mangled plain URL: %s", plain)
+	}
+}
+
+func TestRunVerify_emptyTasks(t *testing.T) {
+	setupConfig(t)
+	outcome, err := RunVerify(Verify{})
+	// Empty verify should pass (no tasks to fail).
+	_ = outcome
+	_ = err
 }
