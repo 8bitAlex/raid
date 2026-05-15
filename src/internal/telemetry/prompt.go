@@ -57,12 +57,16 @@ var isInteractiveFn = func() bool {
 //
 //  1. **Persistent skip** — long-term reasons to be non-interactive:
 //     `--yes` / `--headless` / `RAID_HEADLESS=1`, `DO_NOT_TRACK=1`,
-//     stdin isn't a TTY (CI, pipes, agent hosts), build has no
-//     API key, already decided. These persist `decided=off` so
-//     future runs from the same machine don't re-attempt the
-//     prompt logic. Rationale: a host that's non-interactive today
-//     is probably non-interactive tomorrow; re-prompting on every
-//     run is noise.
+//     stdin isn't a TTY (CI, pipes, agent hosts), already decided.
+//     These persist `decided=off` so future runs from the same
+//     machine don't re-attempt the prompt logic. Rationale: a host
+//     that's non-interactive today is probably non-interactive
+//     tomorrow; re-prompting on every run is noise.
+//
+//     Dev / no-API-key builds short-circuit before reaching this
+//     tier — there's nothing to opt out of, so consent state stays
+//     untouched and a later release-build run on the same machine
+//     will still get a fresh prompt.
 //
 //  2. **Transient skip** — per-invocation reasons that don't reflect
 //     the user's long-term posture: `--json` (machine-readable

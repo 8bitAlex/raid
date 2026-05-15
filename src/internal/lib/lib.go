@@ -131,9 +131,16 @@ func loadRaidVars() {
 	// versions (godotenv defaults to 0644). The file may carry
 	// scrubbed-but-still-private RAID_REPO_*_URL entries and any
 	// Set-task values that the project author treats as secret-ish,
-	// so it should be 0600. Best-effort: chmod failures (read-only
+	// so it should be 0600.
+	//
+	// Use Lstat so a symlinked path doesn't get its target chmodded,
+	// and only touch regular files — a directory or device at this
+	// path is a misconfiguration we shouldn't compound by stripping
+	// its mode bits. Best-effort: chmod failures (read-only
 	// filesystems, foreign-owned files) don't block the load.
-	_ = os.Chmod(path, 0600)
+	if fi, err := os.Lstat(path); err == nil && fi.Mode().IsRegular() {
+		_ = os.Chmod(path, 0600)
+	}
 	m, err := godotenv.Read(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "raid: failed to load persisted vars from %s: %v\n", path, err)
@@ -454,18 +461,20 @@ func setRepoVars(repos []Repo) {
 	}
 }
 
-// ScrubURL strips userinfo (user:password@) from an HTTPS-style URL so
-// credentials embedded in a clone URL never get persisted or surfaced
-// to MCP clients. Returns the input unchanged when:
+// ScrubURL strips userinfo (user:password@) from a credential-bearing
+// URL so secrets embedded in a clone URL never get persisted or
+// surfaced to MCP clients. Returns the input unchanged when:
 //
 //   - it's empty
-//   - it's an SSH-style URL (`git@host:repo.git`) where there's no
-//     userinfo component to leak
+//   - it's an SSH-style URL (`git@host:repo.git` or `ssh://git@host/…`)
+//     where the username is the protocol's required login, not a
+//     credential — stripping it would change clone semantics
 //   - it can't be parsed as a URL (treated as opaque)
 //
-// HTTPS / HTTP URLs with an embedded user (e.g. `https://x-token-auth:
-// <secret>@github.com/...`) come back with `u.User = nil`. The scheme,
-// host, path, and query are preserved verbatim.
+// Only `http` and `https` schemes get scrubbed: those are the ones
+// where userinfo carries tokens / basic-auth secrets. SSH userinfo
+// (the `git` user) is preserved so a scrubbed URL is still a valid
+// clone URL for downstream consumers.
 func ScrubURL(raw string) string {
 	if raw == "" {
 		return ""
@@ -474,8 +483,13 @@ func ScrubURL(raw string) string {
 	if err != nil || u.User == nil {
 		return raw
 	}
-	u.User = nil
-	return u.String()
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		u.User = nil
+		return u.String()
+	default:
+		return raw
+	}
 }
 
 // sanitizeRepoVarName converts a repo name into the uppercase identifier

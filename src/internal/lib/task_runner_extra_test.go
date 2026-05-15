@@ -305,6 +305,13 @@ func TestExecuteTask_setVar_storesInMemory(t *testing.T) {
 // the atomic write path chmods the tempfile down to 0600 before the
 // rename so the final file always lands at the tight mode.
 func TestExecuteTask_setVar_writesFileMode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows file modes only toggle the read-only attribute via
+		// os.Chmod; POSIX permission bits don't round-trip through
+		// Stat().Mode().Perm(). The 0600 invariant is a Unix
+		// guarantee — Windows uses ACLs we don't manage here.
+		t.Skip("0600 perm bits aren't round-trippable on Windows")
+	}
 	overrideRaidVarsPath(t)
 	if err := ExecuteTask(Task{Type: SetVar, Var: "RAID_PERM_TEST", Value: "secret"}); err != nil {
 		t.Fatalf("ExecuteTask(SetVar): %v", err)
@@ -324,6 +331,11 @@ func TestExecuteTask_setVar_writesFileMode0600(t *testing.T) {
 // failures don't block the load, so a foreign-owned or read-only-
 // filesystem file just keeps its old mode.
 func TestLoadRaidVars_tightensExistingFilePerms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// See TestExecuteTask_setVar_writesFileMode0600 — Windows
+		// doesn't preserve POSIX perm bits through os.Chmod.
+		t.Skip("0600 perm bits aren't round-trippable on Windows")
+	}
 	overrideRaidVarsPath(t)
 	path := raidVarsPath()
 	if err := os.WriteFile(path, []byte("LEGACY=value\n"), 0o644); err != nil {

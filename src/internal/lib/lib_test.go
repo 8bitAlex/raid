@@ -142,10 +142,18 @@ func TestForceLoad_noActiveProfile(t *testing.T) {
 // read handlers (raid_list_repos, raid_describe_repo, raid_list_profiles)
 // concurrently read the package-global context pointer. Before the
 // atomic.Pointer refactor this was an undefined-behavior race that
-// `go test -race` would flag. The test stresses that interleave —
-// many readers + one writer hammering the pointer — and relies on the
-// race detector to surface a regression if anyone reintroduces a
-// non-atomic write to the context.
+// `go test -race` would flag.
+//
+// CI-coverage caveat: this regression only fails loudly when the suite
+// runs under `-race`. The repo's default workflow runs
+// `go test -v ./...` without the race detector, so a non-atomic
+// pointer write reintroduced into production code would slip past
+// CI even with this test in place. The race target is meant to be
+// caught locally (`go test -race ./...`) and via the dedicated race
+// CI lane that should accompany this fix; the test is structured to
+// give the detector the strongest possible signal — a synchronized
+// start and continuous writer activity while readers are running —
+// rather than relying on goroutine scheduling luck.
 func TestContextRaceForceLoadVsReads(t *testing.T) {
 	setupTestConfig(t)
 
@@ -156,13 +164,30 @@ func TestContextRaceForceLoadVsReads(t *testing.T) {
 	}}})
 
 	const readers = 8
-	const iterations = 200
-	done := make(chan struct{})
+	const iterations = 1000
+
+	// Start barrier: every goroutine blocks on `start` so the writer
+	// can't sprint past the readers' first iteration before they're
+	// scheduled. Without this, fast machines can finish the writer
+	// loop before any reader runs and the race detector has nothing
+	// to observe.
+	start := make(chan struct{})
+	stop := make(chan struct{})
+
+	writerDone := make(chan struct{})
 	go func() {
-		// Writer: replaces the context wholesale. Doesn't go through
-		// ForceLoad (which requires viper state) — emulates the same
-		// atomic-pointer swap path.
-		for i := 0; i < iterations; i++ {
+		defer close(writerDone)
+		<-start
+		// Keep writing until readers are done so reads and writes
+		// genuinely overlap. Doesn't go through ForceLoad (which
+		// requires viper state) — emulates the same atomic-pointer
+		// swap path.
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			storeContext(&Context{Profile: Profile{
 				Name: "race-test",
 				Repositories: []Repo{
@@ -171,16 +196,16 @@ func TestContextRaceForceLoadVsReads(t *testing.T) {
 				},
 			}})
 		}
-		close(done)
 	}()
 
-	// Readers: walk fields the way GetCommands / GetRepos /
-	// GetWorkspaceContext do.
 	var wg sync.WaitGroup
 	wg.Add(readers)
 	for r := 0; r < readers; r++ {
 		go func() {
 			defer wg.Done()
+			<-start
+			// Readers: walk fields the way GetCommands / GetRepos /
+			// GetWorkspaceContext do.
 			for i := 0; i < iterations; i++ {
 				_ = GetRepos()
 				_ = GetCommands()
@@ -188,8 +213,11 @@ func TestContextRaceForceLoadVsReads(t *testing.T) {
 			}
 		}()
 	}
+
+	close(start)
 	wg.Wait()
-	<-done
+	close(stop)
+	<-writerDone
 
 	// If we got here under -race without a fatal, the atomic-pointer
 	// contract held. The assertion is implicit in the race detector.
@@ -1277,7 +1305,8 @@ func TestScrubURL(t *testing.T) {
 		{"https no userinfo", "https://github.com/org/repo.git", "https://github.com/org/repo.git"},
 		{"http with userinfo", "http://u:p@example.com/", "http://example.com/"},
 		{"ssh scp-style", "git@github.com:org/repo.git", "git@github.com:org/repo.git"},
-		{"ssh url scheme", "ssh://git@github.com/org/repo.git", "ssh://github.com/org/repo.git"},
+		{"ssh url scheme preserves user", "ssh://git@github.com/org/repo.git", "ssh://git@github.com/org/repo.git"},
+		{"git+ssh preserves user", "git+ssh://git@example.com/org/repo.git", "git+ssh://git@example.com/org/repo.git"},
 		{"unparseable", "://broken", "://broken"},
 		{"path only", "/local/path", "/local/path"},
 		{"query preserved", "https://alice:s@host/p?ref=main", "https://host/p?ref=main"},
