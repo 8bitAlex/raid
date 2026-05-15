@@ -256,14 +256,19 @@ func TestReadRecent_corruptJSON(t *testing.T) {
 }
 
 func TestRecordRecent_writeError(t *testing.T) {
-	setupRecentTempPath(t)
-	path := recentPath()
-	// Create a directory where the recent file should live so every write
-	// attempt fails. The contract is that recording must never break
-	// command execution (errors are silenced) AND that nothing gets
-	// persisted — so ReadRecent must still return nil afterwards.
-	os.MkdirAll(path, 0755)
-	defer os.RemoveAll(path)
+	// Place a regular file where writeRecent expects a directory so
+	// MkdirAll(filepath.Dir(path)) returns ENOTDIR and the function
+	// bails before writing. The contract is that recording must never
+	// break command execution (errors are silenced) AND that nothing
+	// gets persisted — so ReadRecent must still return nil afterwards.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("not-a-dir"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := RecentPathOverride
+	t.Cleanup(func() { RecentPathOverride = old })
+	RecentPathOverride = filepath.Join(blocker, "recent.json")
 
 	started := RecordRecentStart("cmd")
 	RecordRecentEnd("cmd", nil, started)
