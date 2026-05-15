@@ -1164,6 +1164,71 @@ func TestSetRepoVars_overwritesPriorEntries(t *testing.T) {
 	}
 }
 
+// TestSetRepoVars_scrubsCredentialsFromURL pins bug C2: a profile YAML
+// using `https://user:token@host/...` as a clone URL must not persist
+// the credential to ~/.raid/vars or surface it through MCP.
+// setRepoVars is the choke point — once a URL passes through it,
+// downstream consumers (the vars resource, every Print/Set task
+// referencing $RAID_REPO_*_URL, etc.) see the scrubbed form.
+func TestSetRepoVars_scrubsCredentialsFromURL(t *testing.T) {
+	withCleanRaidVars(t)
+
+	setRepoVars([]Repo{
+		{Name: "api", Path: "/tmp/api", URL: "https://alice:s3cret@github.com/org/repo.git"},
+		{Name: "ssh", Path: "/tmp/ssh", URL: "git@github.com:org/ssh-repo.git"},
+		{Name: "plain", Path: "/tmp/plain", URL: "https://github.com/org/plain.git"},
+	})
+
+	raidVarsMu.RLock()
+	apiURL := raidVars["RAID_REPO_API_URL"]
+	sshURL := raidVars["RAID_REPO_SSH_URL"]
+	plainURL := raidVars["RAID_REPO_PLAIN_URL"]
+	raidVarsMu.RUnlock()
+
+	if strings.Contains(apiURL, "alice") || strings.Contains(apiURL, "s3cret") {
+		t.Errorf("RAID_REPO_API_URL leaked credentials: %q", apiURL)
+	}
+	if apiURL != "https://github.com/org/repo.git" {
+		t.Errorf("RAID_REPO_API_URL = %q, want scheme+host+path preserved", apiURL)
+	}
+	// SSH URLs have no userinfo to scrub — must round-trip verbatim.
+	if sshURL != "git@github.com:org/ssh-repo.git" {
+		t.Errorf("SSH URL mangled: got %q, want %q", sshURL, "git@github.com:org/ssh-repo.git")
+	}
+	// Plain HTTPS URLs must round-trip verbatim too.
+	if plainURL != "https://github.com/org/plain.git" {
+		t.Errorf("plain HTTPS URL mangled: got %q, want %q", plainURL, "https://github.com/org/plain.git")
+	}
+}
+
+// TestScrubURL covers the helper in isolation against the edge cases
+// setRepoVars exercises in aggregate.
+func TestScrubURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"https with userinfo", "https://alice:secret@github.com/org/repo.git", "https://github.com/org/repo.git"},
+		{"https user only", "https://alice@github.com/org/repo.git", "https://github.com/org/repo.git"},
+		{"https no userinfo", "https://github.com/org/repo.git", "https://github.com/org/repo.git"},
+		{"http with userinfo", "http://u:p@example.com/", "http://example.com/"},
+		{"ssh scp-style", "git@github.com:org/repo.git", "git@github.com:org/repo.git"},
+		{"ssh url scheme", "ssh://git@github.com/org/repo.git", "ssh://github.com/org/repo.git"},
+		{"unparseable", "://broken", "://broken"},
+		{"path only", "/local/path", "/local/path"},
+		{"query preserved", "https://alice:s@host/p?ref=main", "https://host/p?ref=main"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ScrubURL(tt.in); got != tt.want {
+				t.Errorf("ScrubURL(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestForceLoad_seedsRepoVars(t *testing.T) {
 	root := repoRoot(t)
 	setupTestConfig(t)

@@ -926,6 +926,17 @@ func execSetVar(task Task) error {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to write temp vars file: %v", err)
 	}
 
+	// Tighten perms BEFORE the rename so the final file lands at 0600
+	// atomically — godotenv.Write defaults to 0644 (world-readable),
+	// which is wrong for a file that holds raid vars (RAID_REPO_*_URL
+	// can be a clone URL, and user-defined Set values can be anything
+	// the project author treats as secret-ish). Chmod on the tempfile
+	// path: if it fails we abort before rename so we never leave a
+	// 0644 vars file on disk.
+	if err := os.Chmod(tmpName, 0600); err != nil {
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to set vars file permissions: %v", err)
+	}
+
 	if err := os.Rename(tmpName, path); err != nil {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to replace vars file: %v", err)
 	}

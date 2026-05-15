@@ -117,6 +117,14 @@ func GetRepos() []lib.Repo {
 	return lib.GetRepos()
 }
 
+// ScrubURL strips userinfo (`user:password@`) from an HTTPS-style URL
+// so an embedded clone-time credential never gets persisted or
+// surfaced through MCP. SSH-style `git@host:repo.git` URLs and
+// unparseable inputs pass through unchanged. See lib.ScrubURL.
+func ScrubURL(raw string) string {
+	return lib.ScrubURL(raw)
+}
+
 // QuietGetCommands performs a best-effort, read-only profile load and returns
 // the available commands. It does not create config files or emit warnings, and
 // returns nil if the config is absent or loading fails.

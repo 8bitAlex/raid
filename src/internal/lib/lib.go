@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +96,13 @@ func loadRaidVars() {
 	if !sys.FileExists(path) {
 		return
 	}
+	// Tighten perms on existing vars files written by earlier raid
+	// versions (godotenv defaults to 0644). The file may carry
+	// scrubbed-but-still-private RAID_REPO_*_URL entries and any
+	// Set-task values that the project author treats as secret-ish,
+	// so it should be 0600. Best-effort: chmod failures (read-only
+	// filesystems, foreign-owned files) don't block the load.
+	_ = os.Chmod(path, 0600)
 	m, err := godotenv.Read(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "raid: failed to load persisted vars from %s: %v\n", path, err)
@@ -384,6 +392,11 @@ func ForceLoad() error {
 // renamed repo persisted to ~/.raid/vars) are pruned first. Sanitized-name
 // collisions between repos (e.g. "my-api" and "my_api" both → MY_API) are
 // reported to stderr; the last repo wins so behavior is deterministic.
+//
+// URLs are scrubbed of userinfo before storage so an HTTPS clone URL
+// embedding credentials (`https://user:token@host/...`) doesn't end up
+// persisted to ~/.raid/vars or served verbatim through the MCP vars
+// resource. See ScrubURL for the contract.
 func setRepoVars(repos []Repo) {
 	raidVarsMu.Lock()
 	defer raidVarsMu.Unlock()
@@ -404,10 +417,34 @@ func setRepoVars(repos []Repo) {
 				prev, repo.Name, key, repo.Name)
 		}
 		seen[key] = repo.Name
-		raidVars["RAID_REPO_"+key+"_URL"] = repo.URL
+		raidVars["RAID_REPO_"+key+"_URL"] = ScrubURL(repo.URL)
 		raidVars["RAID_REPO_"+key+"_PATH"] = sys.ExpandPath(repo.Path)
 		raidVars["RAID_REPO_"+key+"_BRANCH"] = repo.Branch
 	}
+}
+
+// ScrubURL strips userinfo (user:password@) from an HTTPS-style URL so
+// credentials embedded in a clone URL never get persisted or surfaced
+// to MCP clients. Returns the input unchanged when:
+//
+//   - it's empty
+//   - it's an SSH-style URL (`git@host:repo.git`) where there's no
+//     userinfo component to leak
+//   - it can't be parsed as a URL (treated as opaque)
+//
+// HTTPS / HTTP URLs with an embedded user (e.g. `https://x-token-auth:
+// <secret>@github.com/...`) come back with `u.User = nil`. The scheme,
+// host, path, and query are preserved verbatim.
+func ScrubURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
 }
 
 // sanitizeRepoVarName converts a repo name into the uppercase identifier
