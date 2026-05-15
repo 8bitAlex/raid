@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/8bitalex/raid/schemas"
@@ -38,7 +40,37 @@ type OnInstall struct {
 	Tasks []Task `json:"tasks"`
 }
 
-var context *Context
+// contextPtr is the active workspace context. Replaced wholly via
+// storeContext on Load/ForceLoad; never mutated in-place. Reads go
+// through loadContext.
+//
+// Atomic.Pointer is the right primitive here: writes are rare
+// (Load / ForceLoad / Reset only), reads are frequent (every
+// command/task dispatch + every MCP read), and the value is always
+// wholly replaced rather than partially mutated. mcp-go runs tool
+// handlers from a 5-worker pool, so a mutating handler that calls
+// ForceLoad can race with a read handler that reads context.Profile —
+// the atomic pointer makes the swap+read interleave well-defined.
+//
+// Callers must use loadContext() once per logical operation and bind
+// to a local. "Check nil then read field" patterns must NOT re-call
+// loadContext between the check and the read — otherwise a swap
+// could land in between.
+var contextPtr atomic.Pointer[Context]
+
+// loadContext returns the current active context, or nil when no
+// profile has been loaded yet. Safe for concurrent reads; consumers
+// should bind the result to a local before nil-checking + reading.
+func loadContext() *Context {
+	return contextPtr.Load()
+}
+
+// storeContext atomically replaces the active context. Passing nil
+// resets the context to "not loaded" (Load / Reset paths). Callers
+// outside lib should not need this — use Load / ForceLoad instead.
+func storeContext(c *Context) {
+	contextPtr.Store(c)
+}
 
 const raidVarsFileName = "vars"
 
@@ -94,6 +126,20 @@ func loadRaidVars() {
 	path := raidVarsPath()
 	if !sys.FileExists(path) {
 		return
+	}
+	// Tighten perms on existing vars files written by earlier raid
+	// versions (godotenv defaults to 0644). The file may carry
+	// scrubbed-but-still-private RAID_REPO_*_URL entries and any
+	// Set-task values that the project author treats as secret-ish,
+	// so it should be 0600.
+	//
+	// Use Lstat so a symlinked path doesn't get its target chmodded,
+	// and only touch regular files — a directory or device at this
+	// path is a misconfiguration we shouldn't compound by stripping
+	// its mode bits. Best-effort: chmod failures (read-only
+	// filesystems, foreign-owned files) don't block the load.
+	if fi, err := os.Lstat(path); err == nil && fi.Mode().IsRegular() {
+		_ = os.Chmod(path, 0600)
 	}
 	m, err := godotenv.Read(path)
 	if err != nil {
@@ -310,12 +356,12 @@ func QuietLoad() []Command {
 // ResetContext clears the cached load context, forcing the next Load or ForceLoad to
 // rebuild from the current viper configuration.
 func ResetContext() {
-	context = nil
+	storeContext(nil)
 }
 
 // Load initializes the context from the active profile, using cached results if available.
 func Load() error {
-	if context == nil {
+	if loadContext() == nil {
 		return ForceLoad()
 	}
 	return nil
@@ -329,7 +375,7 @@ func ForceLoad() error {
 	loadRaidVars()
 	p := GetProfile()
 	if p.IsZero() {
-		context = &Context{Env: GetEnv()}
+		storeContext(&Context{Env: GetEnv()})
 		return nil
 	}
 
@@ -367,10 +413,10 @@ func ForceLoad() error {
 
 	setRepoVars(profile.Repositories)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: profile,
 		Env:     GetEnv(),
-	}
+	})
 	return nil
 }
 
@@ -384,6 +430,11 @@ func ForceLoad() error {
 // renamed repo persisted to ~/.raid/vars) are pruned first. Sanitized-name
 // collisions between repos (e.g. "my-api" and "my_api" both → MY_API) are
 // reported to stderr; the last repo wins so behavior is deterministic.
+//
+// URLs are scrubbed of userinfo before storage so an HTTPS clone URL
+// embedding credentials (`https://user:token@host/...`) doesn't end up
+// persisted to ~/.raid/vars or served verbatim through the MCP vars
+// resource. See ScrubURL for the contract.
 func setRepoVars(repos []Repo) {
 	raidVarsMu.Lock()
 	defer raidVarsMu.Unlock()
@@ -404,9 +455,40 @@ func setRepoVars(repos []Repo) {
 				prev, repo.Name, key, repo.Name)
 		}
 		seen[key] = repo.Name
-		raidVars["RAID_REPO_"+key+"_URL"] = repo.URL
+		raidVars["RAID_REPO_"+key+"_URL"] = ScrubURL(repo.URL)
 		raidVars["RAID_REPO_"+key+"_PATH"] = sys.ExpandPath(repo.Path)
 		raidVars["RAID_REPO_"+key+"_BRANCH"] = repo.Branch
+	}
+}
+
+// ScrubURL strips userinfo (user:password@) from a credential-bearing
+// URL so secrets embedded in a clone URL never get persisted or
+// surfaced to MCP clients. Returns the input unchanged when:
+//
+//   - it's empty
+//   - it's an SSH-style URL (`git@host:repo.git` or `ssh://git@host/…`)
+//     where the username is the protocol's required login, not a
+//     credential — stripping it would change clone semantics
+//   - it can't be parsed as a URL (treated as opaque)
+//
+// Only `http` and `https` schemes get scrubbed: those are the ones
+// where userinfo carries tokens / basic-auth secrets. SSH userinfo
+// (the `git` user) is preserved so a scrubbed URL is still a valid
+// clone URL for downstream consumers.
+func ScrubURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		u.User = nil
+		return u.String()
+	default:
+		return raw
 	}
 }
 
@@ -452,10 +534,11 @@ func installRepo(repo Repo) error {
 // InstallRepo clones a single named repository and runs its install tasks.
 // The profile-level install tasks are not run.
 func InstallRepo(name string) error {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return liberrs.Internal("raid context is not initialized")
 	}
-	profile := context.Profile
+	profile := ctx.Profile
 	if profile.IsZero() {
 		return liberrs.Newf(liberrs.CodeProfileNotActive, liberrs.CategoryNotFound, "profile not found")
 	}
@@ -476,10 +559,11 @@ func InstallRepo(name string) error {
 
 // Install clones all repositories in the active profile and runs install tasks.
 func Install(maxThreads int) error {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return liberrs.Internal("raid context is not initialized")
 	}
-	profile := context.Profile
+	profile := ctx.Profile
 	if profile.IsZero() {
 		return liberrs.Newf(liberrs.CodeProfileNotActive, liberrs.CategoryNotFound, "profile not found")
 	}

@@ -9,6 +9,18 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.17.1 — upcoming
+
+Three pre-v1.0 hardening fixes from the release-readiness review. No behavior change for happy paths; all three are correctness/security bugs with regression tests now in place.
+
+**Telemetry consent prompt no longer gets killed by `--json`.** The first-run prompt previously persisted `decided=off` on any skip signal — including transient ones like `--json`. A user who piped one command through `raid context --json | jq` was silently opted out of telemetry for life. The consent flow now splits skip signals into two tiers: persistent (`--yes` / `--headless` / `RAID_HEADLESS` / non-TTY / `DO_NOT_TRACK`) which still persist `decided=off`, and transient (`--json`) which skip the prompt without writing state. The next interactive run without the transient signal still gets prompted.
+
+**Repo URL credentials no longer leak to `~/.raid/vars` or MCP.** A profile YAML using `https://user:token@github.com/...` as a clone URL no longer persists the credential to disk, no longer surfaces it through the MCP `raid://workspace/vars` resource, and no longer lands verbatim in `$RAID_REPO_<NAME>_URL` for subprocesses. SSH-style `git@host:repo.git` URLs round-trip unchanged. **If you've previously run raid against a profile with embedded clone credentials, rotate the affected token** — this fix prevents new leaks but doesn't scrub historical content from your existing vars file. Re-exported as `raid.ScrubURL`.
+
+**`~/.raid/vars` now written with mode `0600` instead of `0644`.** The vars file persists raid-managed variables (scrubbed repo URLs, `Set`-task values, anything project authors treat as secret-ish) and shouldn't be world-readable. New writes land at `0600` atomically; existing 0644 files are best-effort tightened on the next load.
+
+**MCP read/write race on the workspace context.** mcp-go dispatches tool calls from a 5-worker pool, so MCP read handlers (`raid_list_repos`, `raid_describe_repo`, …) could race with mutating handlers' `ForceLoad` rewrites of the package-global context. Replaced with `atomic.Pointer[Context]`; reads are now well-defined under concurrent writes. Race-detector test pins the contract.
+
 ## 0.17.0 — upcoming
 
 **Optional opt-out telemetry follow-up.** When a user declines the first-run telemetry prompt, raid now asks one follow-up question: may we send a single anonymous event recording your denial? Default is no (capital N) just like the main prompt. If accepted, raid fires exactly one `raid_telemetry_opt_out` event (with `reason: "prompt-declined"`) under explicit per-event consent and then leaves telemetry permanently off — that's the whole transaction. If declined or skipped, raid touches zero endpoints for the remainder of the install. The follow-up runs *only* on the explicit-decline path: non-TTY, headless, `DO_NOT_TRACK`, already-decided, and `raid telemetry ...` invocations skip both prompts. Closes the opt-out-rate measurement gap that's otherwise impossible to fill from website analytics alone.

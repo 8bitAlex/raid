@@ -169,15 +169,20 @@ func executeRoot(args []string) int {
 
 	// First-run consent prompt for telemetry. Runs only for non-info,
 	// non-telemetry-subcommand invocations to avoid prompting on
-	// `raid --help`, `raid telemetry on`, and similar. The prompt
-	// itself no-ops when stdin isn't a TTY, when --yes/--headless is
-	// set, when --json is set, or when RAID_HEADLESS=1 in the env
-	// (CI / agent-host opt-in path), so it's safe in non-interactive
-	// contexts. See telemetry.MaybePromptForConsent for the full skip
-	// matrix.
+	// `raid --help`, `raid telemetry on`, and similar.
+	//
+	// Skip signals split into two tiers. Persistent — `--yes` /
+	// `--headless`, `RAID_HEADLESS=1`, non-TTY stdin, DO_NOT_TRACK —
+	// all reflect "this host is non-interactive long-term" and cause
+	// MaybePromptForConsent to persist decided=off so we don't keep
+	// re-prompting. Transient — `--json` — is just "this one command
+	// wants machine-readable output" and must NOT poison the consent
+	// state. The split was added after a real bug where one
+	// `raid context --json | jq` silently opted the user out for life.
 	if !info && !isTelemetrySubcommand(args) {
-		skip := headlessFromArgs(args) || jsonModeFromArgs(args) || lib.IsHeadless()
-		switch telemetry.MaybePromptForConsent(skip) {
+		skipPersistent := headlessFromArgs(args) || lib.IsHeadless()
+		skipTransient := jsonModeFromArgs(args)
+		switch telemetry.MaybePromptForConsent(skipPersistent, skipTransient) {
 		case telemetry.PromptAccepted:
 			// User opted in via the first-run prompt — fire the
 			// adoption event so `raid telemetry on` and the prompt

@@ -520,7 +520,10 @@ func handleListRepos(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 
 	urls := make(map[string]string, len(active.Repositories))
 	for _, r := range active.Repositories {
-		urls[r.Name] = r.URL
+		// Scrub embedded userinfo so an HTTPS clone URL with a token
+		// (`https://user:token@host/...`) doesn't leak through the
+		// MCP tool result. See raid.ScrubURL for the contract.
+		urls[r.Name] = raid.ScrubURL(r.URL)
 	}
 
 	live := rctx.Get().Workspace.Repos

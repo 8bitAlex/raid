@@ -36,9 +36,9 @@ func TestListEnvs_nilContext(t *testing.T) {
 func TestListEnvs_emptyEnvironments(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{Name: "test", Path: "/path"},
-	}
+	})
 
 	envs := ListEnvs()
 	if len(envs) != 0 {
@@ -49,14 +49,14 @@ func TestListEnvs_emptyEnvironments(t *testing.T) {
 func TestListEnvs_withEnvironments(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Environments: []Env{
 				{Name: "dev"},
 				{Name: "prod"},
 			},
 		},
-	}
+	})
 
 	envs := ListEnvs()
 	if len(envs) != 2 {
@@ -67,13 +67,13 @@ func TestListEnvs_withEnvironments(t *testing.T) {
 func TestContainsEnv(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Environments: []Env{
 				{Name: "dev"},
 			},
 		},
-	}
+	})
 
 	if !ContainsEnv("dev") {
 		t.Error("ContainsEnv(\"dev\") = false, want true")
@@ -95,11 +95,11 @@ func TestSetEnv_emptyName(t *testing.T) {
 func TestSetEnv_notFound(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Environments: []Env{{Name: "dev"}},
 		},
-	}
+	})
 
 	err := SetEnv("nonexistent")
 	if err == nil {
@@ -110,11 +110,11 @@ func TestSetEnv_notFound(t *testing.T) {
 func TestSetAndGetEnv(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Environments: []Env{{Name: "dev"}},
 		},
-	}
+	})
 
 	if err := SetEnv("dev"); err != nil {
 		t.Fatalf("SetEnv() error: %v", err)
@@ -137,7 +137,7 @@ func TestExecuteEnv_buildEnvPathError(t *testing.T) {
 	tmpFile.Close()
 	defer os.Remove(tmpFile.Name())
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/test",
@@ -145,7 +145,7 @@ func TestExecuteEnv_buildEnvPathError(t *testing.T) {
 				{Name: "repo1", Path: tmpFile.Name(), URL: "http://x.com"},
 			},
 		},
-	}
+	})
 
 	err = ExecuteEnv("dev")
 	if err == nil {
@@ -158,7 +158,7 @@ func TestExecuteEnv_taskFailure(t *testing.T) {
 
 	dir := t.TempDir()
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/test",
@@ -172,7 +172,7 @@ func TestExecuteEnv_taskFailure(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	err := ExecuteEnv("dev")
 	if err == nil {
@@ -185,7 +185,7 @@ func TestExecuteEnv_success(t *testing.T) {
 
 	dir := t.TempDir()
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/test",
@@ -199,7 +199,7 @@ func TestExecuteEnv_success(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	if err := ExecuteEnv("dev"); err != nil {
 		t.Errorf("ExecuteEnv() error: %v", err)
@@ -211,7 +211,7 @@ func TestExecuteEnv_noMatchingEnvTasks(t *testing.T) {
 
 	dir := t.TempDir()
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/test",
@@ -220,7 +220,7 @@ func TestExecuteEnv_noMatchingEnvTasks(t *testing.T) {
 			},
 			// No environments defined — env name won't match anything.
 		},
-	}
+	})
 
 	// Runs setEnvVariablesForRepos (empty vars) then runTasksForEnv (zero env, returns nil).
 	if err := ExecuteEnv("nonexistent"); err != nil {
@@ -229,7 +229,7 @@ func TestExecuteEnv_noMatchingEnvTasks(t *testing.T) {
 }
 
 func TestLoadEnv_nilContext(t *testing.T) {
-	context = nil
+	storeContext(nil)
 
 	err := LoadEnv()
 	if err == nil {
@@ -240,13 +240,13 @@ func TestLoadEnv_nilContext(t *testing.T) {
 func TestLoadEnv_noEnvFiles(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{
 				{Name: "repo1", Path: "/nonexistent/path"},
 			},
 		},
-	}
+	})
 
 	if err := LoadEnv(); err != nil {
 		t.Errorf("LoadEnv() with no .env files error: %v", err)
@@ -263,13 +263,13 @@ func TestLoadEnv_withEnvFiles(t *testing.T) {
 	}
 	defer os.Unsetenv("RAID_LOAD_TEST")
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{
 				{Name: "repo1", Path: dir},
 			},
 		},
-	}
+	})
 
 	if err := LoadEnv(); err != nil {
 		t.Errorf("LoadEnv() with .env files error: %v", err)
@@ -281,7 +281,7 @@ func TestExecuteEnv_repoEnvVars(t *testing.T) {
 
 	dir := t.TempDir()
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/test",
@@ -306,7 +306,7 @@ func TestExecuteEnv_repoEnvVars(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	if err := ExecuteEnv("dev"); err != nil {
 		t.Errorf("ExecuteEnv() with repo env vars error: %v", err)
@@ -327,7 +327,7 @@ func TestExecuteEnv_setEnvWriteError(t *testing.T) {
 	}
 	defer os.Chmod(envPath, 0644)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/test",
@@ -338,7 +338,7 @@ func TestExecuteEnv_setEnvWriteError(t *testing.T) {
 				{Name: "dev", Variables: []EnvVar{{Name: "KEY", Value: "val"}}},
 			},
 		},
-	}
+	})
 
 	if err := ExecuteEnv("dev"); err == nil {
 		t.Fatal("ExecuteEnv() expected error when .env is read-only")
@@ -355,13 +355,13 @@ func TestLoadEnv_loadFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{
 				{Name: "repo1", Path: dir},
 			},
 		},
-	}
+	})
 
 	if err := LoadEnv(); err == nil {
 		t.Fatal("LoadEnv() expected error when .env is a directory")
@@ -371,9 +371,9 @@ func TestLoadEnv_loadFailure(t *testing.T) {
 func TestLoadEnv_emptyRepositories(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{},
-	}
+	})
 
 	if err := LoadEnv(); err != nil {
 		t.Errorf("LoadEnv() with empty repositories error: %v", err)

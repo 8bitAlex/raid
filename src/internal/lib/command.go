@@ -67,18 +67,20 @@ func (c Command) IsZero() bool {
 
 // GetCommands returns all commands available in the active profile.
 func GetCommands() []Command {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return nil
 	}
-	return context.Profile.Commands
+	return ctx.Profile.Commands
 }
 
 // GetRepos returns the repositories in the active profile.
 func GetRepos() []Repo {
-	if context == nil {
+	ctx := loadContext()
+	if ctx == nil {
 		return nil
 	}
-	return context.Profile.Repositories
+	return ctx.Profile.Repositories
 }
 
 // ExecuteCommand runs the tasks for the named command, applying any output configuration.

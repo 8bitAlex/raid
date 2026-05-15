@@ -668,11 +668,12 @@ func execGroup(task Task) error {
 	if task.Ref == "" {
 		return liberrs.ArgInvalid("ref is required for Group task")
 	}
-	if context == nil || context.Profile.Groups == nil {
+	ctx := loadContext()
+	if ctx == nil || ctx.Profile.Groups == nil {
 		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "no task_groups defined in the active profile")
 	}
 
-	tasks, ok := context.Profile.Groups[task.Ref]
+	tasks, ok := ctx.Profile.Groups[task.Ref]
 	if !ok {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "task group '%s' not found in profile", task.Ref)
 	}
@@ -924,6 +925,17 @@ func execSetVar(task Task) error {
 
 	if err := godotenv.Write(m, tmpName); err != nil {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to write temp vars file: %v", err)
+	}
+
+	// Tighten perms BEFORE the rename so the final file lands at 0600
+	// atomically — godotenv.Write defaults to 0644 (world-readable),
+	// which is wrong for a file that holds raid vars (RAID_REPO_*_URL
+	// can be a clone URL, and user-defined Set values can be anything
+	// the project author treats as secret-ish). Chmod on the tempfile
+	// path: if it fails we abort before rename so we never leave a
+	// 0644 vars file on disk.
+	if err := os.Chmod(tmpName, 0600); err != nil {
+		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "failed to set vars file permissions: %v", err)
 	}
 
 	if err := os.Rename(tmpName, path); err != nil {

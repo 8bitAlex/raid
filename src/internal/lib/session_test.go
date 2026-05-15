@@ -300,7 +300,7 @@ func TestShellSession_exportedVarFlowsToSetThenShell(t *testing.T) {
 	commandStdout = &buf
 	t.Cleanup(func() { commandStdout = origOut })
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{
 				Name: "test",
@@ -314,7 +314,7 @@ func TestShellSession_exportedVarFlowsToSetThenShell(t *testing.T) {
 				},
 			}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("test", nil, nil); err != nil {
 		t.Fatalf("ExecuteCommand error: %v", err)
@@ -338,7 +338,7 @@ func TestShellSession_earlyExitStillCapturesEnv(t *testing.T) {
 
 	// The script exports a variable then calls `exit 0` explicitly — the env
 	// dump must still happen via the EXIT trap, not the sequential append.
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{
 				Name: "early",
@@ -349,7 +349,7 @@ func TestShellSession_earlyExitStillCapturesEnv(t *testing.T) {
 				},
 			}},
 		},
-	}
+	})
 
 	var buf bytes.Buffer
 	origOut := commandStdout
@@ -373,7 +373,7 @@ func TestShellSession_setECapturesEnvBeforeFailure(t *testing.T) {
 
 	// With set -e, a failing command causes an immediate exit. The EXIT trap
 	// must still capture whatever was exported before the failure.
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{
 				Name: "sete",
@@ -382,7 +382,7 @@ func TestShellSession_setECapturesEnvBeforeFailure(t *testing.T) {
 				},
 			}},
 		},
-	}
+	})
 
 	// The command fails (false exits 1), but BEFORE_FAIL must be captured.
 	_ = ExecuteCommand("sete", nil, nil)
@@ -418,7 +418,7 @@ func TestShellSession_shellLocalVarNotExpandedByRaid(t *testing.T) {
 
 	// A shell-local variable ($LOCAL) is set and echoed within the SAME task.
 	// expandRaidForShell should leave $LOCAL intact so the shell resolves it.
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{
 				Name: "local",
@@ -427,7 +427,7 @@ func TestShellSession_shellLocalVarNotExpandedByRaid(t *testing.T) {
 				},
 			}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("local", nil, nil); err != nil {
 		t.Fatalf("ExecuteCommand error: %v", err)

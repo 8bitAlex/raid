@@ -53,20 +53,32 @@ var isInteractiveFn = func() bool {
 // appropriate. Returns the resolved outcome so the caller can fire
 // follow-up events.
 //
-// Skip conditions (each → PromptSkipped + consent persisted off):
-//   - DO_NOT_TRACK env var set
-//   - Consent already decided in a prior invocation
-//   - Build has no API key (telemetry is dead code anyway)
-//   - Stdin isn't a TTY (CI, pipes, agent hosts)
-//   - skipInteractive is true (raid invoked with --yes/--headless,
-//     or for an info command like `--help`, or for a subcommand
-//     that itself manages telemetry like `raid telemetry on`)
+// Two skip tiers, by design:
 //
-// The skip-and-persist behavior matches the user-confirmed scope:
-// non-interactive contexts get the same "off forever, never
-// prompt again" treatment so a later interactive run also stays
-// quiet unless the user runs `raid telemetry on` explicitly.
-func MaybePromptForConsent(skipInteractive bool) PromptResult {
+//  1. **Persistent skip** — long-term reasons to be non-interactive:
+//     `--yes` / `--headless` / `RAID_HEADLESS=1`, `DO_NOT_TRACK=1`,
+//     stdin isn't a TTY (CI, pipes, agent hosts), already decided.
+//     These persist `decided=off` so future runs from the same
+//     machine don't re-attempt the prompt logic. Rationale: a host
+//     that's non-interactive today is probably non-interactive
+//     tomorrow; re-prompting on every run is noise.
+//
+//     Dev / no-API-key builds short-circuit before reaching this
+//     tier — there's nothing to opt out of, so consent state stays
+//     untouched and a later release-build run on the same machine
+//     will still get a fresh prompt.
+//
+//  2. **Transient skip** — per-invocation reasons that don't reflect
+//     the user's long-term posture: `--json` (machine-readable
+//     output mode for one command). The prompt is suppressed but
+//     no consent state is written, so a later interactive run
+//     still gets prompted. Rationale: piping one command through
+//     `--json` is a momentary tool choice, not an opt-out signal.
+//
+// The split exists because conflating the two caused a real bug
+// where `raid context --json | jq` silently opted the user out
+// forever. Callers must classify their skip signal correctly.
+func MaybePromptForConsent(skipPersistent, skipTransient bool) PromptResult {
 	if APIKey == "" {
 		return PromptSkipped
 	}
@@ -77,8 +89,18 @@ func MaybePromptForConsent(skipInteractive bool) PromptResult {
 	if LoadState().Decided {
 		return PromptSkipped
 	}
-	if skipInteractive || !isInteractiveFn() {
+	// Persistent skip or non-TTY: record decided=off so the prompt
+	// doesn't re-fire on subsequent runs. Checked BEFORE transient
+	// so a caller passing both (e.g. `--yes --json` together) gets
+	// the stronger "persist" outcome — not a state-leaving transient
+	// skip that resurrects the prompt on the next run.
+	if skipPersistent || !isInteractiveFn() {
 		_ = SetDecidedOff()
+		return PromptSkipped
+	}
+	// Transient skip: skip without persisting; the next interactive
+	// run without the transient signal still gets prompted.
+	if skipTransient {
 		return PromptSkipped
 	}
 

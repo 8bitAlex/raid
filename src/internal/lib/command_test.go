@@ -43,14 +43,14 @@ func TestGetCommands_nilContext(t *testing.T) {
 
 func TestGetCommands_withCommands(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{
 				{Name: "build", Usage: "Build services"},
 				{Name: "test", Usage: "Run tests"},
 			},
 		},
-	}
+	})
 
 	got := GetCommands()
 	if len(got) != 2 {
@@ -65,11 +65,11 @@ func TestGetCommands_withCommands(t *testing.T) {
 
 func TestExecuteCommand_notFound(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "other", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("nonexistent", nil, nil); err == nil {
 		t.Fatal("ExecuteCommand() expected error for unknown command, got nil")
@@ -82,11 +82,11 @@ func TestExecuteCommand_success(t *testing.T) {
 	commandStdout = io.Discard
 	t.Cleanup(func() { commandStdout = origOut })
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "noop", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("noop", nil, nil); err != nil {
 		t.Errorf("ExecuteCommand() error: %v", err)
@@ -95,11 +95,11 @@ func TestExecuteCommand_success(t *testing.T) {
 
 func TestExecuteCommand_taskFailure(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "fail", Tasks: []Task{{Type: Shell, Cmd: "exit 1"}}}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("fail", nil, nil); err == nil {
 		t.Fatal("ExecuteCommand() expected error from failing task, got nil")
@@ -119,13 +119,13 @@ func TestExecuteCommand_argsSetAsEnvVars(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "capture", Tasks: []Task{
 				{Type: Template, Src: srcFile, Dest: outFile},
 			}}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("capture", []string{"foo", "bar"}, nil); err != nil {
 		t.Fatalf("ExecuteCommand() error: %v", err)
@@ -170,13 +170,13 @@ func TestExecuteCommand_staleArgsCleared(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "capture", Tasks: []Task{
 				{Type: Template, Src: srcFile, Dest: outFile},
 			}}},
 		},
-	}
+	})
 
 	// First call with two args, second call with one — RAID_ARG_2 must not bleed through.
 	if err := ExecuteCommand("capture", []string{"first", "stale"}, nil); err != nil {
@@ -230,11 +230,11 @@ func TestExecuteCommand_namedBindings_restoresPreviousEnv(t *testing.T) {
 	const key = "RAID_NAMED_TEST_KEY"
 	t.Setenv(key, "original")
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("noop", nil, map[string]string{key: "overwritten"}); err != nil {
 		t.Fatalf("ExecuteCommand: %v", err)
@@ -256,11 +256,11 @@ func TestExecuteCommand_namedBindings_unsetsAddedKeys(t *testing.T) {
 	os.Unsetenv(key)
 	t.Cleanup(func() { os.Unsetenv(key) })
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
 		},
-	}
+	})
 
 	if err := ExecuteCommand("noop", nil, map[string]string{key: "value"}); err != nil {
 		t.Fatalf("ExecuteCommand: %v", err)
@@ -277,11 +277,11 @@ func TestExecuteCommand_namedBindings_skipsInvalidKeys(t *testing.T) {
 	commandStdout, commandStderr = io.Discard, io.Discard
 	t.Cleanup(func() { commandStdout = origOut; commandStderr = origErr })
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "noop", Tasks: []Task{}}},
 		},
-	}
+	})
 
 	// Empty keys and all-underscore keys must not call os.Setenv (which would
 	// either error on the empty key or set a useless `_=value`).
@@ -397,13 +397,13 @@ func TestExecuteCommand_namedBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "patch", Tasks: []Task{
 				{Type: Template, Src: srcFile, Dest: outFile},
 			}}},
 		},
-	}
+	})
 
 	named := map[string]string{
 		"TICKET":  "12345",
@@ -436,11 +436,11 @@ func TestExecuteCommand_notFoundDoesNotSetArgs(t *testing.T) {
 	os.Unsetenv("RAID_ARG_1")
 	t.Cleanup(func() { os.Unsetenv("RAID_ARG_1") })
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Commands: []Command{{Name: "other", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
 		},
-	}
+	})
 
 	_ = ExecuteCommand("nonexistent", []string{"should-not-be-set"}, nil)
 	if got := os.Getenv("RAID_ARG_1"); got != "" {
@@ -613,9 +613,9 @@ func TestMergeCommands(t *testing.T) {
 // --- GetRepos ---
 
 func TestGetRepos_nilContext(t *testing.T) {
-	old := context
-	context = nil
-	defer func() { context = old }()
+	old := loadContext()
+	storeContext(nil)
+	defer func() { storeContext(old) }()
 
 	if got := GetRepos(); got != nil {
 		t.Errorf("GetRepos() = %v, want nil when context is nil", got)
@@ -623,15 +623,15 @@ func TestGetRepos_nilContext(t *testing.T) {
 }
 
 func TestGetRepos_withRepos(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{
 				{Name: "backend"},
 				{Name: "frontend"},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	got := GetRepos()
 	if len(got) != 2 {
@@ -646,11 +646,11 @@ func TestGetRepos_withRepos(t *testing.T) {
 
 func TestExecuteRepoCommand_repoNotFound(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{{Name: "backend"}},
 		},
-	}
+	})
 
 	err := ExecuteRepoCommand("nonexistent", "test", nil, nil)
 	if err == nil {
@@ -663,14 +663,14 @@ func TestExecuteRepoCommand_repoNotFound(t *testing.T) {
 
 func TestExecuteRepoCommand_cmdNotFound(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{{
 				Name:     "backend",
 				Commands: []Command{{Name: "build", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
 			}},
 		},
-	}
+	})
 
 	err := ExecuteRepoCommand("backend", "nonexistent", nil, nil)
 	if err == nil {
@@ -687,14 +687,14 @@ func TestExecuteRepoCommand_success(t *testing.T) {
 	commandStdout = io.Discard
 	t.Cleanup(func() { commandStdout = origOut })
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{{
 				Name:     "backend",
 				Commands: []Command{{Name: "noop", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}},
 			}},
 		},
-	}
+	})
 
 	if err := ExecuteRepoCommand("backend", "noop", nil, nil); err != nil {
 		t.Errorf("ExecuteRepoCommand() error: %v", err)
@@ -703,14 +703,14 @@ func TestExecuteRepoCommand_success(t *testing.T) {
 
 func TestExecuteRepoCommand_taskFailure(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{{
 				Name:     "backend",
 				Commands: []Command{{Name: "fail", Tasks: []Task{{Type: Shell, Cmd: "exit 1"}}}},
 			}},
 		},
-	}
+	})
 
 	if err := ExecuteRepoCommand("backend", "fail", nil, nil); err == nil {
 		t.Fatal("expected error from failing task, got nil")
@@ -730,7 +730,7 @@ func TestExecuteRepoCommand_setsArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Repositories: []Repo{{
 				Name: "backend",
@@ -740,7 +740,7 @@ func TestExecuteRepoCommand_setsArgs(t *testing.T) {
 				}},
 			}},
 		},
-	}
+	})
 
 	if err := ExecuteRepoCommand("backend", "tmpl", []string{"hello", "world"}, nil); err != nil {
 		t.Fatalf("ExecuteRepoCommand() error: %v", err)
@@ -755,9 +755,9 @@ func TestExecuteRepoCommand_setsArgs(t *testing.T) {
 }
 
 func TestExecuteRepoCommand_nilContext(t *testing.T) {
-	old := context
-	context = nil
-	defer func() { context = old }()
+	old := loadContext()
+	storeContext(nil)
+	defer func() { storeContext(old) }()
 
 	if err := ExecuteRepoCommand("any", "any", nil, nil); err == nil {
 		t.Fatal("expected error with nil context, got nil")

@@ -70,14 +70,14 @@ func TestExecuteTask_prompt_readError(t *testing.T) {
 // --- Group parallel/retry group not found ---
 
 func TestExecuteTask_group_parallel_groupNotFound(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"other": {{Type: Shell, Cmd: "exit 0"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "nonexistent", Parallel: true}
 	if err := ExecuteTask(task); err == nil {
@@ -86,14 +86,14 @@ func TestExecuteTask_group_parallel_groupNotFound(t *testing.T) {
 }
 
 func TestExecuteTask_group_retry_groupNotFound(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Groups: map[string][]Task{
 				"other": {{Type: Shell, Cmd: "exit 0"}},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	task := Task{Type: Group, Ref: "nonexistent", Attempts: 1}
 	if err := ExecuteTask(task); err == nil {
@@ -296,6 +296,60 @@ func TestExecuteTask_setVar_storesInMemory(t *testing.T) {
 	raidVarsMu.RUnlock()
 	if got != "hello" {
 		t.Errorf("RAID_TEST_VAR = %q, want %q", got, "hello")
+	}
+}
+
+// TestExecuteTask_setVar_writesFileMode0600 pins bug C2: the vars
+// file persists project-author secrets (Set values, scrubbed clone
+// URLs) and must not be world-readable. godotenv defaults to 0644;
+// the atomic write path chmods the tempfile down to 0600 before the
+// rename so the final file always lands at the tight mode.
+func TestExecuteTask_setVar_writesFileMode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows file modes only toggle the read-only attribute via
+		// os.Chmod; POSIX permission bits don't round-trip through
+		// Stat().Mode().Perm(). The 0600 invariant is a Unix
+		// guarantee — Windows uses ACLs we don't manage here.
+		t.Skip("0600 perm bits aren't round-trippable on Windows")
+	}
+	overrideRaidVarsPath(t)
+	if err := ExecuteTask(Task{Type: SetVar, Var: "RAID_PERM_TEST", Value: "secret"}); err != nil {
+		t.Fatalf("ExecuteTask(SetVar): %v", err)
+	}
+	info, err := os.Stat(raidVarsPath())
+	if err != nil {
+		t.Fatalf("stat vars file: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("vars file mode = %o, want 0600 (world-readable bits leak credentials/values)", mode)
+	}
+}
+
+// TestLoadRaidVars_tightensExistingFilePerms covers the migration
+// path: vars files written by earlier raid versions on disk at 0644
+// should be tightened to 0600 on the next load. Best-effort — chmod
+// failures don't block the load, so a foreign-owned or read-only-
+// filesystem file just keeps its old mode.
+func TestLoadRaidVars_tightensExistingFilePerms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// See TestExecuteTask_setVar_writesFileMode0600 — Windows
+		// doesn't preserve POSIX perm bits through os.Chmod.
+		t.Skip("0600 perm bits aren't round-trippable on Windows")
+	}
+	overrideRaidVarsPath(t)
+	path := raidVarsPath()
+	if err := os.WriteFile(path, []byte("LEGACY=value\n"), 0o644); err != nil {
+		t.Fatalf("seed legacy vars file: %v", err)
+	}
+
+	loadRaidVars()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("legacy file not tightened: mode = %o, want 0600", mode)
 	}
 }
 
@@ -725,7 +779,7 @@ func TestExecuteTask_setVar_createFileError(t *testing.T) {
 // --- installRepo ---
 
 func TestInstallRepo_cloneError(t *testing.T) {
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -737,8 +791,8 @@ func TestInstallRepo_cloneError(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	err := InstallRepo("badrepo")
 	if err == nil {

@@ -563,6 +563,44 @@ func TestHandleListRepos_returnsConfiguredReposWithURL(t *testing.T) {
 	}
 }
 
+// TestHandleListRepos_scrubsCredentialBearingURL pins bug C2 at the
+// MCP handler boundary: a clone URL with embedded userinfo
+// (`https://user:token@host/...`) must come back through
+// raid_list_repos with the credentials stripped. The unit test on
+// ScrubURL alone isn't enough — a future refactor that bypasses the
+// helper here would still pass that test but reintroduce the leak.
+func TestHandleListRepos_scrubsCredentialBearingURL(t *testing.T) {
+	body := `name: test-fixture
+repositories:
+  - name: demo-repo
+    path: ` + "/tmp/raid-cmd-context-test-demo-repo-DOES-NOT-EXIST" + `
+    url: https://alice:s3cret@github.com/org/demo.git
+`
+	loadTestProfile(t, body)
+
+	res, err := handleListRepos(stdctx.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("handleListRepos: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected ok, got error: %s", toolResultText(res))
+	}
+	raw := toolResultText(res)
+	if strings.Contains(raw, "alice") || strings.Contains(raw, "s3cret") {
+		t.Fatalf("MCP response leaked credentials: %s", raw)
+	}
+	var entries []listReposEntry
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 repo, got %d: %+v", len(entries), entries)
+	}
+	if entries[0].URL != "https://github.com/org/demo.git" {
+		t.Errorf("repo URL = %q, want scrubbed scheme+host+path", entries[0].URL)
+	}
+}
+
 func TestHandleDescribeRepo_lookupByName(t *testing.T) {
 	loadTestProfile(t, minimalTestProfileBody)
 

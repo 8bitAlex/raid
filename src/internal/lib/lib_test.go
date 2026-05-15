@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -63,13 +64,13 @@ func TestLoad_noContext(t *testing.T) {
 func TestLoad_withExistingContext(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{Profile: Profile{Name: "test", Path: "/path"}}
+	storeContext(&Context{Profile: Profile{Name: "test", Path: "/path"}})
 
 	if err := Load(); err != nil {
 		t.Errorf("Load() with existing context error: %v", err)
 	}
 	// Should not reload — cached context must be preserved.
-	if context.Profile.Name != "test" {
+	if loadContext().Profile.Name != "test" {
 		t.Errorf("Load() modified existing context unexpectedly")
 	}
 }
@@ -131,8 +132,97 @@ func TestForceLoad_noActiveProfile(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Errorf("ForceLoad() with no active profile error: %v", err)
 	}
-	if context == nil {
+	if loadContext() == nil {
 		t.Fatal("ForceLoad() did not set context")
+	}
+}
+
+// TestContextRaceForceLoadVsReads pins bug C3: ForceLoad is called
+// from mutating MCP handlers (raid_install, raid_env_switch, …) while
+// read handlers (raid_list_repos, raid_describe_repo, raid_list_profiles)
+// concurrently read the package-global context pointer. Before the
+// atomic.Pointer refactor this was an undefined-behavior race that
+// `go test -race` would flag.
+//
+// CI-coverage caveat: this regression only fails loudly when the suite
+// runs under `-race`. The repo's default workflow runs
+// `go test -v ./...` without the race detector, so a non-atomic
+// pointer write reintroduced into production code would slip past
+// CI even with this test in place. The race target is meant to be
+// caught locally (`go test -race ./...`) and via the dedicated race
+// CI lane that should accompany this fix; the test is structured to
+// give the detector the strongest possible signal — a synchronized
+// start and continuous writer activity while readers are running —
+// rather than relying on goroutine scheduling luck.
+func TestContextRaceForceLoadVsReads(t *testing.T) {
+	setupTestConfig(t)
+
+	// Seed an initial context so reads have something to walk.
+	storeContext(&Context{Profile: Profile{Name: "race-test", Repositories: []Repo{
+		{Name: "a", Path: "/tmp/a"},
+		{Name: "b", Path: "/tmp/b"},
+	}}})
+
+	const readers = 8
+	const iterations = 1000
+
+	// Start barrier: every goroutine blocks on `start` so the writer
+	// can't sprint past the readers' first iteration before they're
+	// scheduled. Without this, fast machines can finish the writer
+	// loop before any reader runs and the race detector has nothing
+	// to observe.
+	start := make(chan struct{})
+	stop := make(chan struct{})
+
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		<-start
+		// Keep writing until readers are done so reads and writes
+		// genuinely overlap. Doesn't go through ForceLoad (which
+		// requires viper state) — emulates the same atomic-pointer
+		// swap path.
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			storeContext(&Context{Profile: Profile{
+				Name: "race-test",
+				Repositories: []Repo{
+					{Name: "a", Path: "/tmp/a"},
+					{Name: "b", Path: "/tmp/b"},
+				},
+			}})
+		}
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(readers)
+	for r := 0; r < readers; r++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			// Readers: walk fields the way GetCommands / GetRepos /
+			// GetWorkspaceContext do.
+			for i := 0; i < iterations; i++ {
+				_ = GetRepos()
+				_ = GetCommands()
+				_ = GetProfile()
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(stop)
+	<-writerDone
+
+	// If we got here under -race without a fatal, the atomic-pointer
+	// contract held. The assertion is implicit in the race detector.
+	if loadContext() == nil {
+		t.Fatal("context unexpectedly nil after race test")
 	}
 }
 
@@ -168,8 +258,8 @@ func TestForceLoad_withValidProfile(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Errorf("ForceLoad() with valid profile error: %v", err)
 	}
-	if context == nil || context.Profile.Name != "testprofile" {
-		t.Errorf("ForceLoad() context = %v, want profile named testprofile", context)
+	if loadContext() == nil || loadContext().Profile.Name != "testprofile" {
+		t.Errorf("ForceLoad() context = %v, want profile named testprofile", loadContext())
 	}
 }
 
@@ -284,7 +374,7 @@ func TestValidateSchema_schemaViolation(t *testing.T) {
 func TestInstall_noProfile(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{Profile: Profile{}}
+	storeContext(&Context{Profile: Profile{}})
 
 	err := Install(1)
 	if err == nil {
@@ -295,9 +385,9 @@ func TestInstall_noProfile(t *testing.T) {
 func TestInstall_noRepos(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{Name: "test", Path: "/path"},
-	}
+	})
 
 	if err := Install(0); err != nil {
 		t.Errorf("Install() with no repos error: %v", err)
@@ -311,7 +401,7 @@ func TestInstall_withSemaphoreAndExistingRepo(t *testing.T) {
 	// Fake git repo — CloneRepository will skip cloning.
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -319,7 +409,7 @@ func TestInstall_withSemaphoreAndExistingRepo(t *testing.T) {
 				{Name: "repo1", Path: dir, URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	// maxThreads=1 exercises the semaphore acquisition/release paths.
 	if err := Install(1); err != nil {
@@ -332,7 +422,7 @@ func TestInstall_cloneFailure(t *testing.T) {
 
 	dir := t.TempDir()
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -341,7 +431,7 @@ func TestInstall_cloneFailure(t *testing.T) {
 				{Name: "repo1", Path: filepath.Join(dir, "newrepo"), URL: "file:///nonexistent/repo.git"},
 			},
 		},
-	}
+	})
 
 	err := Install(0)
 	if err == nil {
@@ -352,7 +442,7 @@ func TestInstall_cloneFailure(t *testing.T) {
 func TestInstall_installTaskFailure(t *testing.T) {
 	setupTestConfig(t)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -360,7 +450,7 @@ func TestInstall_installTaskFailure(t *testing.T) {
 				Tasks: []Task{{Type: Shell, Cmd: "exit 1"}},
 			},
 		},
-	}
+	})
 
 	err := Install(0)
 	if err == nil {
@@ -374,7 +464,7 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -389,7 +479,7 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 
 	err := Install(0)
 	if err == nil {
@@ -399,7 +489,7 @@ func TestInstall_repoInstallTaskFailure(t *testing.T) {
 
 func TestInstallRepo_notFound(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -407,7 +497,7 @@ func TestInstallRepo_notFound(t *testing.T) {
 				{Name: "repo1", Path: t.TempDir(), URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	err := InstallRepo("doesnotexist")
 	if err == nil {
@@ -436,7 +526,7 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 		raidVarsMu.Unlock()
 	})
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -453,7 +543,7 @@ func TestInstallRepo_clonesAndRunsTasks(t *testing.T) {
 				{Name: "other", Path: t.TempDir(), URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	if err := InstallRepo("target"); err != nil {
 		t.Fatalf("InstallRepo() error: %v", err)
@@ -483,7 +573,7 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 		raidVarsMu.Unlock()
 	})
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -494,7 +584,7 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 				{Name: "repo1", Path: dir, URL: "http://example.com"},
 			},
 		},
-	}
+	})
 
 	if err := InstallRepo("repo1"); err != nil {
 		t.Fatalf("InstallRepo() error: %v", err)
@@ -509,7 +599,7 @@ func TestInstallRepo_doesNotRunProfileTasks(t *testing.T) {
 
 func TestInstallRepo_noContext(t *testing.T) {
 	setupTestConfig(t)
-	context = nil
+	storeContext(nil)
 
 	if err := InstallRepo("any"); err == nil {
 		t.Fatal("InstallRepo() expected error when context is nil")
@@ -518,7 +608,7 @@ func TestInstallRepo_noContext(t *testing.T) {
 
 func TestInstallRepo_noProfile(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{Profile: Profile{}}
+	storeContext(&Context{Profile: Profile{}})
 
 	if err := InstallRepo("any"); err == nil {
 		t.Fatal("InstallRepo() expected error when profile is zero")
@@ -573,10 +663,10 @@ func TestForceLoad_mergesRepoCommands(t *testing.T) {
 
 func TestResetContext_nilsContext(t *testing.T) {
 	setupTestConfig(t)
-	context = &Context{Profile: Profile{Name: "foo"}}
+	storeContext(&Context{Profile: Profile{Name: "foo"}})
 	ResetContext()
-	if context != nil {
-		t.Errorf("ResetContext() did not nil context, got %v", context)
+	if loadContext() != nil {
+		t.Errorf("ResetContext() did not nil context, got %v", loadContext())
 	}
 }
 
@@ -894,7 +984,7 @@ func TestRaidVarsPath_default(t *testing.T) {
 // TestInstall_nilContext tests the early return branch when context is nil.
 func TestInstall_nilContext(t *testing.T) {
 	setupTestConfig(t)
-	context = nil
+	storeContext(nil)
 
 	if err := Install(0); err == nil {
 		t.Error("Install() expected error when context is nil")
@@ -960,8 +1050,8 @@ func TestForceLoad_withGroups(t *testing.T) {
 	if err := ForceLoad(); err != nil {
 		t.Fatalf("ForceLoad with groups: %v", err)
 	}
-	if context == nil || len(context.Profile.Groups) != 2 {
-		t.Errorf("ForceLoad: expected 2 groups, got %v", context)
+	if loadContext() == nil || len(loadContext().Profile.Groups) != 2 {
+		t.Errorf("ForceLoad: expected 2 groups, got %v", loadContext())
 	}
 }
 
@@ -973,7 +1063,7 @@ func TestInstallRepo_installTaskError(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
-	context = &Context{
+	storeContext(&Context{
 		Profile: Profile{
 			Name: "test",
 			Path: "/path",
@@ -988,8 +1078,8 @@ func TestInstallRepo_installTaskError(t *testing.T) {
 				},
 			},
 		},
-	}
-	defer func() { context = nil }()
+	})
+	defer func() { storeContext(nil) }()
 
 	err := InstallRepo("repo1")
 	if err == nil {
@@ -1161,6 +1251,72 @@ func TestSetRepoVars_overwritesPriorEntries(t *testing.T) {
 	raidVarsMu.RUnlock()
 	if got != "fresh" {
 		t.Errorf("RAID_REPO_API_URL = %q after setRepoVars, want %q", got, "fresh")
+	}
+}
+
+// TestSetRepoVars_scrubsCredentialsFromURL pins bug C2: a profile YAML
+// using `https://user:token@host/...` as a clone URL must not persist
+// the credential to ~/.raid/vars or surface it through MCP.
+// setRepoVars is the choke point — once a URL passes through it,
+// downstream consumers (the vars resource, every Print/Set task
+// referencing $RAID_REPO_*_URL, etc.) see the scrubbed form.
+func TestSetRepoVars_scrubsCredentialsFromURL(t *testing.T) {
+	withCleanRaidVars(t)
+
+	setRepoVars([]Repo{
+		{Name: "api", Path: "/tmp/api", URL: "https://alice:s3cret@github.com/org/repo.git"},
+		{Name: "ssh", Path: "/tmp/ssh", URL: "git@github.com:org/ssh-repo.git"},
+		{Name: "plain", Path: "/tmp/plain", URL: "https://github.com/org/plain.git"},
+	})
+
+	raidVarsMu.RLock()
+	apiURL := raidVars["RAID_REPO_API_URL"]
+	sshURL := raidVars["RAID_REPO_SSH_URL"]
+	plainURL := raidVars["RAID_REPO_PLAIN_URL"]
+	raidVarsMu.RUnlock()
+
+	if strings.Contains(apiURL, "alice") || strings.Contains(apiURL, "s3cret") {
+		t.Errorf("RAID_REPO_API_URL leaked credentials: %q", apiURL)
+	}
+	if apiURL != "https://github.com/org/repo.git" {
+		t.Errorf("RAID_REPO_API_URL = %q, want scheme+host+path preserved", apiURL)
+	}
+	// SSH URLs have no userinfo to scrub — must round-trip verbatim.
+	if sshURL != "git@github.com:org/ssh-repo.git" {
+		t.Errorf("SSH URL mangled: got %q, want %q", sshURL, "git@github.com:org/ssh-repo.git")
+	}
+	// Plain HTTPS URLs must round-trip verbatim too.
+	if plainURL != "https://github.com/org/plain.git" {
+		t.Errorf("plain HTTPS URL mangled: got %q, want %q", plainURL, "https://github.com/org/plain.git")
+	}
+}
+
+// TestScrubURL covers the helper in isolation against the edge cases
+// setRepoVars exercises in aggregate.
+func TestScrubURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"https with userinfo", "https://alice:secret@github.com/org/repo.git", "https://github.com/org/repo.git"},
+		{"https user only", "https://alice@github.com/org/repo.git", "https://github.com/org/repo.git"},
+		{"https no userinfo", "https://github.com/org/repo.git", "https://github.com/org/repo.git"},
+		{"http with userinfo", "http://u:p@example.com/", "http://example.com/"},
+		{"ssh scp-style", "git@github.com:org/repo.git", "git@github.com:org/repo.git"},
+		{"ssh url scheme preserves user", "ssh://git@github.com/org/repo.git", "ssh://git@github.com/org/repo.git"},
+		{"git+ssh preserves user", "git+ssh://git@example.com/org/repo.git", "git+ssh://git@example.com/org/repo.git"},
+		{"unparseable", "://broken", "://broken"},
+		{"path only", "/local/path", "/local/path"},
+		{"query preserved", "https://alice:s@host/p?ref=main", "https://host/p?ref=main"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ScrubURL(tt.in); got != tt.want {
+				t.Errorf("ScrubURL(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
 
