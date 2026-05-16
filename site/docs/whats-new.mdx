@@ -9,6 +9,12 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.17.3 — upcoming
+
+Test-only hotfix. No behavior change to the shipped binary.
+
+**`TestWriteIDExclusive_mkdirFailure` now passes on Windows.** The test pinned `writeIDExclusive`'s "MkdirAll fails → error returned" contract by passing `/dev/null/impossible/path/id` — a path that only forces `MkdirAll` to fail on POSIX, where `/dev/null` is a char-device file the kernel refuses to descend into. On Windows there is no `/dev/null`, so `MkdirAll` happily created `C:\dev\null\impossible\path\` and the test failed with no returned error. Replaced with a portable file-as-parent-dir trick (write a regular file, then pass a path that treats it as a directory component) which fails `MkdirAll` on both POSIX (ENOTDIR) and Windows (ERROR_DIRECTORY).
+
 ## 0.17.2 — upcoming
 
 Eighteen High and Medium pre-v1.0 review fixes. No new features; behavior changes are surgical and called out individually below.
