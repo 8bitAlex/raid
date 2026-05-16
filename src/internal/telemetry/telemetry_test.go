@@ -1064,9 +1064,24 @@ func TestPurgeID_alreadyAbsent(t *testing.T) {
 
 func TestWriteIDExclusive_mkdirFailure(t *testing.T) {
 	setupTestEnv(t)
-	_, err := writeIDExclusive("/dev/null/impossible/path/id", "test-id")
+	// Force MkdirAll to fail in a portable way: create a regular file
+	// and pass a path that treats it as a directory component. On
+	// POSIX this yields ENOTDIR; on Windows it yields ERROR_DIRECTORY
+	// / "the directory name is invalid". Either way MkdirAll returns
+	// non-nil, which is the contract the test pins.
+	//
+	// The previous version passed `/dev/null/impossible/path/id`,
+	// which only fails on POSIX (where /dev/null is a char-device
+	// file). On Windows there is no /dev/null and MkdirAll happily
+	// creates the chain under the current drive, so the test failed.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatalf("setup blocker file: %v", err)
+	}
+	_, err := writeIDExclusive(filepath.Join(blocker, "impossible", "id"), "test-id")
 	if err == nil {
-		t.Fatal("writeIDExclusive() with impossible path should error")
+		t.Fatal("writeIDExclusive() with file-as-parent-dir path should error")
 	}
 }
 
