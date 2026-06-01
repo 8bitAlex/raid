@@ -9,6 +9,10 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.17.4 — upcoming
+
+**The `install.sh` script now installs on Windows.** Run it from a Git Bash (MSYS2 / Cygwin) shell and the installer detects the `MINGW*` / `MSYS*` / `CYGWIN*` platform, downloads the `windows_amd64` `.zip` release, verifies its checksum, and unzips `raid.exe` into `~/bin` (created if missing). If `~/bin` is not on your `PATH`, the script prints the `export PATH` line to add. WSL is unchanged — it reports `linux` from `uname`, so it follows the existing Linux path and installs the Linux binary. Windows is published for `amd64` only; `arm64` is rejected with a clear message, and the script errors early if `unzip` is missing.
+
 ## 0.17.3 — upcoming
 
 Test-only hotfix. No behavior change to the shipped binary.

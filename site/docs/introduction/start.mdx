@@ -14,10 +14,12 @@ Raid is designed to be easy to get up and running. This guide walks through inst
 brew install 8bitalex/tap/raid
 ```
 
-**Script** <span className="subtitle">for macOS/Linux</span>
+**Script** <span className="subtitle">for macOS/Linux/Windows/WSL</span>
 ```bash
 curl -fsSL https://raidcli.dev/install.sh | bash
 ```
+
+On Windows, run the script from a **Git Bash** shell — it downloads `raid.exe` and installs it into `~/bin` (printing the `PATH` line to add if that directory is not already on your `PATH`). Inside WSL the script installs the Linux binary. On macOS it hands off to Homebrew.
 
 **Download** <span className="subtitle">for Windows/Linux/macOS</span>
 

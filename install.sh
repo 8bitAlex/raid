@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 #
-# Raid installer — Linux (with automatic Homebrew handoff on macOS).
+# Raid installer — Linux, Windows (Git Bash), and WSL,
+# with automatic Homebrew handoff on macOS.
 #
 # Raid is a declarative multi-repo development environment orchestrator:
 # a cross-platform Go CLI that turns your team's commands, environments,
 # and workflows into version-controlled YAML.
+#
+# On Windows, run this from a Git Bash shell. Inside WSL the script
+# behaves like any other Linux install (it installs the Linux binary).
 #
 # Homepage: https://github.com/8bitalex/raid
 # License:  GPL-3.0-only
@@ -16,33 +20,59 @@ set -euo pipefail
 
 REPO="8bitalex/raid"
 BINARY="raid"
-INSTALL_DIR="/usr/local/bin"
 
 # ── OS check ────────────────────────────────────────────────────────────────
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-if [[ "$OS" == "darwin" ]]; then
-  if ! command -v brew &>/dev/null; then
-    echo "Error: Homebrew is required on macOS. Install it from https://brew.sh"
+# WSL reports "linux" from uname, so it follows the Linux path automatically.
+# Git Bash / MSYS2 / Cygwin report MINGW*/MSYS*/CYGWIN*, which map to Windows.
+UNAME=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "$UNAME" in
+  darwin)
+    if ! command -v brew &>/dev/null; then
+      echo "Error: Homebrew is required on macOS. Install it from https://brew.sh"
+      exit 1
+    fi
+    exec brew install 8bitalex/tap/raid
+    ;;
+  linux)
+    OS="linux"
+    EXT="tar.gz"
+    ;;
+  mingw*|msys*|cygwin*)
+    OS="windows"
+    EXT="zip"
+    BINARY="raid.exe"
+    ;;
+  *)
+    echo "Unsupported OS: $UNAME"
     exit 1
-  fi
-  exec brew install 8bitalex/tap/raid
-fi
-
-if [[ "$OS" != "linux" ]]; then
-  echo "Unsupported OS: $OS"
-  exit 1
-fi
+    ;;
+esac
 
 # ── Architecture ─────────────────────────────────────────────────────────────
 ARCH=$(uname -m)
 case "$ARCH" in
-  x86_64)  ARCH="amd64" ;;
-  aarch64) ARCH="arm64" ;;
+  x86_64|amd64)   ARCH="amd64" ;;
+  aarch64|arm64)  ARCH="arm64" ;;
   *)
     echo "Unsupported architecture: $ARCH"
     exit 1
     ;;
 esac
+
+# Windows releases are published for amd64 only.
+if [[ "$OS" == "windows" && "$ARCH" != "amd64" ]]; then
+  echo "Unsupported architecture for Windows: $ARCH (only amd64 is published)"
+  exit 1
+fi
+
+# ── Install directory ──────────────────────────────────────────────────────
+# Windows lacks a writable /usr/local/bin, so install into the user's
+# ~/bin (created if missing) and warn if it is not on PATH.
+if [[ "$OS" == "windows" ]]; then
+  INSTALL_DIR="${HOME}/bin"
+else
+  INSTALL_DIR="/usr/local/bin"
+fi
 
 # ── Resolve version ──────────────────────────────────────────────────────────
 VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
@@ -55,11 +85,11 @@ if [[ -z "$VERSION" ]]; then
 fi
 
 # ── Download & verify ────────────────────────────────────────────────────────
-FILENAME="${BINARY}_${VERSION}_${OS}_${ARCH}.tar.gz"
+FILENAME="${BINARY%.exe}_${VERSION}_${OS}_${ARCH}.${EXT}"
 URL="https://github.com/${REPO}/releases/download/v${VERSION}/${FILENAME}"
 CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/checksums.txt"
 
-echo "Installing ${BINARY} v${VERSION} (${OS}/${ARCH})..."
+echo "Installing raid v${VERSION} (${OS}/${ARCH})..."
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -79,10 +109,22 @@ fi
 
 (cd "$TMP" && sha256sum -c "${TMP}/checksums_for_file.txt")
 
-tar -xzf "${TMP}/${FILENAME}" -C "$TMP"
+# ── Extract ────────────────────────────────────────────────────────────────
+if [[ "$EXT" == "zip" ]]; then
+  if ! command -v unzip >/dev/null 2>&1; then
+    echo "Error: unzip is required to extract the Windows archive."
+    exit 1
+  fi
+  unzip -o -q "${TMP}/${FILENAME}" -d "$TMP"
+else
+  tar -xzf "${TMP}/${FILENAME}" -C "$TMP"
+fi
 
 # ── Install ───────────────────────────────────────────────────────────────────
-if [[ -w "$INSTALL_DIR" ]]; then
+if [[ "$OS" == "windows" ]]; then
+  mkdir -p "$INSTALL_DIR"
+  mv "${TMP}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+elif [[ -w "$INSTALL_DIR" ]]; then
   mv "${TMP}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
 else
   echo "Installing to ${INSTALL_DIR} (requires sudo)..."
@@ -92,3 +134,16 @@ fi
 echo ""
 echo "Installed successfully:"
 "${INSTALL_DIR}/${BINARY}" --version
+
+# On Windows, ~/bin is rarely on PATH out of the box — nudge the user.
+if [[ "$OS" == "windows" ]]; then
+  case ":${PATH}:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *)
+      echo ""
+      echo "Note: ${INSTALL_DIR} is not on your PATH."
+      echo "Add it (e.g. in ~/.bashrc) so you can run 'raid' from anywhere:"
+      echo "  export PATH=\"\$HOME/bin:\$PATH\""
+      ;;
+  esac
+fi
