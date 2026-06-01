@@ -100,12 +100,20 @@ Feedback, issues, and contributions are welcome.
 brew install 8bitalex/tap/raid
 ```
 
-**Linux**
+**Linux / WSL**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash
 ```
 
-**Windows**
+**Windows (Git Bash)**
+
+From a Git Bash shell the same script installs `raid.exe` into `~/bin` (it prints the `PATH` line to add if that directory isn't already on your `PATH`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash
+```
+
+**Windows (manual)**
 
 1. Go to the [latest release](https://github.com/8bitalex/raid/releases/latest) and download `raid_<version>_windows_amd64.zip`
 2. Extract the zip — you'll find `raid.exe` inside
