@@ -1,0 +1,18 @@
+# Codecov configuration.
+#
+# The Go suite runs with -covermode=atomic across concurrent tests, so a
+# handful of timing-dependent branches (async version check, telemetry,
+# concurrent task output) flip between hit/miss/partial run-to-run. That
+# produces sub-1% coverage swings on PRs that change no Go code at all.
+# The threshold below absorbs that flakiness while still enforcing the
+# project's 90% floor (see CLAUDE.md) and demanding high patch coverage.
+coverage:
+  status:
+    project:
+      default:
+        target: 90%
+        threshold: 1%
+    patch:
+      default:
+        target: 90%
+        threshold: 1%
