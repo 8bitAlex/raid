@@ -74,7 +74,7 @@ Raw YAML samples in the repo:
 
 - [install.sh](https://github.com/8bitalex/raid/blob/main/install.sh): Linux/macOS/Windows/WSL installer — `curl -fsSL https://raw.githubusercontent.com/8bitalex/raid/main/install.sh | bash`. macOS hands off to Homebrew; WSL installs the Linux binary; run from Git Bash on Windows to install `raid.exe` into `~/bin`.
 - [Homebrew tap](https://github.com/8bitalex/homebrew-tap): macOS — `brew install 8bitalex/tap/raid`
-- [Releases](https://github.com/8bitalex/raid/releases): Prebuilt binaries for macOS, Linux, and Windows (amd64 and arm64)
+- [Releases](https://github.com/8bitalex/raid/releases): Prebuilt binaries for macOS and Linux (amd64 and arm64) and Windows (amd64 only)
 
 ## Optional
 
