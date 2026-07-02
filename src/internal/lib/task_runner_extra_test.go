@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1302,5 +1303,37 @@ func TestBuildSubprocessEnv_marksLockHeld(t *testing.T) {
 		if kv == MutationLockEnvVar+"=1" {
 			t.Fatal("lock marker still present after release")
 		}
+	}
+}
+
+func TestExecuteTask_print_prefixedWhenConcurrentOnTTY(t *testing.T) {
+	prev := isTerminalSinkFn
+	isTerminalSinkFn = func(io.Writer) bool { return true }
+	defer func() { isTerminalSinkFn = prev }()
+	t.Setenv("NO_COLOR", "1")
+
+	var buf bytes.Buffer
+	restore := SetCommandOutput(&buf, io.Discard)
+	defer restore()
+
+	task := Task{Type: Print, Message: "hello", Concurrent: false}
+	// shouldPrefix requires Concurrent; execPrint is reached via
+	// dispatch, so call with the flag set directly.
+	task.Concurrent = true
+	if err := dispatchTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := buf.String(); got != "[print] hello\n" {
+		t.Errorf("output = %q, want prefixed line", got)
+	}
+
+	// Colored variant through the same wrapped path.
+	buf.Reset()
+	colored := Task{Type: Print, Message: "hi", Color: "green", Concurrent: true}
+	if err := dispatchTask(colored); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := buf.String(); !strings.Contains(got, "[print] ") || !strings.Contains(got, "hi") {
+		t.Errorf("colored output = %q, want prefixed line", got)
 	}
 }

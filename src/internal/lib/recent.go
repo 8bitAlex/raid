@@ -43,6 +43,11 @@ type RecentEntry struct {
 	DurationMs int64     `json:"durationMs,omitempty"`
 }
 
+// renameFn is the rename operation used by writeRecent's atomic swap.
+// Tests substitute it to exercise the Windows fallback branches, where
+// renaming over an existing destination fails.
+var renameFn = os.Rename
+
 // RecentPathOverride redirects the recent.json log path. Intended only for
 // tests that exercise ExecuteCommand so they do not pollute the developer's
 // real ~/.raid/recent.json.
@@ -151,6 +156,10 @@ func RecordRecentEnd(command string, runErr error, startedAt time.Time) {
 //
 // All errors are silenced — recording history must never break command
 // execution. On any failure the temp file is cleaned up.
+//
+// renameFn is injectable so tests can drive the Windows-style fallback
+// (first rename refused) deterministically on POSIX, where os.Rename
+// always replaces an existing file.
 func writeRecent(entries []RecentEntry) {
 	path := recentPath()
 	dir := filepath.Dir(path)
@@ -190,14 +199,14 @@ func writeRecent(entries []RecentEntry) {
 	// exists, so fall back to moving the old file aside and swapping. The
 	// aside file (not a bare os.Remove) means a failure of the second
 	// rename can restore the previous history instead of losing it.
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := renameFn(tmpPath, path); err != nil {
 		bak := path + ".bak"
 		_ = os.Remove(bak)
-		if err := os.Rename(path, bak); err != nil {
+		if err := renameFn(path, bak); err != nil {
 			return
 		}
-		if err := os.Rename(tmpPath, path); err != nil {
-			_ = os.Rename(bak, path)
+		if err := renameFn(tmpPath, path); err != nil {
+			_ = renameFn(bak, path)
 			return
 		}
 		_ = os.Remove(bak)

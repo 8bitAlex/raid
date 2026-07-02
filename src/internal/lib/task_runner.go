@@ -440,14 +440,21 @@ func parseEnvLines(output string) map[string]string {
 		}
 		return result
 	}
+	lines := strings.Split(output, "\n")
+	// Drop only the artifact of a trailing final newline — every other
+	// empty line sits between two lines of some entry and is a blank
+	// line inside a multi-line value, which must be preserved.
+	if n := len(lines); n > 0 && lines[n-1] == "" {
+		lines = lines[:n-1]
+	}
 	lastKey := ""
-	for _, line := range strings.Split(output, "\n") {
+	for _, line := range lines {
 		if k, v, found := strings.Cut(line, "="); found && isEnvName(k) {
 			result[k] = v
 			lastKey = k
 			continue
 		}
-		if lastKey != "" && line != "" {
+		if lastKey != "" {
 			result[lastKey] += "\n" + line
 		}
 	}
@@ -485,8 +492,10 @@ func isPOSIXShell(shell string) bool {
 }
 
 // shellSingleQuote escapes s for interpolation inside a single-quoted
-// POSIX shell string ('...' → '\” splice), so a TMPDIR containing a
-// quote can't break out of the session wrapper.
+// POSIX shell string. Each single quote in s is replaced with the
+// close-quote / escaped-quote / reopen-quote splice (quote, backslash
+// quote, quote, quote), so a TMPDIR containing a quote can't break out
+// of the session wrapper.
 func shellSingleQuote(s string) string {
 	return strings.ReplaceAll(s, "'", `'\''`)
 }

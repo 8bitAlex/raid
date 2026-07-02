@@ -89,6 +89,24 @@ func TestParseEnvLines_newlineFallbackRejoinsMultilineValues(t *testing.T) {
 	}
 }
 
+func TestParseEnvLines_newlineFallbackPreservesBlankLinesInValues(t *testing.T) {
+	// A blank line INSIDE a multi-line value must be preserved; only the
+	// artifact of the dump's trailing final newline is dropped.
+	input := "KEY=first\n\nafter-blank\nOTHER=x\n"
+	got := parseEnvLines(input)
+	if got["KEY"] != "first\n\nafter-blank" {
+		t.Errorf("KEY = %q, want blank continuation line preserved", got["KEY"])
+	}
+	if got["OTHER"] != "x" {
+		t.Errorf("OTHER = %q, want %q", got["OTHER"], "x")
+	}
+	// Without a trailing newline the last line is still real content.
+	got2 := parseEnvLines("KEY=a\n\nb")
+	if got2["KEY"] != "a\n\nb" {
+		t.Errorf("KEY = %q, want trailing continuation kept when no final newline", got2["KEY"])
+	}
+}
+
 func TestIsEnvName(t *testing.T) {
 	valid := []string{"A", "_", "FOO", "foo_bar", "_9", "A1"}
 	for _, s := range valid {

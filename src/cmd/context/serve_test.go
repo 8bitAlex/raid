@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -983,5 +984,45 @@ commands:
 	}
 	if res.IsError {
 		t.Errorf("expected success, got error: %s", toolResultText(res))
+	}
+}
+
+// TestHandleInstall_successReloadsWorkspace drives the success branch:
+// the repo path is already a real git repository, so InstallRepo skips
+// the clone and succeeds, and the handler refreshes the cached
+// workspace via reloadWorkspace.
+func TestHandleInstall_successReloadsWorkspace(t *testing.T) {
+	repoDir := t.TempDir()
+	for _, args := range [][]string{
+		{"init"},
+		{"config", "user.email", "test@test"},
+		{"config", "user.name", "test"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("git unavailable: %v (%s)", err, out)
+		}
+	}
+
+	loadTestProfile(t, `
+name: test-fixture
+repositories:
+  - name: myrepo
+    path: `+repoDir+`
+    url: https://example.com/repo.git
+`)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"repo": "myrepo"}
+	res, err := handleInstall(stdctx.Background(), req)
+	if err != nil {
+		t.Fatalf("handleInstall: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected success (existing git repo skips clone), got: %s", toolResultText(res))
+	}
+	if !strings.Contains(toolResultText(res), "myrepo") {
+		t.Errorf("expected repo name in success output, got: %s", toolResultText(res))
 	}
 }

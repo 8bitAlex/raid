@@ -1603,3 +1603,13 @@ func TestAddProfiles_caseCollisionWarns(t *testing.T) {
 		t.Errorf("expected case-collision warning, got %q", buf.String())
 	}
 }
+
+func TestValidateProfile_jsonMalformedArrayRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte(`[{"name": "broken"`), 0644)
+
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() must reject malformed JSON arrays")
+	}
+}
