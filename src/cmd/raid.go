@@ -57,6 +57,11 @@ func init() {
 	rootCmd.PersistentFlags().Bool("headless", false, "Alias for --yes; intended for CI, scheduled runs, and agent hosts. Also enabled by setting RAID_HEADLESS=1 in the environment.")
 	rootCmd.PersistentFlags().Bool("no-prefix", false, "Disable per-task output prefixing in concurrent runs. Equivalent to RAID_NO_PREFIX=1.")
 	rootCmd.PersistentPreRunE = applyPersistentEnvFlags
+	// Consent persistence rewrites the shared ~/.raid config file, so it
+	// must serialize through the same cross-process mutation lock every
+	// other config writer uses. Injected here because telemetry can't
+	// import lib (lib imports telemetry).
+	telemetry.SetLockFunc(raid.WithMutationLock)
 	// Subcommands
 	rootCmd.AddCommand(profile.Command)
 	rootCmd.AddCommand(install.Command)
@@ -614,6 +619,13 @@ func applyConfigFlag(args []string) {
 			return
 		}
 		if v, ok := strings.CutPrefix(arg, "-c="); ok {
+			*raid.ConfigPath = v
+			return
+		}
+		// Glued shorthand value (`-c/path/cfg.yaml`), which pflag also
+		// accepts. The `-c=` form was already handled above, and a bare
+		// `-c` falls through to the flag-with-separate-value case below.
+		if v, ok := strings.CutPrefix(arg, "-c"); ok && v != "" {
 			*raid.ConfigPath = v
 			return
 		}

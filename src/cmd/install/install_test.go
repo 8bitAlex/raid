@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 const (
-	subprocEnvNoArgs  = "RAID_TEST_INSTALL_NOARGS"
-	subprocEnvOneArg  = "RAID_TEST_INSTALL_ONEARG"
+	subprocEnvNoArgs = "RAID_TEST_INSTALL_NOARGS"
+	subprocEnvOneArg = "RAID_TEST_INSTALL_ONEARG"
 )
 
 func setupConfig(t *testing.T) {
@@ -77,6 +78,47 @@ func TestInstallCommand_oneArg_returnsError(t *testing.T) {
 	}
 }
 
+// TestInstallCommand_threadsWithRepoArg_isError covers the flag/arg
+// combination the help text forbids: an explicit --threads together with a
+// repository argument must be rejected instead of silently ignored.
+func TestInstallCommand_threadsWithRepoArg_isError(t *testing.T) {
+	setupConfig(t)
+	if err := Command.Flags().Set("threads", "4"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = Command.Flags().Set("threads", "0")
+		Command.Flags().Lookup("threads").Changed = false
+	})
+
+	err := Command.RunE(Command, []string{"some-repo"})
+	if err == nil {
+		t.Fatal("expected error when --threads is combined with a repo argument")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeArgInvalid {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeArgInvalid)
+	}
+}
+
+// TestInstallCommand_defaultThreadsWithRepoArg_notArgError guards that the
+// untouched --threads default does NOT trigger the combination error — only
+// an explicitly set flag does.
+func TestInstallCommand_defaultThreadsWithRepoArg_notArgError(t *testing.T) {
+	setupConfig(t)
+
+	err := Command.RunE(Command, []string{"some-repo"})
+	if err == nil {
+		t.Fatal("expected error when no profile configured")
+	}
+	if rErr, ok := errs.AsError(err); ok && rErr.Code() == errs.CodeArgInvalid {
+		t.Errorf("default --threads must not be rejected, got %v", err)
+	}
+}
+
 // setupConfigWithProfile creates a config with a profile that has a local repo
 // that can actually be cloned.
 func setupConfigWithProfile(t *testing.T) string {
@@ -133,7 +175,7 @@ func TestInstallCommand_noArgs_success(t *testing.T) {
 
 	// Call the Run handler directly - on success it just returns without log.Fatalf
 	cmd := &cobra.Command{}
-	_ = Command.RunE(cmd,[]string{})
+	_ = Command.RunE(cmd, []string{})
 
 	// Verify the repo was cloned
 	if _, err := os.Stat(cloneDest); err != nil {
@@ -145,7 +187,7 @@ func TestInstallCommand_oneArg_success(t *testing.T) {
 	cloneDest := setupConfigWithProfile(t)
 
 	cmd := &cobra.Command{}
-	_ = Command.RunE(cmd,[]string{"repo1"})
+	_ = Command.RunE(cmd, []string{"repo1"})
 
 	if _, err := os.Stat(cloneDest); err != nil {
 		t.Errorf("install repo1: expected repo cloned at %s, got: %v", cloneDest, err)

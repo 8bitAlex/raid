@@ -19,6 +19,11 @@ const IDFileEnv = "RAID_TELEMETRY_ID_FILE"
 // platform-correct path on macOS/Linux/Windows.
 var homeDirFn = os.UserHomeDir
 
+// writeFileFn wraps os.WriteFile for the corrupt-id repair path —
+// overridable in tests so the write-failure branch is exercisable
+// without fs permission tricks (which don't bite when running as root).
+var writeFileFn = os.WriteFile
+
 // idMu guards the in-process cache around the ID file so concurrent
 // Capture calls don't race on the read/write. The file itself is
 // effectively single-writer (the user, on this machine), so we don't
@@ -133,7 +138,10 @@ func newID() (string, error) {
 // writeIDExclusive persists the ID at path using O_CREATE|O_EXCL so
 // concurrent callers can't clobber each other's value. If the file
 // already exists (another process won the race), the existing
-// contents are read and returned instead. Permissions are 0600
+// contents are read and returned instead. An existing-but-empty file
+// (a crash between create and write) is treated as corrupt and
+// repaired in place with the new ID — otherwise a zero-byte file
+// would silently disable telemetry forever. Permissions are 0600
 // because this is a stable identifier for the user's machine — not a
 // secret, but no reason to leave it world-readable either.
 func writeIDExclusive(path, id string) (string, error) {
@@ -150,7 +158,13 @@ func writeIDExclusive(path, id string) (string, error) {
 			}
 			existing := strings.TrimSpace(string(data))
 			if existing == "" {
-				return "", fmt.Errorf("telemetry: id file present but empty at %s", path)
+				// Corrupt zero-byte file (crash between O_EXCL create
+				// and write). Rewrite it in place — callers already
+				// hold idMu, so this can't race in-process.
+				if writeErr := writeFileFn(path, []byte(id+"\n"), 0600); writeErr != nil {
+					return "", writeErr
+				}
+				return id, nil
 			}
 			return existing, nil
 		}

@@ -45,6 +45,7 @@ func setupTestEnv(t *testing.T) {
 	prevIsInteractive := isInteractiveFn
 	prevPromptIn := promptInFn
 	prevPromptOut := promptOutFn
+	prevLockFn := lockFn
 
 	os.Setenv(IDFileEnv, idPath)
 	os.Unsetenv(DoNotTrackEnvVar)
@@ -68,6 +69,7 @@ func setupTestEnv(t *testing.T) {
 		isInteractiveFn = prevIsInteractive
 		promptInFn = prevPromptIn
 		promptOutFn = prevPromptOut
+		lockFn = prevLockFn
 		resetIDCacheForTest()
 		viper.Reset()
 		_ = prevConfig
@@ -167,8 +169,8 @@ func TestCapture_sendsWhenActive(t *testing.T) {
 	}
 
 	var (
-		hits  int32
-		body  []byte
+		hits int32
+		body []byte
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
@@ -210,10 +212,10 @@ func TestEventBuilders_neverLeakUserContent(t *testing.T) {
 	// is "don't put them in the map" rather than "scrub them out", so
 	// a typo in the builder body would surface here.
 	forbidden := []string{
-		"rm -rf /",        // example cmd body
-		"/Users/secret",   // example path
-		"SECRET_TOKEN",    // example env name
-		"sk-live-",        // example secret prefix
+		"rm -rf /",      // example cmd body
+		"/Users/secret", // example path
+		"SECRET_TOKEN",  // example env name
+		"sk-live-",      // example secret prefix
 	}
 	cases := []struct {
 		name  string
@@ -782,6 +784,66 @@ func TestMaybePromptForConsent_acceptSkipsFollowUp(t *testing.T) {
 	}
 }
 
+// TestMaybePromptForConsent_acceptPersistFailureStillAccepted covers
+// the "yes but the config write failed" path: the user did consent
+// and viper's in-memory state is on for this run, so the outcome must
+// be PromptAccepted (not PromptSkipped) plus a visible warning that
+// the choice couldn't be saved. Returning PromptSkipped here caused
+// events to send this run with no raid_first_run.
+func TestMaybePromptForConsent_acceptPersistFailureStillAccepted(t *testing.T) {
+	setupTestEnv(t)
+	// Point viper at a config path whose parent dir doesn't exist:
+	// ReadInConfig sees not-found (tolerated), WriteConfig fails.
+	viper.Reset()
+	viper.SetConfigFile(filepath.Join(t.TempDir(), "missing-dir", "config.toml"))
+
+	isInteractiveFn = func() bool { return true }
+	r := strings.NewReader("y\n")
+	promptInFn = func() io.Reader { return r }
+	out := &strings.Builder{}
+	promptOutFn = func() io.Writer { return out }
+
+	got := MaybePromptForConsent(false, false)
+	if got != PromptAccepted {
+		t.Errorf("outcome = %v, want PromptAccepted despite persist failure", got)
+	}
+	if !strings.Contains(out.String(), "could not save your telemetry choice") {
+		t.Errorf("missing persist-failure warning in output: %q", out.String())
+	}
+	// In-memory consent is flipped on for this run — matching the
+	// PromptAccepted outcome the caller acts on.
+	st := LoadState()
+	if !st.Decided || !st.Enabled {
+		t.Errorf("in-memory state = %+v, want both true after accepted-but-unsaved", st)
+	}
+}
+
+// TestMaybePromptForConsent_declinePersistFailureWarns keeps the
+// decline path symmetric: a failed persist of "no" still returns
+// PromptDeclined (the caller treats decline and skip identically, so
+// semantics are unchanged) but must warn instead of failing silently
+// and re-prompting next run with no explanation.
+func TestMaybePromptForConsent_declinePersistFailureWarns(t *testing.T) {
+	setupTestEnv(t)
+	viper.Reset()
+	viper.SetConfigFile(filepath.Join(t.TempDir(), "missing-dir", "config.toml"))
+
+	isInteractiveFn = func() bool { return true }
+	// "n" declines the main prompt; "n" declines the follow-up.
+	r := strings.NewReader("n\nn\n")
+	promptInFn = func() io.Reader { return r }
+	out := &strings.Builder{}
+	promptOutFn = func() io.Writer { return out }
+
+	got := MaybePromptForConsent(false, false)
+	if got != PromptDeclined {
+		t.Errorf("outcome = %v, want PromptDeclined despite persist failure", got)
+	}
+	if !strings.Contains(out.String(), "could not save your telemetry choice") {
+		t.Errorf("missing persist-failure warning in output: %q", out.String())
+	}
+}
+
 // --- CaptureOptOutConsented ---
 
 // TestCaptureOptOutConsented_bypassesInactive — the whole point of
@@ -871,6 +933,123 @@ func TestSetEnabled_persistsBothKeys(t *testing.T) {
 	st = LoadState()
 	if !st.Decided || st.Enabled {
 		t.Errorf("state after off = %+v, want decided=true enabled=false", st)
+	}
+}
+
+// TestSetEnabled_defaultLockPassthrough pins that the default lockFn
+// is a plain passthrough — persistence works without cmd/raid.go ever
+// calling SetLockFunc (e.g. in tests or embedded use).
+func TestSetEnabled_defaultLockPassthrough(t *testing.T) {
+	setupTestEnv(t)
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled with default lockFn: %v", err)
+	}
+	st := LoadState()
+	if !st.Decided || !st.Enabled {
+		t.Errorf("state = %+v, want both true", st)
+	}
+}
+
+// TestSetLockFunc_wrapsPersistence confirms an injected lock wrapper
+// is invoked around the viper write — the hook cmd/raid.go uses to
+// route consent persistence through raid.WithMutationLock.
+func TestSetLockFunc_wrapsPersistence(t *testing.T) {
+	setupTestEnv(t)
+	var calls int
+	SetLockFunc(func(fn func() error) error {
+		calls++
+		return fn()
+	})
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled with custom lockFn: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("lockFn invoked %d times, want 1", calls)
+	}
+	st := LoadState()
+	if !st.Decided || !st.Enabled {
+		t.Errorf("state = %+v, want both true", st)
+	}
+}
+
+// TestSetLockFunc_lockErrorPropagates — if acquiring the cross-process
+// lock fails, SetEnabled must surface that error, not write anyway.
+func TestSetLockFunc_lockErrorPropagates(t *testing.T) {
+	setupTestEnv(t)
+	lockErr := fmt.Errorf("lock busy")
+	SetLockFunc(func(fn func() error) error { return lockErr })
+	if err := SetEnabled(true); err != lockErr {
+		t.Errorf("SetEnabled = %v, want lock error %v", err, lockErr)
+	}
+}
+
+// TestSetLockFunc_nilIgnored pins the guard: passing nil must keep
+// the current wrapper instead of installing a nil func that would
+// panic on the next persist.
+func TestSetLockFunc_nilIgnored(t *testing.T) {
+	setupTestEnv(t)
+	SetLockFunc(nil)
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled after SetLockFunc(nil): %v", err)
+	}
+}
+
+// TestSetEnabled_missingConfigFileTolerated — a fresh install has no
+// config file yet; the pre-write ReadInConfig must treat not-found as
+// benign and let WriteConfig create the file.
+func TestSetEnabled_missingConfigFileTolerated(t *testing.T) {
+	setupTestEnv(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	viper.Reset()
+	viper.SetConfigFile(path)
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled with missing config file: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("config file not created: %v", err)
+	}
+}
+
+// TestSetEnabled_readErrorPropagates — a config file that exists but
+// can't be parsed is a real error (silently overwriting it would
+// destroy the user's settings), so SetEnabled must fail.
+func TestSetEnabled_readErrorPropagates(t *testing.T) {
+	setupTestEnv(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("not = valid = toml [["), 0600); err != nil {
+		t.Fatal(err)
+	}
+	viper.Reset()
+	viper.SetConfigFile(path)
+	if err := SetEnabled(true); err == nil {
+		t.Fatal("SetEnabled should propagate a config parse error")
+	}
+}
+
+// TestSetEnabled_freshSnapshotPreservesExternalWrites is the
+// lost-update regression: keys another process persisted after our
+// snapshot was taken must survive our write because SetEnabled
+// re-reads the config inside the locked section.
+func TestSetEnabled_freshSnapshotPreservesExternalWrites(t *testing.T) {
+	setupTestEnv(t)
+	path := viper.ConfigFileUsed()
+	// Simulate a concurrent raid process persisting a key after our
+	// in-memory snapshot (taken by setupTestEnv) went stale.
+	if err := os.WriteFile(path, []byte("externalkey = \"from-other-process\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "externalkey") {
+		t.Errorf("external key lost after SetEnabled; file:\n%s", data)
+	}
+	if !strings.Contains(string(data), "telemetry") {
+		t.Errorf("telemetry keys missing after SetEnabled; file:\n%s", data)
 	}
 }
 
@@ -988,15 +1167,82 @@ func TestWriteIDExclusive_raceLoserReadsExisting(t *testing.T) {
 	}
 }
 
+// TestWriteIDExclusive_raceLoserEmptyFile pins the self-heal path: an
+// existing zero-byte file (crash between O_EXCL create and write) is
+// corrupt, not a race winner — it must be repaired in place with the
+// new ID rather than erroring forever.
 func TestWriteIDExclusive_raceLoserEmptyFile(t *testing.T) {
 	setupTestEnv(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "id")
 	os.WriteFile(path, []byte(""), 0600)
 
+	got, err := writeIDExclusive(path, "new-id")
+	if err != nil {
+		t.Fatalf("writeIDExclusive() with empty existing file should repair, got error: %v", err)
+	}
+	if got != "new-id" {
+		t.Errorf("writeIDExclusive() = %q, want %q", got, "new-id")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read repaired file: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "new-id" {
+		t.Errorf("repaired file contents = %q, want %q", string(data), "new-id\n")
+	}
+}
+
+// TestWriteIDExclusive_emptyFileRepairFailure covers the error path of
+// the repair itself: if rewriting the corrupt empty file fails, the
+// error must surface rather than reporting a repaired ID.
+func TestWriteIDExclusive_emptyFileRepairFailure(t *testing.T) {
+	setupTestEnv(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id")
+	os.WriteFile(path, []byte(""), 0600)
+
+	prev := writeFileFn
+	writeFileFn = func(string, []byte, os.FileMode) error {
+		return fmt.Errorf("disk full")
+	}
+	defer func() { writeFileFn = prev }()
+
 	_, err := writeIDExclusive(path, "new-id")
 	if err == nil {
-		t.Fatal("writeIDExclusive() with empty existing file should error")
+		t.Fatal("writeIDExclusive() should error when the repair write fails")
+	}
+	if !strings.Contains(err.Error(), "disk full") {
+		t.Errorf("error = %v, want the injected write failure", err)
+	}
+}
+
+// TestLoadOrCreateID_repairsEmptyFile is the end-to-end regression for
+// the "empty id file permanently disables telemetry" bug: a
+// pre-existing zero-byte file must yield a fresh valid ID that
+// persists across calls, not an empty string forever.
+func TestLoadOrCreateID_repairsEmptyFile(t *testing.T) {
+	setupTestEnv(t)
+	path := IDPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	id := loadOrCreateID()
+	if id == "" {
+		t.Fatal("loadOrCreateID() returned empty for a repairable empty file")
+	}
+	if len(id) != 36 {
+		t.Errorf("repaired ID = %q, want UUID format (36 chars)", id)
+	}
+	// The repair must persist: a fresh (cache-cleared) call reads the
+	// same ID back from disk.
+	resetIDCacheForTest()
+	if again := loadOrCreateID(); again != id {
+		t.Errorf("ID after repair not persisted: first %q, second %q", id, again)
 	}
 }
 

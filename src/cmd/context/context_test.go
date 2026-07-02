@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	rctx "github.com/8bitalex/raid/src/raid/context"
 	"github.com/spf13/cobra"
@@ -170,9 +171,9 @@ func TestWriteJSON_workspaceIsNested(t *testing.T) {
 		Version:    "1.2.3",
 		WebsiteUrl: "https://github.com/8bitalex/raid",
 		Workspace: rctx.Workspace{
-			Profile: "demo",
-			Env:     "dev",
-			Repos:   []rctx.Repo{{Name: "api", Path: "~/dev/api"}},
+			Profile:  "demo",
+			Env:      "dev",
+			Repos:    []rctx.Repo{{Name: "api", Path: "~/dev/api"}},
 			Commands: []rctx.Command{{Name: "deploy"}},
 		},
 	}
@@ -323,6 +324,71 @@ func TestWritePretty_commandSteps(t *testing.T) {
 	// Lint command has no steps; ensure no numbered lines snuck in for it.
 	if strings.Contains(out, "1. ") && strings.Count(out, "1. ") != 1 {
 		t.Errorf("expected exactly one '1.' step row (release's first step), got: %s", out)
+	}
+}
+
+// runeColumn returns the rune offset of the first occurrence of sub in line,
+// or -1 when absent. Column alignment must be asserted in runes, not bytes —
+// that's the whole point of the padRunes-based padding.
+func runeColumn(line, sub string) int {
+	i := strings.Index(line, sub)
+	if i < 0 {
+		return -1
+	}
+	return utf8.RuneCountInString(line[:i])
+}
+
+// findLine returns the first output line containing sub.
+func findLine(t *testing.T, out, sub string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, sub) {
+			return line
+		}
+	}
+	t.Fatalf("no output line contains %q\n--- output ---\n%s", sub, out)
+	return ""
+}
+
+// TestWritePretty_nonASCIIColumnsAlign guards that the repos, tools, and
+// commands tables pad by visible rune width. Byte-based padding ("%-*s")
+// under-pads multi-byte names (e.g. "café" is 5 bytes but 4 columns),
+// shifting every subsequent column on that row.
+func TestWritePretty_nonASCIIColumnsAlign(t *testing.T) {
+	var buf bytes.Buffer
+	ws := rctx.Snapshot{
+		Workspace: rctx.Workspace{
+			Profile: "demo",
+			Repos: []rctx.Repo{
+				{Name: "café", Path: "/tmp/x", Cloned: true, Branch: "main"},
+				{Name: "backend", Path: "/tmp/backend", Cloned: true, Branch: "main"},
+			},
+			Commands: []rctx.Command{
+				{Name: "déploy", Description: "Deploy with flair"},
+				{Name: "long-command", Description: "Plain ASCII"},
+			},
+		},
+		Tools: []rctx.Tool{
+			{Name: "inställ", Description: "Fake install"},
+			{Name: "doctor-long", Description: "Check config"},
+		},
+	}
+	if err := writePretty(&buf, ws); err != nil {
+		t.Fatalf("writePretty: %v", err)
+	}
+	out := buf.String()
+
+	if got, want := runeColumn(findLine(t, out, "café"), "/tmp/x"),
+		runeColumn(findLine(t, out, "backend"), "/tmp/backend"); got != want {
+		t.Errorf("repo path column misaligned: café row at rune %d, backend row at rune %d\n%s", got, want, out)
+	}
+	if got, want := runeColumn(findLine(t, out, "déploy"), "Deploy with flair"),
+		runeColumn(findLine(t, out, "long-command"), "Plain ASCII"); got != want {
+		t.Errorf("command description column misaligned: déploy row at rune %d, long-command row at rune %d\n%s", got, want, out)
+	}
+	if got, want := runeColumn(findLine(t, out, "inställ"), "Fake install"),
+		runeColumn(findLine(t, out, "doctor-long"), "Check config"); got != want {
+		t.Errorf("tool description column misaligned: inställ row at rune %d, doctor-long row at rune %d\n%s", got, want, out)
 	}
 }
 

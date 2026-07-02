@@ -11,7 +11,7 @@ import (
 type Severity int
 
 const (
-	SeverityOK    Severity = iota
+	SeverityOK Severity = iota
 	SeverityWarn
 	SeverityError
 )
@@ -130,7 +130,7 @@ func checkProfile() []Finding {
 		})
 	}
 
-	findings = append(findings, checkVerify("verify", fullProfile.Verify)...)
+	findings = append(findings, checkVerify("verify", fullProfile.Verify, sys.GetHomeDir())...)
 
 	if len(fullProfile.Repositories) == 0 {
 		return append(findings, Finding{
@@ -219,14 +219,18 @@ func checkRepo(repo Repo) []Finding {
 	}
 	repo.Verify = append(repo.Verify, repoConfig.Verify...)
 
-	findings = append(findings, checkVerify(fmt.Sprintf("repo/%s verify", repo.Name), repo.Verify)...)
+	findings = append(findings, checkVerify(fmt.Sprintf("repo/%s verify", repo.Name), repo.Verify, repoPath)...)
 	return findings
 }
 
 // checkVerify runs each verify entry and converts the outcome into a
 // finding. label is the check-name prefix ("verify" for profile-level,
 // "repo/<name> verify" for repo-level). The entry's Name is appended
-// so each finding has a unique, human-readable label.
+// so each finding has a unique, human-readable label. defaultDir is
+// applied to Shell tasks without an explicit path — the repo dir for
+// repo-level entries, home for profile-level — matching the execution
+// context install: tasks get, so a verify passes or fails the same way
+// regardless of where `raid doctor` was invoked from.
 //
 // Outcomes map to severities:
 //   - VerifyOutcomeOK         → SeverityOK
@@ -237,14 +241,18 @@ func checkRepo(repo Repo) []Finding {
 //
 // Failures don't short-circuit subsequent entries — doctor reports every
 // verify so the user sees the full picture in one pass.
-func checkVerify(label string, entries []Verify) []Finding {
+func checkVerify(label string, entries []Verify, defaultDir string) []Finding {
 	var findings []Finding
 	for _, v := range entries {
 		if v.IsZero() {
 			continue
 		}
 		check := fmt.Sprintf("%s/%s", label, v.Name)
-		outcome, err := RunVerify(v)
+		outcome, err := RunVerify(Verify{
+			Name:   v.Name,
+			Tasks:  withDefaultDir(v.Tasks, defaultDir),
+			OnFail: withDefaultDir(v.OnFail, defaultDir),
+		})
 		switch outcome {
 		case VerifyOutcomeOK:
 			findings = append(findings, Finding{

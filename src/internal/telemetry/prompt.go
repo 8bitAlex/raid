@@ -128,8 +128,13 @@ func MaybePromptForConsent(skipPersistent, skipTransient bool) PromptResult {
 		answer := readPromptAnswer(reader)
 		switch answer {
 		case "y", "yes":
+			// A failed persist doesn't undo the consent: viper's
+			// in-memory state is already on for this run, and the user
+			// did say yes — so still report PromptAccepted (the caller
+			// fires raid_first_run) and warn that we'll have to ask
+			// again next time.
 			if err := SetEnabled(true); err != nil {
-				return PromptSkipped
+				fmt.Fprintf(promptOutFn(), "warning: could not save your telemetry choice (%v); you'll be asked again next run\n", err)
 			}
 			return PromptAccepted
 		case "?":
@@ -147,7 +152,13 @@ func MaybePromptForConsent(skipPersistent, skipTransient bool) PromptResult {
 			if askOptOutEventConsent(reader) {
 				CaptureOptOutConsented("prompt-declined")
 			}
-			_ = SetEnabled(false)
+			// Same persistence caveat as the accept path: a failed
+			// write can't be silent, or the user gets re-prompted
+			// next run with no explanation. In-memory state is off
+			// either way, so PromptDeclined stays correct.
+			if err := SetEnabled(false); err != nil {
+				fmt.Fprintf(promptOutFn(), "warning: could not save your telemetry choice (%v); you'll be asked again next run\n", err)
+			}
 			return PromptDeclined
 		}
 	}

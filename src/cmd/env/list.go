@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/8bitalex/raid/src/raid/env"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,10 @@ var ListEnvCmd = &cobra.Command{
 			}
 			enc := json.NewEncoder(cmd.OutOrStdout())
 			enc.SetIndent("", "  ")
-			return enc.Encode(out)
+			if err := enc.Encode(out); err != nil {
+				return errs.Unknown(err)
+			}
+			return nil
 		}
 
 		if len(envs) == 0 {

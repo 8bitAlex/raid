@@ -375,6 +375,21 @@ func TestApplyConfigFlag(t *testing.T) {
 			wantPath: "/custom/config.toml",
 		},
 		{
+			name:     "short flag with glued value",
+			args:     []string{"raid", "-c/custom/config.toml", "install"},
+			wantPath: "/custom/config.toml",
+		},
+		{
+			name:     "short flag with glued relative value",
+			args:     []string{"raid", "-ccfg.yaml"},
+			wantPath: "cfg.yaml",
+		},
+		{
+			name:     "glued value after end-of-flags marker ignored",
+			args:     []string{"raid", "--", "-c/custom/config.toml"},
+			wantPath: "",
+		},
+		{
 			name:     "config flag at end with no value",
 			args:     []string{"raid", "--config"},
 			wantPath: "",
@@ -584,8 +599,8 @@ func TestAttachCommandArgsAndFlags_flagDefaultsAndTypes(t *testing.T) {
 
 func TestAttachCommandArgsAndFlags_requiredFlag(t *testing.T) {
 	co := &cobra.Command{
-		Use:  "cmd",
-		Run:  func(*cobra.Command, []string) {},
+		Use: "cmd",
+		Run: func(*cobra.Command, []string) {},
 		// Silence cobra's usage dump on error so the test output stays clean.
 		SilenceUsage:  true,
 		SilenceErrors: true,

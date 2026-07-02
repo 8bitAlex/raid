@@ -27,6 +27,7 @@
 //     decision, creates an anonymous ID and sends exactly one
 //     `raid_telemetry_opt_out` event before leaving telemetry off
 //     forever. This is per-event consent, never state-level.
+//
 // Outside of those two paths, no anonymous ID is created or written
 // until the user explicitly opts in.
 package telemetry
@@ -55,11 +56,11 @@ var CaptureEndpoint = "https://us.i.posthog.com/i/v0/e/"
 // Event names. Stable contract — these are the labels that show up in
 // PostHog and on the public telemetry-disclosure page.
 const (
-	EventFirstRun         = "raid_first_run"
-	EventCommandExecuted  = "raid_command_executed"
-	EventCommandFailed    = "raid_command_failed"
-	EventTaskExecuted     = "raid_task_executed"
-	EventTelemetryOptOut  = "raid_telemetry_opt_out"
+	EventFirstRun        = "raid_first_run"
+	EventCommandExecuted = "raid_command_executed"
+	EventCommandFailed   = "raid_command_failed"
+	EventTaskExecuted    = "raid_task_executed"
+	EventTelemetryOptOut = "raid_telemetry_opt_out"
 )
 
 // Event is what Capture queues for delivery. Properties must already

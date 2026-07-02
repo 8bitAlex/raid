@@ -67,6 +67,8 @@ raid profile add https://gist.githubusercontent.com/<user>/<id>/raw/<sha>/profil
 | HTTP/HTTPS ending in `.yaml` / `.yml` / `.json` | Direct download |
 | Any other HTTP/HTTPS URL | Probed with `git ls-remote`; cloned if it responds, otherwise downloaded |
 
+Fetched profiles are copied to `~/<name>.raid.yaml`. If a file already exists at that path, `raid profile add <url>` refuses with a `PROFILE_ALREADY_EXISTS` error instead of overwriting it — remove or rename the existing file, or register it directly with `raid profile add ~/<name>.raid.yaml`.
+
 Profiles fetched from a URL are saved to `~/<name>.raid.yaml` and registered automatically. If no active profile is set, the first imported profile becomes active.
 
 List all profiles and see which is active:

@@ -3,6 +3,7 @@ package lib
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1474,5 +1475,141 @@ func TestGetProfilePaths_emptyConfig(t *testing.T) {
 	}
 	if len(paths) != 0 {
 		t.Errorf("getProfilePaths() expected empty map, got %v", paths)
+	}
+}
+
+func TestValidateProfile_trailingEmptyDocumentAccepted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.yaml")
+	// A trailing `---` (with or without comments) decodes as a nil
+	// document. Extraction skips it; validation must too, or a file
+	// that extracts cleanly refuses to load.
+	body := "name: test\n---\n# TODO: second profile\n"
+	os.WriteFile(path, []byte(body), 0644)
+
+	if err := ValidateProfile(path); err != nil {
+		t.Fatalf("ValidateProfile() error for trailing empty doc: %v", err)
+	}
+}
+
+func TestValidateProfile_jsonNullRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte("null"), 0644)
+
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() must reject a top-level null JSON document")
+	}
+}
+
+func TestValidateProfile_jsonEmptyArrayRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte("[]"), 0644)
+
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() must reject an empty JSON array (nothing was validated)")
+	}
+}
+
+func TestValidateProfile_jsonArrayStillValidated(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte(`[{"name": "test", "badfield": 1}]`), 0644)
+
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() expected schema violation inside array element")
+	}
+
+	os.WriteFile(path, []byte(`[{"name": "test"}]`), 0644)
+	if err := ValidateProfile(path); err != nil {
+		t.Fatalf("ValidateProfile() error for valid array: %v", err)
+	}
+}
+
+func TestExtractProfiles_jsonNullYieldsNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte("null"), 0644)
+
+	_, err := ExtractProfiles(path)
+	if err == nil {
+		t.Fatal("ExtractProfiles() must not return a zero profile for null input")
+	}
+	if !strings.Contains(err.Error(), "no profiles found") {
+		t.Errorf("error = %q, want 'no profiles found'", err.Error())
+	}
+}
+
+func TestExtractProfiles_jsonArraySkipsUnnamedEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte(`[{"name": "real"}, {}]`), 0644)
+
+	profiles, err := ExtractProfiles(path)
+	if err != nil {
+		t.Fatalf("ExtractProfiles() error: %v", err)
+	}
+	if len(profiles) != 1 || profiles[0].Name != "real" {
+		t.Errorf("profiles = %v, want just the named entry", profiles)
+	}
+}
+
+func TestBuildProfile_singleRepoNameDriftIsCaseInsensitive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, RaidConfigFileName)
+	os.WriteFile(path, []byte("name: MyRepo\nbranch: main\n"), 0644)
+
+	// Registration lowercases the key (viper), so the registered name is
+	// "myrepo" while the raid.yaml declares "MyRepo" — that's not drift.
+	built, err := buildProfile(Profile{Name: "myrepo", Path: path})
+	if err != nil {
+		t.Fatalf("buildProfile() error for case-only difference: %v", err)
+	}
+	if built.Name != "MyRepo" {
+		t.Errorf("built.Name = %q, want %q", built.Name, "MyRepo")
+	}
+
+	// Real drift must still be refused.
+	if _, err := buildProfile(Profile{Name: "otherrepo", Path: path}); err == nil {
+		t.Fatal("buildProfile() must refuse genuinely drifted names")
+	}
+}
+
+func TestAddProfiles_caseCollisionWarns(t *testing.T) {
+	setupTestConfig(t)
+
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	addErr := AddProfiles([]Profile{
+		{Name: "Dev", Path: "/tmp/a.yaml"},
+		{Name: "dev", Path: "/tmp/b.yaml"},
+	})
+	w.Close()
+	os.Stderr = origStderr
+
+	if addErr != nil {
+		t.Fatalf("AddProfiles() error: %v", addErr)
+	}
+	var buf strings.Builder
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "differ only by case") {
+		t.Errorf("expected case-collision warning, got %q", buf.String())
+	}
+}
+
+func TestValidateProfile_jsonMalformedArrayRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.json")
+	os.WriteFile(path, []byte(`[{"name": "broken"`), 0644)
+
+	if err := ValidateProfile(path); err == nil {
+		t.Fatal("ValidateProfile() must reject malformed JSON arrays")
 	}
 }

@@ -2,6 +2,8 @@ package sys
 
 import (
 	"bufio"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -149,6 +151,23 @@ func TestExpandPath(t *testing.T) {
 			t.Errorf("ExpandPath(%q) = %q, want %q", "/usr/local/bin", got, want)
 		}
 	})
+
+	t.Run("unexpandable ~user keeps original path", func(t *testing.T) {
+		// homedir.Expand fails on the ~user form; the original input must
+		// survive (resolved via Abs) instead of collapsing to the CWD.
+		got := ExpandPath("~raid-no-such-user-xyz/repo")
+		if !strings.HasSuffix(got, "~raid-no-such-user-xyz/repo") &&
+			!strings.HasSuffix(got, `~raid-no-such-user-xyz\repo`) {
+			t.Errorf("ExpandPath(~user form) = %q, want the original path preserved", got)
+		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got == cwd {
+			t.Errorf("ExpandPath(~user form) collapsed to the CWD %q", cwd)
+		}
+	})
 }
 
 func TestExpand(t *testing.T) {
@@ -282,6 +301,20 @@ func TestCopyFile_createsDestWithContent(t *testing.T) {
 	}
 }
 
+func TestCopyFile_copyWriteError(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("/dev/full is Linux-specific")
+	}
+	src := filepath.Join(t.TempDir(), "src.txt")
+	if err := os.WriteFile(src, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Writes to /dev/full fail with ENOSPC, exercising the io.Copy error path.
+	if err := CopyFile(src, "/dev/full"); err == nil {
+		t.Error("CopyFile() to /dev/full: want error, got nil")
+	}
+}
+
 func TestCopyFile_srcNotFound(t *testing.T) {
 	dir := t.TempDir()
 	if err := CopyFile(filepath.Join(dir, "missing.txt"), filepath.Join(dir, "dest.txt")); err == nil {
@@ -364,6 +397,59 @@ func TestReadLine(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("ReadLine(%q): got %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+// --- ReadLineErr ---
+
+func TestReadLineErr(t *testing.T) {
+	t.Run("normal line", func(t *testing.T) {
+		reader := bufio.NewReader(strings.NewReader("hello world\n"))
+		got, err := ReadLineErr(reader, "")
+		if err != nil {
+			t.Fatalf("ReadLineErr: unexpected error %v", err)
+		}
+		if got != "hello world" {
+			t.Errorf("ReadLineErr = %q, want %q", got, "hello world")
+		}
+	})
+
+	t.Run("final unterminated line succeeds", func(t *testing.T) {
+		reader := bufio.NewReader(strings.NewReader("no newline"))
+		got, err := ReadLineErr(reader, "")
+		if err != nil {
+			t.Fatalf("ReadLineErr: unexpected error %v", err)
+		}
+		if got != "no newline" {
+			t.Errorf("ReadLineErr = %q, want %q", got, "no newline")
+		}
+	})
+
+	t.Run("empty input surfaces EOF", func(t *testing.T) {
+		reader := bufio.NewReader(strings.NewReader(""))
+		got, err := ReadLineErr(reader, "")
+		if !errors.Is(err, io.EOF) {
+			t.Errorf("ReadLineErr error = %v, want io.EOF", err)
+		}
+		if got != "" {
+			t.Errorf("ReadLineErr = %q, want empty", got)
+		}
+	})
+
+	t.Run("whitespace-only then EOF surfaces EOF", func(t *testing.T) {
+		reader := bufio.NewReader(strings.NewReader("   "))
+		if _, err := ReadLineErr(reader, ""); !errors.Is(err, io.EOF) {
+			t.Errorf("ReadLineErr error = %v, want io.EOF", err)
+		}
+	})
+}
+
+// TestReadLine_eofReturnsEmpty pins the back-compat contract of the ReadLine
+// wrapper: exhausted input yields "" with no way to observe the error.
+func TestReadLine_eofReturnsEmpty(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader(""))
+	if got := ReadLine(reader, ""); got != "" {
+		t.Errorf("ReadLine at EOF = %q, want empty", got)
 	}
 }
 

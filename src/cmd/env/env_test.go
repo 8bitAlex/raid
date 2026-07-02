@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid/errs"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -391,6 +392,43 @@ func TestListEnvCmd_jsonWithEnvironments(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("staging missing from %+v", got)
+	}
+}
+
+// failingWriter always errors, forcing enc.Encode to fail so the
+// errs.Unknown wrap in the --json branch is exercised.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("simulated write failure")
+}
+
+// TestListEnvCmd_jsonEncodeError covers the encode-failure branch: the error
+// must come back wrapped as a structured UNKNOWN error (consistent with the
+// sibling commands) instead of a bare encoder error.
+func TestListEnvCmd_jsonEncodeError(t *testing.T) {
+	resetEnvCmdState(t)
+	setupConfig(t)
+
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	root.AddCommand(ListEnvCmd)
+	ListEnvCmd.SetOut(failingWriter{})
+	t.Cleanup(func() { ListEnvCmd.SetOut(nil) })
+
+	err := ListEnvCmd.RunE(ListEnvCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when encode fails")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeUnknown {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeUnknown)
+	}
+	if !strings.Contains(err.Error(), "simulated write failure") {
+		t.Errorf("error %q does not carry the encoder failure", err.Error())
 	}
 }
 

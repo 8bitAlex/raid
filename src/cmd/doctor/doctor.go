@@ -63,7 +63,16 @@ func severityString(s raid.Severity) string {
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
-	findings := raid.Doctor()
+	// Doctor runs verify task sequences whose onFail remediation can mutate
+	// files, so it must serialize against other raid processes (CLI and MCP
+	// server) via the cross-process mutation lock.
+	var findings []raid.Finding
+	if lockErr := raid.WithMutationLock(func() error {
+		findings = raid.Doctor()
+		return nil
+	}); lockErr != nil {
+		return errs.Wrap(lockErr)
+	}
 
 	oks, warnings, errorCount := 0, 0, 0
 	for _, f := range findings {
@@ -105,32 +114,33 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
+	out := cmd.OutOrStdout()
 	for _, f := range findings {
 		switch f.Severity {
 		case raid.SeverityOK:
-			fmt.Printf("  [ok]    %s: %s\n", f.Check, f.Message)
+			fmt.Fprintf(out, "  [ok]    %s: %s\n", f.Check, f.Message)
 		case raid.SeverityWarn:
-			fmt.Printf("  [warn]  %s: %s\n", f.Check, f.Message)
+			fmt.Fprintf(out, "  [warn]  %s: %s\n", f.Check, f.Message)
 			if f.Suggestion != "" {
-				fmt.Printf("          → %s\n", f.Suggestion)
+				fmt.Fprintf(out, "          → %s\n", f.Suggestion)
 			}
 		case raid.SeverityError:
-			fmt.Printf("  [error] %s: %s\n", f.Check, f.Message)
+			fmt.Fprintf(out, "  [error] %s: %s\n", f.Check, f.Message)
 			if f.Suggestion != "" {
-				fmt.Printf("          → %s\n", f.Suggestion)
+				fmt.Fprintf(out, "          → %s\n", f.Suggestion)
 			}
 		}
 	}
 
-	fmt.Println()
+	fmt.Fprintln(out)
 	switch {
 	case errorCount > 0:
-		fmt.Printf("%d error(s) detected.\n", errorCount)
+		fmt.Fprintf(out, "%d error(s) detected.\n", errorCount)
 		return errs.ConfigInvalid(fmt.Errorf("%d doctor finding(s) at error severity", errorCount))
 	case warnings > 0:
-		fmt.Printf("%d warning(s).\n", warnings)
+		fmt.Fprintf(out, "%d warning(s).\n", warnings)
 	default:
-		fmt.Println("No issues found.")
+		fmt.Fprintln(out, "No issues found.")
 	}
 	return nil
 }

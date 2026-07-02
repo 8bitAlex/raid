@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"errors"
 	"os"
 	"strings"
 
@@ -19,6 +20,22 @@ const (
 // DoNotTrackEnvVar is the standard cross-tool opt-out env var that
 // raid honors as a hard off. See https://consoledonottrack.com/.
 const DoNotTrackEnvVar = "DO_NOT_TRACK"
+
+// lockFn wraps consent persistence so writes to the shared ~/.raid
+// config serialize against other raid processes. Defaults to a plain
+// passthrough because telemetry can't import lib (lib imports
+// telemetry) — cmd/raid.go wires raid.WithMutationLock in via
+// SetLockFunc at startup.
+var lockFn = func(fn func() error) error { return fn() }
+
+// SetLockFunc installs the cross-process mutation lock wrapper used
+// around consent persistence. Called once from cmd/raid.go with
+// raid.WithMutationLock; tests may inject their own wrapper.
+func SetLockFunc(fn func(func() error) error) {
+	if fn != nil {
+		lockFn = fn
+	}
+}
 
 // State is the user-facing consent snapshot read by `raid telemetry
 // status` and by IsActive. Decided distinguishes "user has been asked
@@ -43,9 +60,22 @@ func LoadState() State {
 // so we don't re-prompt — a user who answered no should stay
 // not-prompted until they explicitly run `raid telemetry on`.
 func SetEnabled(enabled bool) error {
-	viper.Set(consentDecidedKey, true)
-	viper.Set(consentEnabledKey, enabled)
-	return viper.WriteConfig()
+	return lockFn(func() error {
+		// Re-read under the lock so the write applies to a fresh
+		// snapshot — viper.WriteConfig serializes its full in-memory
+		// state, and writing a stale snapshot would clobber keys a
+		// concurrent raid process just persisted. A missing config
+		// file is fine (fresh install); WriteConfig creates it.
+		if err := viper.ReadInConfig(); err != nil {
+			var notFound viper.ConfigFileNotFoundError
+			if !errors.As(err, &notFound) && !os.IsNotExist(err) {
+				return err
+			}
+		}
+		viper.Set(consentDecidedKey, true)
+		viper.Set(consentEnabledKey, enabled)
+		return viper.WriteConfig()
+	})
 }
 
 // SetDecidedOff marks the user as having declined without ever being

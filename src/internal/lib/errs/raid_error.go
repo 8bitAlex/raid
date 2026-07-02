@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 )
 
 // Error is the structured-error interface every raid failure satisfies.
@@ -68,34 +69,34 @@ func (c Category) String() string {
 // Stable code strings. Documented at /docs/references/errors. Add new
 // codes additively; never rename or repurpose an existing one.
 const (
-	CodeUnknown                = "UNKNOWN"
-	CodeInternal               = "INTERNAL"
-	CodeGitNotInstalled        = "GIT_NOT_INSTALLED"
-	CodeLockFailed             = "LOCK_FAILED"
-	CodeProfileInvalid         = "PROFILE_INVALID"
-	CodeProfileFileRead        = "PROFILE_FILE_READ"
-	CodeProfileAlreadyExists   = "PROFILE_ALREADY_EXISTS"
-	CodeRepoInvalid            = "REPO_INVALID"
-	CodeConfigInvalid          = "CONFIG_INVALID"
-	CodeConfigLoadFailed       = "CONFIG_LOAD_FAILED"
-	CodeSchemaValidationFailed = "SCHEMA_VALIDATION_FAILED"
-	CodeArgInvalid             = "ARG_INVALID"
-	CodeTaskFailed             = "TASK_FAILED"
-	CodeTaskShellFailed        = "TASK_SHELL_FAILED"
-	CodeTaskScriptFailed       = "TASK_SCRIPT_FAILED"
-	CodeTaskWaitTimeout        = "TASK_WAIT_TIMEOUT"
-	CodeTaskTemplateFailed     = "TASK_TEMPLATE_FAILED"
-	CodeTaskGitFailed          = "TASK_GIT_FAILED"
-	CodeCloneFailed            = "CLONE_FAILED"
-	CodeTaskHTTPFailed         = "TASK_HTTP_FAILED"
-	CodeProfileNotFound        = "PROFILE_NOT_FOUND"
-	CodeProfileNotActive       = "PROFILE_NOT_ACTIVE"
-	CodeProfileFileMissing     = "PROFILE_FILE_MISSING"
-	CodeRepoNotFound           = "REPO_NOT_FOUND"
-	CodeRepoNotCloned          = "REPO_NOT_CLONED"
-	CodeEnvNotFound            = "ENV_NOT_FOUND"
-	CodeCommandNotFound        = "COMMAND_NOT_FOUND"
-	CodeVerifyFailed           = "VERIFY_FAILED"
+	CodeUnknown                 = "UNKNOWN"
+	CodeInternal                = "INTERNAL"
+	CodeGitNotInstalled         = "GIT_NOT_INSTALLED"
+	CodeLockFailed              = "LOCK_FAILED"
+	CodeProfileInvalid          = "PROFILE_INVALID"
+	CodeProfileFileRead         = "PROFILE_FILE_READ"
+	CodeProfileAlreadyExists    = "PROFILE_ALREADY_EXISTS"
+	CodeRepoInvalid             = "REPO_INVALID"
+	CodeConfigInvalid           = "CONFIG_INVALID"
+	CodeConfigLoadFailed        = "CONFIG_LOAD_FAILED"
+	CodeSchemaValidationFailed  = "SCHEMA_VALIDATION_FAILED"
+	CodeArgInvalid              = "ARG_INVALID"
+	CodeTaskFailed              = "TASK_FAILED"
+	CodeTaskShellFailed         = "TASK_SHELL_FAILED"
+	CodeTaskScriptFailed        = "TASK_SCRIPT_FAILED"
+	CodeTaskWaitTimeout         = "TASK_WAIT_TIMEOUT"
+	CodeTaskTemplateFailed      = "TASK_TEMPLATE_FAILED"
+	CodeTaskGitFailed           = "TASK_GIT_FAILED"
+	CodeCloneFailed             = "CLONE_FAILED"
+	CodeTaskHTTPFailed          = "TASK_HTTP_FAILED"
+	CodeProfileNotFound         = "PROFILE_NOT_FOUND"
+	CodeProfileNotActive        = "PROFILE_NOT_ACTIVE"
+	CodeProfileFileMissing      = "PROFILE_FILE_MISSING"
+	CodeRepoNotFound            = "REPO_NOT_FOUND"
+	CodeRepoNotCloned           = "REPO_NOT_CLONED"
+	CodeEnvNotFound             = "ENV_NOT_FOUND"
+	CodeCommandNotFound         = "COMMAND_NOT_FOUND"
+	CodeVerifyFailed            = "VERIFY_FAILED"
 	CodeHeadlessPromptNoDefault = "HEADLESS_PROMPT_NO_DEFAULT"
 )
 
@@ -255,7 +256,12 @@ func EmitJSON(w io.Writer, err error) {
 		payload[k] = v
 	}
 	enc := json.NewEncoder(w)
-	_ = enc.Encode(map[string]any{"error": payload})
+	if encErr := enc.Encode(map[string]any{"error": payload}); encErr != nil {
+		// The structured envelope couldn't be written (broken pipe,
+		// full disk). Fall back to plain text on stderr so the process
+		// doesn't exit non-zero with no explanation on any stream.
+		fmt.Fprintf(os.Stderr, "raid: %v (failed to emit JSON error: %v)\n", err, encErr)
+	}
 }
 
 // Wrap is a convenience: if err already implements Error, return it

@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/8bitalex/raid/src/internal/lib"
+	"github.com/8bitalex/raid/src/raid/errs"
 	pro "github.com/8bitalex/raid/src/raid/profile"
 	"github.com/spf13/cobra"
 )
@@ -222,6 +224,133 @@ func TestFindProfileFilesInDir_fallbackSkipsDirectories(t *testing.T) {
 	got := findProfileFilesInDir(dir)
 	if len(got) != 1 || !strings.HasSuffix(got[0], "profile.yaml") {
 		t.Errorf("findProfileFilesInDir with subdir: got %v, want only profile.yaml", got)
+	}
+}
+
+// --- cloneError ---
+
+func TestCloneError_includesGitOutput(t *testing.T) {
+	base := fmt.Errorf("exit status 128")
+	err := cloneError(base, []byte("fatal: repository 'x' not found\n"))
+	if !strings.Contains(err.Error(), "exit status 128") {
+		t.Errorf("error %q should wrap the exec error", err.Error())
+	}
+	if !strings.Contains(err.Error(), "fatal: repository 'x' not found") {
+		t.Errorf("error %q should include git's diagnostics", err.Error())
+	}
+}
+
+func TestCloneError_emptyOutputReturnsOriginal(t *testing.T) {
+	base := fmt.Errorf("exit status 128")
+	if err := cloneError(base, []byte("  \n")); err != base {
+		t.Errorf("cloneError with empty output = %v, want the original error", err)
+	}
+}
+
+func TestCloneError_truncatesLongOutput(t *testing.T) {
+	base := fmt.Errorf("exit status 128")
+	long := strings.Repeat("x", 1000)
+	err := cloneError(base, []byte(long))
+	if len(err.Error()) > 400 {
+		t.Errorf("error length = %d, want truncated (~300 chars of output)", len(err.Error()))
+	}
+	if !strings.Contains(err.Error(), "…") {
+		t.Errorf("truncated error %q should carry the ellipsis marker", err.Error())
+	}
+}
+
+func TestCloneError_truncationRespectsRuneBoundary(t *testing.T) {
+	base := fmt.Errorf("exit status 128")
+	// One ASCII byte then 2-byte runes: byte 300 lands mid-rune, so a naive
+	// byte cut would split it. The boundary walk must back up one byte.
+	long := "x" + strings.Repeat("é", 400)
+	err := cloneError(base, []byte(long))
+	if strings.ContainsRune(err.Error(), '�') {
+		t.Errorf("truncation split a UTF-8 rune: %q", err.Error())
+	}
+	if !strings.HasSuffix(err.Error(), "…") {
+		t.Errorf("truncated error %q should end with the ellipsis marker", err.Error())
+	}
+}
+
+// TestGitCloneFunc_realGitErrorCarriesDiagnostics drives the real (non-mock)
+// gitCloneFunc against a guaranteed-missing local path: the returned error
+// must contain git's own message, not just "exit status 128".
+func TestGitCloneFunc_realGitErrorCarriesDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	err := gitCloneFunc(filepath.Join(dir, "does-not-exist.git"), filepath.Join(dir, "dest"))
+	if err == nil {
+		t.Fatal("expected clone of a missing repo to fail")
+	}
+	if !strings.Contains(err.Error(), "does not exist") && !strings.Contains(err.Error(), "fatal") {
+		t.Errorf("error %q should include git's diagnostics", err.Error())
+	}
+}
+
+// TestGitCloneFunc_realGitSuccess covers the happy path of the real clone
+// wrapper against a local bare repo.
+func TestGitCloneFunc_realGitSuccess(t *testing.T) {
+	dir := t.TempDir()
+	bare := filepath.Join(dir, "bare.git")
+	if out, err := exec.Command("git", "init", "--bare", bare).CombinedOutput(); err != nil {
+		t.Fatalf("git init --bare: %v\n%s", err, out)
+	}
+	if err := gitCloneFunc(bare, filepath.Join(dir, "dest")); err != nil {
+		t.Errorf("gitCloneFunc of a local bare repo: %v", err)
+	}
+}
+
+// --- destination file collision ---
+
+// TestAddProfilesFromHTTPURL_destFileExists guards against silently
+// clobbering an existing (unregistered) ~/<name>.raid.yaml: the add must
+// refuse with a structured error and leave the file untouched.
+func TestAddProfilesFromHTTPURL_destFileExists(t *testing.T) {
+	setupConfig(t)
+	defer saveFetchMocks()()
+
+	homeDir := t.TempDir()
+	getHomeDir = func() string { return homeDir }
+	detectGitURL = func(string) bool { return false }
+	httpGetFunc = func(string) ([]byte, error) {
+		return []byte("name: taken\n"), nil
+	}
+
+	existing := filepath.Join(homeDir, "taken.raid.yaml")
+	if err := os.WriteFile(existing, []byte("name: taken\n# precious local edits\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	err := runAddProfileFromURLE(cmd, "https://example.com/profile.yaml")
+	if err == nil {
+		t.Fatal("expected error when the destination file already exists")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeProfileAlreadyExists {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeProfileAlreadyExists)
+	}
+	if !strings.Contains(err.Error(), existing) {
+		t.Errorf("error %q should name the colliding path", err.Error())
+	}
+
+	data, readErr := os.ReadFile(existing)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !strings.Contains(string(data), "precious local edits") {
+		t.Errorf("existing file was overwritten: %q", string(data))
+	}
+	// Nothing should have been registered either.
+	if lib.ContainsProfile("taken") {
+		t.Error("profile must not be registered when the copy is refused")
 	}
 }
 

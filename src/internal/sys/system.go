@@ -61,7 +61,7 @@ func CreateFile(filePath string) (*os.File, error) {
 }
 
 // CopyFile copies the file at src to dest, creating parent directories as needed.
-func CopyFile(src, dest string) error {
+func CopyFile(src, dest string) (err error) {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", src, err)
@@ -74,7 +74,14 @@ func CopyFile(src, dest string) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
 	}
-	defer destFile.Close()
+	// Close-time write-back failures (e.g. a full disk flushing buffered
+	// data) must not be reported as success, so surface them through the
+	// named return unless an earlier error already claimed it.
+	defer func() {
+		if cerr := destFile.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("close %s: %w", dest, cerr)
+		}
+	}()
 	if _, err := io.Copy(destFile, srcFile); err != nil {
 		return fmt.Errorf("copy %s → %s: %w", src, dest, err)
 	}
@@ -108,7 +115,12 @@ func ExpandPath(input string) string {
 
 	input = os.ExpandEnv(input)
 	input = strings.TrimSpace(input)
-	input, _ = homedir.Expand(input)
+	// homedir.Expand returns ("", err) on failure (e.g. "~otheruser/repo");
+	// keep the original input in that case rather than letting the empty
+	// string collapse to the CWD via filepath.Abs below.
+	if expanded, err := homedir.Expand(input); err == nil {
+		input = expanded
+	}
 
 	// On Windows, preserve POSIX-style absolute paths (for example,
 	// "/usr/local/bin") rather than canonicalizing them into a drive-rooted
@@ -181,9 +193,23 @@ func ValidateFileName(name string) error {
 
 // ReadLine prints prompt to stdout and returns the trimmed line read from reader.
 func ReadLine(reader *bufio.Reader, prompt string) string {
+	line, _ := ReadLineErr(reader, prompt)
+	return line
+}
+
+// ReadLineErr prints prompt to stdout and returns the trimmed line read from
+// reader. Unlike ReadLine it surfaces read failures — including io.EOF when
+// the input is exhausted — so interactive loops can abort instead of spinning
+// on empty reads. A final unterminated line (data followed by io.EOF) is
+// treated as a successful read.
+func ReadLineErr(reader *bufio.Reader, prompt string) (string, error) {
 	fmt.Print(prompt)
-	line, _ := reader.ReadString('\n')
-	return strings.TrimSpace(line)
+	line, err := reader.ReadString('\n')
+	trimmed := strings.TrimSpace(line)
+	if err != nil && trimmed == "" {
+		return "", err
+	}
+	return trimmed, nil
 }
 
 // ReadYesNo prompts the user and returns true if they answer "y" or "yes" (case-insensitive).

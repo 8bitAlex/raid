@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -190,9 +191,9 @@ func TestRecordRecentEnd_distinguishesSubSecondStarts(t *testing.T) {
 	// then two Ends a moment later.
 	calls := 0
 	timeline := []time.Time{
-		now,                                         // start A
-		now.Add(200 * time.Millisecond),             // start B (same second, different ns)
-		now.Add(time.Second),                        // end A
+		now,                             // start A
+		now.Add(200 * time.Millisecond), // start B (same second, different ns)
+		now.Add(time.Second),            // end A
 		now.Add(time.Second + 100*time.Millisecond), // end B
 	}
 	recentNowFn = func() time.Time {
@@ -275,5 +276,101 @@ func TestRecordRecent_writeError(t *testing.T) {
 
 	if got := ReadRecent(); got != nil {
 		t.Errorf("ReadRecent() after failed writes = %v, want nil (nothing persisted)", got)
+	}
+}
+
+// --- writeRecent Windows-style rename fallback ---
+
+// withRenameFn substitutes the rename operation for the duration of a test.
+func withRenameFn(t *testing.T, fn func(old, new string) error) {
+	t.Helper()
+	prev := renameFn
+	renameFn = fn
+	t.Cleanup(func() { renameFn = prev })
+}
+
+func TestWriteRecent_fallbackSwapsViaAsideFile(t *testing.T) {
+	path := setupRecentTempPath(t)
+	if err := os.WriteFile(path, []byte(`[{"command":"old"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate Windows: renaming over an existing destination fails.
+	withRenameFn(t, func(oldPath, newPath string) error {
+		if _, err := os.Stat(newPath); err == nil {
+			return errors.New("destination exists")
+		}
+		return os.Rename(oldPath, newPath)
+	})
+
+	writeRecent([]RecentEntry{{Command: "new"}})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("recent file missing after fallback swap: %v", err)
+	}
+	if got := string(data); !strings.Contains(got, `"new"`) {
+		t.Errorf("recent file = %s, want the new entry", got)
+	}
+	if _, err := os.Stat(path + ".bak"); !os.IsNotExist(err) {
+		t.Error("aside .bak file should be removed after a successful swap")
+	}
+}
+
+func TestWriteRecent_fallbackAsideFailureKeepsOriginal(t *testing.T) {
+	path := setupRecentTempPath(t)
+	if err := os.WriteFile(path, []byte(`[{"command":"old"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Every rename fails: the first (over existing) and the move-aside.
+	withRenameFn(t, func(oldPath, newPath string) error {
+		return errors.New("rename refused")
+	})
+
+	writeRecent([]RecentEntry{{Command: "new"}})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("previous recent file must survive: %v", err)
+	}
+	if got := string(data); !strings.Contains(got, `"old"`) {
+		t.Errorf("recent file = %s, want previous content preserved", got)
+	}
+}
+
+func TestWriteRecent_fallbackSecondRenameFailureRestoresOriginal(t *testing.T) {
+	path := setupRecentTempPath(t)
+	if err := os.WriteFile(path, []byte(`[{"command":"old"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// First rename (over existing) fails; the move-aside succeeds; the
+	// swap-in fails; the restore rename succeeds. The previous history
+	// must be back at path afterwards — this is the loss the aside file
+	// exists to prevent.
+	calls := 0
+	withRenameFn(t, func(oldPath, newPath string) error {
+		calls++
+		switch calls {
+		case 1: // tmp → path (destination exists)
+			return errors.New("destination exists")
+		case 2: // path → path.bak
+			return os.Rename(oldPath, newPath)
+		case 3: // tmp → path (simulated sharing violation)
+			return errors.New("sharing violation")
+		default: // path.bak → path restore
+			return os.Rename(oldPath, newPath)
+		}
+	})
+
+	writeRecent([]RecentEntry{{Command: "new"}})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("previous recent file must be restored: %v", err)
+	}
+	if got := string(data); !strings.Contains(got, `"old"`) {
+		t.Errorf("recent file = %s, want restored previous content", got)
 	}
 }

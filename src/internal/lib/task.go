@@ -95,6 +95,12 @@ type Task struct {
 	// Retry
 	Attempts int    `json:"attempts,omitempty"`
 	Delay    string `json:"delay,omitempty"`
+
+	// groupStack is the chain of group refs that produced this task,
+	// stamped by execGroup so nested Group tasks can detect reference
+	// cycles instead of recursing until stack exhaustion. Unexported and
+	// never serialized — execution-time bookkeeping only.
+	groupStack []string
 }
 
 // IsZero reports whether the task has no type set.
@@ -129,6 +135,7 @@ func (t Task) Expand() Task {
 		Color:      t.Color,
 		Attempts:   t.Attempts,
 		Delay:      t.Delay,
+		groupStack: t.groupStack,
 	}
 }
 

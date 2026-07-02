@@ -35,8 +35,14 @@ func YAMLToJSON(file io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	var extra interface{}
-	if err := dec.Decode(&extra); err == nil {
+	switch err := dec.Decode(&extra); {
+	case err == nil:
 		return nil, fmt.Errorf("multi-document YAML is not supported for schema validation")
+	case err != io.EOF:
+		// A parse error here means there IS a trailing document, it's
+		// just malformed — surfacing it beats silently validating only
+		// the first document.
+		return nil, fmt.Errorf("multi-document YAML is not supported for schema validation and the trailing document is malformed: %w", err)
 	}
 	return json.Marshal(data)
 }

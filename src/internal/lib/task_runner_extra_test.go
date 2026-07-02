@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -493,7 +494,6 @@ func TestGetShell_cmd(t *testing.T) {
 		t.Errorf("getShell(\"cmd\") = %v, want [cmd /c]", result)
 	}
 }
-
 
 func TestGetShell_unknownDefaultsOnLinux(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -1000,5 +1000,340 @@ func TestSetCommandOutput_redirectsAndRestores(t *testing.T) {
 	commandStderr.Write([]byte("post-restore"))
 	if outBuf.Len() != 0 || errBuf.Len() != 0 {
 		t.Errorf("post-restore writes leaked into buffers: out=%q err=%q", outBuf.String(), errBuf.String())
+	}
+}
+
+// --- group cycle detection ---
+
+func TestExecuteTask_group_selfCycleDetected(t *testing.T) {
+	storeContext(&Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"a": {{Type: Group, Ref: "a"}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	err := ExecuteTask(Task{Type: Group, Ref: "a"})
+	if err == nil {
+		t.Fatal("expected cycle error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error %q should mention the cycle", err.Error())
+	}
+}
+
+func TestExecuteTask_group_mutualCycleDetected(t *testing.T) {
+	storeContext(&Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"a": {{Type: Group, Ref: "b"}},
+				"b": {{Type: Group, Ref: "a"}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	err := ExecuteTask(Task{Type: Group, Ref: "a"})
+	if err == nil {
+		t.Fatal("expected cycle error, got nil")
+	}
+	if !strings.Contains(err.Error(), "a -> b -> a") {
+		t.Errorf("error %q should include the ref chain", err.Error())
+	}
+}
+
+func TestExecuteTask_group_nestedNonCycleStillRuns(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "nested-ran")
+	storeContext(&Context{
+		Profile: Profile{
+			Groups: map[string][]Task{
+				"outer": {{Type: Group, Ref: "inner"}},
+				"inner": {{Type: Shell, Cmd: "echo done > " + marker}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	if err := ExecuteTask(Task{Type: Group, Ref: "outer"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Error("nested group tasks did not run")
+	}
+}
+
+func TestExecuteTask_group_doesNotMutateCachedProfile(t *testing.T) {
+	// execGroup must copy the group's task slice before stamping the
+	// ref stack / Parallel promotion — otherwise the cached profile's
+	// tasks accumulate state across runs.
+	shared := []Task{{Type: Shell, Cmd: "exit 0"}}
+	storeContext(&Context{
+		Profile: Profile{
+			Groups: map[string][]Task{"g": shared},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	if err := ExecuteTask(Task{Type: Group, Ref: "g", Parallel: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if shared[0].Concurrent {
+		t.Error("cached profile task was mutated (Concurrent promoted in place)")
+	}
+	if shared[0].groupStack != nil {
+		t.Error("cached profile task was mutated (groupStack stamped in place)")
+	}
+}
+
+// --- Set task var-name validation ---
+
+func TestExecuteTask_set_rejectsInvalidVarNames(t *testing.T) {
+	dir := t.TempDir()
+	prev := raidVarsOverridePath
+	raidVarsOverridePath = filepath.Join(dir, "vars")
+	defer func() { raidVarsOverridePath = prev }()
+
+	for _, name := range []string{"A=B", "A B", "A\nB", "A\"B", "A#B", "A'B"} {
+		err := ExecuteTask(Task{Type: SetVar, Var: name, Value: "v"})
+		if err == nil {
+			t.Errorf("var %q: expected error, got nil", name)
+		}
+	}
+	// The vars file must not have been created/corrupted by rejected names.
+	if _, err := os.Stat(raidVarsOverridePath); err == nil {
+		data, _ := os.ReadFile(raidVarsOverridePath)
+		if strings.Contains(string(data), "=B=") {
+			t.Errorf("vars file corrupted: %q", string(data))
+		}
+	}
+}
+
+func TestExecuteTask_set_validNameStillWorks(t *testing.T) {
+	dir := t.TempDir()
+	prev := raidVarsOverridePath
+	raidVarsOverridePath = filepath.Join(dir, "vars")
+	defer func() { raidVarsOverridePath = prev }()
+
+	raidVarsMu.Lock()
+	prevVars := raidVars
+	raidVars = map[string]string{}
+	raidVarsMu.Unlock()
+	defer func() {
+		raidVarsMu.Lock()
+		raidVars = prevVars
+		raidVarsMu.Unlock()
+	}()
+
+	if err := ExecuteTask(Task{Type: SetVar, Var: "my_var", Value: "v1"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	raidVarsMu.RLock()
+	got := raidVars["MY_VAR"]
+	raidVarsMu.RUnlock()
+	if got != "v1" {
+		t.Errorf("raidVars[MY_VAR] = %q, want %q", got, "v1")
+	}
+}
+
+// --- Prompt/Confirm variable expansion ---
+
+func TestExecuteTask_prompt_headlessExpandsDefault(t *testing.T) {
+	defer SetHeadlessForTest(true)()
+	t.Setenv("RAID_EXPAND_SRC", "expanded-value")
+	os.Unsetenv("RAID_PROMPT_EXPAND_TEST")
+	t.Cleanup(func() { os.Unsetenv("RAID_PROMPT_EXPAND_TEST") })
+
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_EXPAND_TEST", Default: "$RAID_EXPAND_SRC"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := os.Getenv("RAID_PROMPT_EXPAND_TEST"); got != "expanded-value" {
+		t.Errorf("default not expanded: got %q", got)
+	}
+}
+
+func TestExecuteTask_prompt_literalSkipsExpansion(t *testing.T) {
+	defer SetHeadlessForTest(true)()
+	t.Setenv("RAID_EXPAND_SRC", "expanded-value")
+	os.Unsetenv("RAID_PROMPT_LITERAL_TEST")
+	t.Cleanup(func() { os.Unsetenv("RAID_PROMPT_LITERAL_TEST") })
+
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_LITERAL_TEST", Default: "$RAID_EXPAND_SRC", Literal: true}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := os.Getenv("RAID_PROMPT_LITERAL_TEST"); got != "$RAID_EXPAND_SRC" {
+		t.Errorf("literal default was expanded: got %q", got)
+	}
+}
+
+func TestExecuteTask_prompt_bannerGoesToStderrAndExpands(t *testing.T) {
+	t.Setenv("RAID_BANNER_ENV", "prod")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString("v\n")
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	var outBuf, errBuf bytes.Buffer
+	restore := SetCommandOutput(&outBuf, &errBuf)
+	defer restore()
+
+	os.Unsetenv("RAID_PROMPT_BANNER_TEST")
+	t.Cleanup(func() { os.Unsetenv("RAID_PROMPT_BANNER_TEST") })
+	task := Task{Type: Prompt, Var: "RAID_PROMPT_BANNER_TEST", Message: "Value for $RAID_BANNER_ENV:"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if outBuf.Len() != 0 {
+		t.Errorf("prompt banner leaked to stdout: %q", outBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "Value for prod:") {
+		t.Errorf("stderr = %q, want expanded banner", errBuf.String())
+	}
+}
+
+func TestExecuteTask_confirm_bannerGoesToStderrAndExpands(t *testing.T) {
+	t.Setenv("RAID_BANNER_ENV", "prod")
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString("y\n")
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = origStdin }()
+
+	var outBuf, errBuf bytes.Buffer
+	restore := SetCommandOutput(&outBuf, &errBuf)
+	defer restore()
+
+	task := Task{Type: Confirm, Message: "Deploy to $RAID_BANNER_ENV?"}
+	if err := ExecuteTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if outBuf.Len() != 0 {
+		t.Errorf("confirm banner leaked to stdout: %q", outBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "Deploy to prod? [y/N]") {
+		t.Errorf("stderr = %q, want expanded banner", errBuf.String())
+	}
+}
+
+// --- session capture: multi-line values survive a real shell round-trip ---
+
+func TestSession_multiLineEnvValueSurvives(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell session capture")
+	}
+
+	startSession()
+	defer endSession()
+
+	multi := "line-one\nline-two==\nline-three"
+	t.Setenv("RAID_MULTILINE_BASE", multi)
+
+	// Re-snapshot the baseline AFTER setting the var so it's part of it.
+	startSession()
+
+	// Task 1: exports a new var; the trap dump must not corrupt the
+	// pre-existing multi-line var into truncated/bogus session entries.
+	if err := ExecuteTask(Task{Type: Shell, Cmd: "export RAID_SESSION_NEW=captured"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	commandSession.mu.RLock()
+	defer commandSession.mu.RUnlock()
+	if v, ok := commandSession.vars["RAID_MULTILINE_BASE"]; ok && v != multi {
+		t.Errorf("multi-line var corrupted in session: %q", v)
+	}
+	if commandSession.vars["RAID_SESSION_NEW"] != "captured" {
+		t.Errorf("exported var not captured: %v", commandSession.vars["RAID_SESSION_NEW"])
+	}
+	// No bogus keys parsed out of the multi-line value's continuation lines.
+	for k := range commandSession.vars {
+		if strings.HasPrefix(k, "line-") {
+			t.Errorf("bogus session var parsed from continuation line: %q", k)
+		}
+	}
+}
+
+// --- mutation lock re-entrancy ---
+
+func TestBuildSubprocessEnv_marksLockHeld(t *testing.T) {
+	dir := t.TempDir()
+	prevLock := LockPathOverride
+	LockPathOverride = filepath.Join(dir, ".lock")
+	defer func() { LockPathOverride = prevLock }()
+
+	for _, kv := range buildSubprocessEnv() {
+		if strings.HasPrefix(kv, MutationLockEnvVar+"=") {
+			t.Fatalf("lock marker present without lock held: %s", kv)
+		}
+	}
+
+	err := WithMutationLock(func() error {
+		found := false
+		for _, kv := range buildSubprocessEnv() {
+			if kv == MutationLockEnvVar+"=1" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("lock marker missing from subprocess env while lock held")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, kv := range buildSubprocessEnv() {
+		if kv == MutationLockEnvVar+"=1" {
+			t.Fatal("lock marker still present after release")
+		}
+	}
+}
+
+func TestExecuteTask_print_prefixedWhenConcurrentOnTTY(t *testing.T) {
+	prev := isTerminalSinkFn
+	isTerminalSinkFn = func(io.Writer) bool { return true }
+	defer func() { isTerminalSinkFn = prev }()
+	t.Setenv("NO_COLOR", "1")
+
+	var buf bytes.Buffer
+	restore := SetCommandOutput(&buf, io.Discard)
+	defer restore()
+
+	task := Task{Type: Print, Message: "hello", Concurrent: false}
+	// shouldPrefix requires Concurrent; execPrint is reached via
+	// dispatch, so call with the flag set directly.
+	task.Concurrent = true
+	if err := dispatchTask(task); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := buf.String(); got != "[print] hello\n" {
+		t.Errorf("output = %q, want prefixed line", got)
+	}
+
+	// Colored variant through the same wrapped path.
+	buf.Reset()
+	colored := Task{Type: Print, Message: "hi", Color: "green", Concurrent: true}
+	if err := dispatchTask(colored); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := buf.String(); !strings.Contains(got, "[print] ") || !strings.Contains(got, "hi") {
+		t.Errorf("colored output = %q, want prefixed line", got)
 	}
 }

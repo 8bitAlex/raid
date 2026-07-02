@@ -738,7 +738,7 @@ func TestExecuteRepoCommand_setsArgs(t *testing.T) {
 			Repositories: []Repo{{
 				Name: "backend",
 				Commands: []Command{{
-					Name: "tmpl",
+					Name:  "tmpl",
 					Tasks: []Task{{Type: Template, Src: srcFile, Dest: outFile}},
 				}},
 			}},
@@ -824,5 +824,47 @@ func TestLockPath_defaultShape(t *testing.T) {
 	}
 	if !strings.Contains(got, ConfigDirName) {
 		t.Errorf("lockPath() = %q, want it to contain ConfigDirName %q", got, ConfigDirName)
+	}
+}
+
+func TestSetCommandArgs_collidingNamesRestoreOriginal(t *testing.T) {
+	// "my-flag" and "my.flag" both sanitize to MY_FLAG. The cleanup
+	// must restore the true pre-command state (unset), not raid's own
+	// intermediate value.
+	os.Unsetenv("MY_FLAG")
+	t.Cleanup(func() { os.Unsetenv("MY_FLAG") })
+
+	var errBuf bytes.Buffer
+	restore := SetCommandOutput(io.Discard, &errBuf)
+	defer restore()
+
+	cleanup := setCommandArgs(nil, map[string]string{"my-flag": "a", "my.flag": "b"})
+
+	// Sorted order: "my-flag" < "my.flag" ('-' 0x2D < '.' 0x2E), so the
+	// later name deterministically wins during the run.
+	if got := os.Getenv("MY_FLAG"); got != "b" {
+		t.Errorf("during run MY_FLAG = %q, want deterministic winner %q", got, "b")
+	}
+	if !strings.Contains(errBuf.String(), "MY_FLAG") {
+		t.Errorf("expected collision warning naming MY_FLAG, got %q", errBuf.String())
+	}
+
+	cleanup()
+	if v, ok := os.LookupEnv("MY_FLAG"); ok {
+		t.Errorf("after cleanup MY_FLAG = %q, want unset", v)
+	}
+}
+
+func TestSetCommandArgs_collidingNamesRestorePreexistingValue(t *testing.T) {
+	t.Setenv("MY_FLAG", "original")
+
+	restore := SetCommandOutput(io.Discard, io.Discard)
+	defer restore()
+
+	cleanup := setCommandArgs(nil, map[string]string{"my-flag": "a", "my.flag": "b"})
+	cleanup()
+
+	if got := os.Getenv("MY_FLAG"); got != "original" {
+		t.Errorf("after cleanup MY_FLAG = %q, want %q", got, "original")
 	}
 }
