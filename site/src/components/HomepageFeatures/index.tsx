@@ -2,7 +2,7 @@ import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
 import TerminalWindow from '@site/src/components/TerminalWindow';
-import { Rocket, BookOpen, Users, Layers } from 'lucide-react';
+import { Boxes, Rocket, BookOpen, Users, Layers, Bot } from 'lucide-react';
 import styles from './styles.module.css';
 
 type CodeSample = {
@@ -19,6 +19,35 @@ type FeatureItem = {
 };
 
 const FeatureList: FeatureItem[] = [
+  {
+    icon: <Boxes size={28} />,
+    title: 'Your whole stack, one YAML profile',
+    description: (
+      <>
+        A <strong>profile</strong> is a version-controlled YAML file that
+        describes your entire development environment: the repositories to
+        clone, how to set them up, the environments to switch between, and the
+        commands your team runs. Check it in once — every teammate and every
+        machine gets the same setup.
+      </>
+    ),
+    code: {
+      language: 'yaml',
+      title: 'profile.raid.yml',
+      content: `name: platform
+
+repositories:
+  - name: api
+    url: git@github.com:my-org/api.git
+    path: ~/dev/api
+  - name: frontend
+    url: git@github.com:my-org/frontend.git
+    path: ~/dev/frontend
+  - name: worker
+    url: git@github.com:my-org/worker.git
+    path: ~/dev/worker`,
+    },
+  },
   {
     icon: <Rocket size={28} />,
     title: 'One-command onboarding',
@@ -108,8 +137,9 @@ Done in 1m 18s`,
     description: (
       <>
         <code>raid env staging</code> writes the right <code>.env</code> files
-        into every repo and runs environment tasks across all of them at once.
-        Switch contexts in seconds, not minutes.
+        into every repo and runs environment tasks across all of them at once —
+        profile-level tasks and each repo&apos;s own. Switch contexts in
+        seconds, not minutes.
       </>
     ),
     code: {
@@ -126,8 +156,34 @@ Done in 1m 18s`,
       - type: Shell
         cmd: docker compose up -d
       - type: Wait
-        url: http://localhost:5432
+        url: localhost:5432
         timeout: 30s`,
+    },
+  },
+  {
+    icon: <Bot size={28} />,
+    title: 'Built for AI agents',
+    description: (
+      <>
+        Raid is a first-class <strong>MCP server</strong>: <code>raid context
+        serve</code> gives Claude, Cursor, or any MCP client live workspace
+        context and tools to run your team&apos;s commands — with per-command{' '}
+        <code>agent</code> safety metadata controlling what runs unattended.
+        Headless mode (<code>--yes</code>) and <code>--json</code> output make
+        every command scriptable.
+      </>
+    ),
+    code: {
+      language: 'json',
+      title: 'mcp.json',
+      content: `{
+  "mcpServers": {
+    "raid": {
+      "command": "raid",
+      "args": ["context", "serve"]
+    }
+  }
+}`,
     },
   },
 ];
