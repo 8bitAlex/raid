@@ -316,22 +316,28 @@ func execShell(task Task) error {
 	shell := getShell(task.Shell)
 	cmdStr := task.Cmd
 
-	// When a session is active and we're not on Windows, wrap the command so
-	// that the full environment after execution is dumped to a temp file.
-	// This lets us capture variables exported by the shell command and make
-	// them available to subsequent tasks in the same command run.
+	// When a session is active and the resolved shell is a POSIX shell, wrap
+	// the command so that the full environment after execution is dumped to a
+	// temp file. This lets us capture variables exported by the shell command
+	// and make them available to subsequent tasks in the same command run.
+	// The wrapper is POSIX syntax (`name=value`, `trap ... EXIT`), so it must
+	// be gated on the resolved shell — not the platform — or a `shell: pwsh`
+	// task on Linux/macOS would fail on the wrapper before the user's command
+	// ever ran.
 	var tmpFile string
-	if commandSession != nil && sys.GetPlatform() != sys.Windows {
+	if commandSession != nil && sys.GetPlatform() != sys.Windows && isPOSIXShell(shell[0]) {
 		if f, err := os.CreateTemp("", ".raid-session-*"); err == nil {
 			tmpFile = f.Name()
 			f.Close()
 			// Register an EXIT trap so the environment is dumped on all exit
 			// paths — including early exits from `exit N`, `set -e`, or any
 			// signal that terminates the shell. The trap captures $? before
-			// running env so the original exit code is preserved.
+			// running env so the original exit code is preserved. Prefer
+			// `env -0` (NUL-separated) so multi-line values survive the
+			// round-trip; fall back to plain `env` where -0 isn't supported.
 			cmdStr = fmt.Sprintf(
-				"__raid_tmp='%s'\ntrap '__raid_exit=$?; env > \"$__raid_tmp\"; exit $__raid_exit' EXIT\n%s",
-				tmpFile, task.Cmd,
+				"__raid_tmp='%s'\ntrap '__raid_exit=$?; env -0 > \"$__raid_tmp\" 2>/dev/null || env > \"$__raid_tmp\"; exit $__raid_exit' EXIT\n%s",
+				shellSingleQuote(tmpFile), task.Cmd,
 			)
 		}
 	}
@@ -413,17 +419,76 @@ func hashBytes(p []byte) uint64 {
 	return h.Sum64()
 }
 
-// parseEnvLines parses newline-separated KEY=VALUE pairs as produced by `env`.
-// Values may contain '=' characters; only the first '=' is used as delimiter.
+// parseEnvLines parses a session env dump. NUL-separated output (from
+// `env -0`) is preferred and unambiguous — values may contain newlines and
+// '='; only the first '=' of each entry is the delimiter.
+//
+// The newline-separated fallback (plain `env`) is inherently ambiguous for
+// multi-line values, so it is parsed defensively: a line only starts a new
+// entry when its key is a valid environment identifier; anything else is
+// treated as a continuation of the previous value and rejoined with '\n'.
+// Without that filter, a multi-line value (e.g. a PEM key) would be
+// truncated to its first line and its continuation lines misparsed as bogus
+// KEY=VALUE pairs — poisoning the session env for every subsequent task.
 func parseEnvLines(output string) map[string]string {
 	result := make(map[string]string)
+	if strings.Contains(output, "\x00") {
+		for _, entry := range strings.Split(output, "\x00") {
+			if k, v, found := strings.Cut(entry, "="); found && k != "" {
+				result[k] = v
+			}
+		}
+		return result
+	}
+	lastKey := ""
 	for _, line := range strings.Split(output, "\n") {
-		k, v, found := strings.Cut(line, "=")
-		if found && k != "" {
+		if k, v, found := strings.Cut(line, "="); found && isEnvName(k) {
 			result[k] = v
+			lastKey = k
+			continue
+		}
+		if lastKey != "" && line != "" {
+			result[lastKey] += "\n" + line
 		}
 	}
 	return result
+}
+
+// isEnvName reports whether s is a valid POSIX environment variable
+// identifier: [A-Za-z_][A-Za-z0-9_]*.
+func isEnvName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'):
+		case r >= '0' && r <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isPOSIXShell reports whether the resolved shell binary understands the
+// POSIX session-capture wrapper (variable assignment + `trap ... EXIT`).
+func isPOSIXShell(shell string) bool {
+	switch shell {
+	case "bash", "sh", "zsh":
+		return true
+	}
+	return false
+}
+
+// shellSingleQuote escapes s for interpolation inside a single-quoted
+// POSIX shell string ('...' → '\” splice), so a TMPDIR containing a
+// quote can't break out of the session wrapper.
+func shellSingleQuote(s string) string {
+	return strings.ReplaceAll(s, "'", `'\''`)
 }
 
 func getShell(shell string) []string {
@@ -546,6 +611,11 @@ func setCmdOutput(cmd *exec.Cmd, task Task) func() {
 // Defensive guard since Set / Prompt task input isn't yet schema-constrained.
 func buildSubprocessEnv() []string {
 	env := os.Environ()
+	// Mark children spawned under the mutation lock so a nested raid
+	// invocation doesn't deadlock re-acquiring it — see MutationLockEnvVar.
+	if mutationLockHeld() {
+		env = append(env, MutationLockEnvVar+"=1")
+	}
 	if commandSession != nil {
 		commandSession.mu.RLock()
 		for k, v := range commandSession.vars {
@@ -714,6 +784,16 @@ func execGroup(task Task) error {
 	if task.Ref == "" {
 		return liberrs.ArgInvalid("ref is required for Group task")
 	}
+	// Refuse self- or mutually-referencing groups. Without this check,
+	// a group whose tasks (transitively) reference the group itself
+	// recurses until Go stack exhaustion — a crash recover() can't
+	// catch, which would tear down the long-lived MCP stdio server.
+	for _, ancestor := range task.groupStack {
+		if ancestor == task.Ref {
+			return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask,
+				"task group cycle detected: %s", strings.Join(append(task.groupStack, task.Ref), " -> "))
+		}
+	}
 	ctx := loadContext()
 	if ctx == nil || ctx.Profile.Groups == nil {
 		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "no task_groups defined in the active profile")
@@ -724,20 +804,24 @@ func execGroup(task Task) error {
 		return liberrs.Newf(liberrs.CodeTaskFailed, liberrs.CategoryTask, "task group '%s' not found in profile", task.Ref)
 	}
 
-	if task.Parallel {
-		concurrent := make([]Task, len(tasks))
-		for i, t := range tasks {
+	// Copy before mutating: the slice is shared cached-profile state, so
+	// stamping the ref stack (or the Parallel promotion) in place would
+	// leak into every later run of the same group.
+	stack := append(append([]string(nil), task.groupStack...), task.Ref)
+	children := make([]Task, len(tasks))
+	for i, t := range tasks {
+		t.groupStack = stack
+		if task.Parallel {
 			t.Concurrent = true
-			concurrent[i] = t
 		}
-		tasks = concurrent
+		children[i] = t
 	}
 
 	if task.Attempts > 0 {
-		return execGroupWithRetry(tasks, task.Attempts, task.Delay)
+		return execGroupWithRetry(children, task.Attempts, task.Delay)
 	}
 
-	return ExecuteTasks(tasks)
+	return ExecuteTasks(children)
 }
 
 func execGroupWithRetry(tasks []Task, attempts int, delayStr string) error {
@@ -830,6 +914,14 @@ func execPrompt(task Task) error {
 		return liberrs.ArgInvalid("var is required for Prompt task")
 	}
 
+	// Expand $VAR references in the banner and default, matching every
+	// other task type. Done before the headless branch so a headless run
+	// stores the expanded default, not the literal "$HOME/..." text.
+	if !task.Literal {
+		task.Message = expandRaid(task.Message)
+		task.Default = expandRaid(task.Default)
+	}
+
 	// Headless mode: skip stdin entirely. Use the declared default if
 	// present; otherwise fail fast with a structured error. We refuse
 	// to set the variable to "" silently because callers downstream
@@ -852,8 +944,11 @@ func execPrompt(task Task) error {
 
 	// outputMu held only for the banner write; releasing before the
 	// stdin read so a blocking ReadString can't freeze concurrent
-	// task output.
-	lockedFprint(commandStdout, message+" ")
+	// task output. The banner goes to stderr (conventional for
+	// interactive prompts) so `out: {stdout: false}` or a plain shell
+	// redirect can't swallow it and leave the CLI blocked invisibly
+	// on stdin.
+	lockedFprint(commandStderr, message+" ")
 
 	value, err := getStdinReader().ReadString('\n')
 	if err != nil {
@@ -882,6 +977,10 @@ func execConfirm(task Task) error {
 	message := task.Message
 	if message == "" {
 		message = "Continue?"
+	} else if !task.Literal {
+		// Expand $VAR references in the banner, matching every other
+		// task type.
+		message = expandRaid(message)
 	}
 
 	stdinMu.Lock()
@@ -889,7 +988,8 @@ func execConfirm(task Task) error {
 
 	// Banner held under outputMu but released before the stdin read
 	// (which can block indefinitely); see execPrompt for rationale.
-	lockedFprint(commandStdout, message+" [y/N] ")
+	// Emitted to stderr for the same reasons as execPrompt's banner.
+	lockedFprint(commandStderr, message+" [y/N] ")
 
 	answer, err := getStdinReader().ReadString('\n')
 	if err != nil {
@@ -909,7 +1009,12 @@ func execPrint(task Task) error {
 		msg = expandRaid(msg)
 	}
 
+	// Wrapped output locks per-line inside prefixedWriter.Write; the
+	// unwrapped path must go through lockedFprintf so a Print can't land
+	// mid-line inside a concurrent peer's prefixed output (or race on a
+	// non-thread-safe sink installed via SetCommandOutput).
 	sink := io.Writer(commandStdout)
+	wrapped := false
 	if shouldPrefix(task, commandStdout) {
 		color := ""
 		if !colorDisabled() {
@@ -918,16 +1023,24 @@ func execPrint(task Task) error {
 		pw := newPrefixedWriter(commandStdout, buildPrefix(task.Label(), color))
 		defer pw.Flush()
 		sink = pw
+		wrapped = true
+	}
+	emit := func(format string, args ...any) {
+		if wrapped {
+			fmt.Fprintf(sink, format, args...)
+			return
+		}
+		lockedFprintf(sink, format, args...)
 	}
 
 	if task.Color != "" {
 		if code, ok := colorCodes[strings.ToLower(task.Color)]; ok {
-			fmt.Fprintf(sink, "%s%s%s\n", code, msg, colorCodes["reset"])
+			emit("%s%s%s\n", code, msg, colorCodes["reset"])
 			return nil
 		}
 	}
 
-	fmt.Fprintln(sink, msg)
+	emit("%s\n", msg)
 	return nil
 }
 
@@ -937,6 +1050,15 @@ func execSetVar(task Task) error {
 	}
 	task = task.Expand()
 	task.Var = strings.ToUpper(task.Var)
+
+	// Reject names that would corrupt the vars file or be silently
+	// dropped from subprocess envs. '=' splits into a different key on
+	// godotenv re-read (the in-memory entry then diverges from what was
+	// persisted), and NUL/newline/'#'/quotes/whitespace break either the
+	// dotenv round-trip or the exec env-block encoding.
+	if !validEnvPair(task.Var, task.Value) || strings.ContainsAny(task.Var, " \t\n\r\"'#") {
+		return liberrs.Newf(liberrs.CodeArgInvalid, liberrs.CategoryConfig, "invalid var name %q for Set task: must not contain '=', whitespace, quotes, or '#'", task.Var)
+	}
 
 	path := raidVarsPath()
 

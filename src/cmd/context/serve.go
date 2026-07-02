@@ -279,14 +279,14 @@ func registerTools(s *server.MCPServer) {
 }
 
 // agentToolDefs returns the canonical raid agent toolkit. Names match issue
-// #45 so the toolkit stays stable even as the implementations land.
+// #45 so the toolkit stays stable even as the implementations evolve.
 //
-// Read-only tools (list_profiles, list_repos, describe_repo) are implemented
-// here; mutating tools (install, env_switch, run_task) are still stubs that
-// return an MCP tool error indicating the call hasn't been implemented yet.
-// Tool errors flow back to the model for self-correction; protocol errors
-// don't, which is why the stubs return a successful result-with-isError
-// rather than `error` from the handler.
+// Read-only tools (list_profiles, list_repos, describe_repo) read the cached
+// workspace directly; mutating tools (install, env_switch, run_task) run
+// under the cross-process mutation lock with their output captured off
+// os.Stdout. Handler failures surface as tool errors (a successful result
+// with isError=true) rather than `error` from the handler: tool errors flow
+// back to the model for self-correction; protocol errors don't.
 func agentToolDefs() []agentToolDef {
 	return []agentToolDef{
 		{
@@ -377,6 +377,19 @@ func (s *syncBuffer) String() string {
 	return s.buf.String()
 }
 
+// reloadWorkspace refreshes the cached workspace snapshot after a mutating
+// tool ran. Failures are diagnostic-only — the mutation itself already
+// succeeded — so they're surfaced on os.Stderr (safe: only stdout carries
+// JSON-RPC framing) rather than failing the tool call, matching the
+// vars-watcher reload path in startVarsWatcher. The previous in-memory
+// snapshot is retained on failure since ForceLoad only swaps the cached
+// context on success.
+func reloadWorkspace(tool string) {
+	if err := raid.ForceLoad(); err != nil {
+		fmt.Fprintf(os.Stderr, "raid: %s: workspace reload failed: %v\n", tool, err)
+	}
+}
+
 func handleInstall(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	repoName := req.GetString("repo", "")
 
@@ -391,7 +404,7 @@ func handleInstall(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 		})
 		if runErr == nil {
 			// Refresh cached workspace so subsequent reads see new state.
-			_ = raid.ForceLoad()
+			reloadWorkspace("raid_install")
 		}
 		return runErr
 	})
@@ -461,7 +474,7 @@ func handleRunTask(_ stdctx.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 			// ExecuteCommand mutates env vars and recent.json. ForceLoad
 			// keeps reads consistent (recent is read fresh anyway, but
 			// command definitions come from the cached profile).
-			_ = raid.ForceLoad()
+			reloadWorkspace("raid_run_task")
 		}
 		return runErr
 	})
@@ -626,10 +639,4 @@ func jsonToolResult(payload any) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultError(fmt.Sprintf("internal: marshal: %v", err)), nil
 	}
 	return mcp.NewToolResultText(string(data)), nil
-}
-
-func notImplemented(name string) server.ToolHandlerFunc {
-	return func(_ stdctx.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return mcp.NewToolResultError(fmt.Sprintf("%s is not yet implemented; see https://github.com/8bitalex/raid/issues/45", name)), nil
-	}
 }

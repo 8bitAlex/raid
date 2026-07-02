@@ -38,6 +38,34 @@ func setupConfig(t *testing.T) {
 	}
 }
 
+// setupLoadedConfig isolates lib config + home-dir state (lock, recent) in a
+// temp dir and resets the cached context. runDoctor acquires the mutation
+// lock, so the LockPathOverride redirect keeps tests off the developer's
+// real ~/.raid/.lock. Returns the temp dir so tests can drop profile files
+// next to the config.
+func setupLoadedConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	oldCfg := lib.CfgPath
+	oldLock := lib.LockPathOverride
+	oldRecent := lib.RecentPathOverride
+	t.Cleanup(func() {
+		lib.CfgPath = oldCfg
+		lib.LockPathOverride = oldLock
+		lib.RecentPathOverride = oldRecent
+		lib.ResetContext()
+		viper.Reset()
+	})
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.LockPathOverride = filepath.Join(dir, ".lock")
+	lib.RecentPathOverride = filepath.Join(dir, "recent.json")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+	return dir
+}
+
 // newDoctorCmd returns a child cobra.Command wired into a parent root
 // whose persistent --json flag is set as requested. runDoctor reads
 // jsonMode via cmd.Root().PersistentFlags() so the parent setup is the
@@ -149,18 +177,7 @@ func TestCommand_isConfigured(t *testing.T) {
 }
 
 func TestRunDoctor_allOK(t *testing.T) {
-	dir := t.TempDir()
-	old := lib.CfgPath
-	t.Cleanup(func() {
-		lib.CfgPath = old
-		lib.ResetContext()
-		viper.Reset()
-	})
-	lib.CfgPath = filepath.Join(dir, "config.toml")
-	lib.ResetContext()
-	if err := lib.InitConfig(); err != nil {
-		t.Fatalf("InitConfig: %v", err)
-	}
+	dir := setupLoadedConfig(t)
 
 	repoDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0755); err != nil {
@@ -183,23 +200,12 @@ func TestRunDoctor_allOK(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	r, w, pipeErr := os.Pipe()
-	if pipeErr != nil {
-		t.Fatal(pipeErr)
-	}
-	oldStdout := os.Stdout
-	os.Stdout = w
-
+	var buf bytes.Buffer
 	cmd := newDoctorCmd(false)
+	cmd.SetOut(&buf)
 	if err := runDoctor(cmd, nil); err != nil {
 		t.Errorf("runDoctor allOK returned error: %v", err)
 	}
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
 	got := buf.String()
 
 	if !strings.Contains(got, "[ok]") {
@@ -211,18 +217,7 @@ func TestRunDoctor_allOK(t *testing.T) {
 }
 
 func TestRunDoctor_warningsOnly(t *testing.T) {
-	dir := t.TempDir()
-	old := lib.CfgPath
-	t.Cleanup(func() {
-		lib.CfgPath = old
-		lib.ResetContext()
-		viper.Reset()
-	})
-	lib.CfgPath = filepath.Join(dir, "config.toml")
-	lib.ResetContext()
-	if err := lib.InitConfig(); err != nil {
-		t.Fatalf("InitConfig: %v", err)
-	}
+	dir := setupLoadedConfig(t)
 
 	profilePath := filepath.Join(dir, "warn.raid.yaml")
 	content := "name: warn\nrepositories:\n  - name: missing-repo\n    url: https://example.com/repo.git\n    path: /tmp/nonexistent-path-raid-test-12345\n"
@@ -240,23 +235,12 @@ func TestRunDoctor_warningsOnly(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	r, w, pipeErr := os.Pipe()
-	if pipeErr != nil {
-		t.Fatal(pipeErr)
-	}
-	oldStdout := os.Stdout
-	os.Stdout = w
-
+	var buf bytes.Buffer
 	cmd := newDoctorCmd(false)
+	cmd.SetOut(&buf)
 	if err := runDoctor(cmd, nil); err != nil {
 		t.Errorf("runDoctor warningsOnly returned unexpected error: %v", err)
 	}
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
 	got := buf.String()
 
 	if !strings.Contains(got, "[warn]") {
@@ -271,18 +255,7 @@ func TestRunDoctor_warningsOnly(t *testing.T) {
 }
 
 func TestRunDoctor_jsonAllOK(t *testing.T) {
-	dir := t.TempDir()
-	old := lib.CfgPath
-	t.Cleanup(func() {
-		lib.CfgPath = old
-		lib.ResetContext()
-		viper.Reset()
-	})
-	lib.CfgPath = filepath.Join(dir, "config.toml")
-	lib.ResetContext()
-	if err := lib.InitConfig(); err != nil {
-		t.Fatalf("InitConfig: %v", err)
-	}
+	dir := setupLoadedConfig(t)
 
 	repoDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0755); err != nil {
@@ -333,18 +306,7 @@ func TestRunDoctor_jsonAllOK(t *testing.T) {
 }
 
 func TestRunDoctor_jsonWarningSurfacesSuggestion(t *testing.T) {
-	dir := t.TempDir()
-	old := lib.CfgPath
-	t.Cleanup(func() {
-		lib.CfgPath = old
-		lib.ResetContext()
-		viper.Reset()
-	})
-	lib.CfgPath = filepath.Join(dir, "config.toml")
-	lib.ResetContext()
-	if err := lib.InitConfig(); err != nil {
-		t.Fatalf("InitConfig: %v", err)
-	}
+	dir := setupLoadedConfig(t)
 
 	profilePath := filepath.Join(dir, "warn.raid.yaml")
 	content := "name: warn\nrepositories:\n  - name: missing-repo\n    url: https://example.com/repo.git\n    path: /tmp/nonexistent-path-raid-test-67890\n"
@@ -402,18 +364,7 @@ func TestSeverityString(t *testing.T) {
 }
 
 func TestRunDoctor_noReposWarning(t *testing.T) {
-	dir := t.TempDir()
-	old := lib.CfgPath
-	t.Cleanup(func() {
-		lib.CfgPath = old
-		lib.ResetContext()
-		viper.Reset()
-	})
-	lib.CfgPath = filepath.Join(dir, "config.toml")
-	lib.ResetContext()
-	if err := lib.InitConfig(); err != nil {
-		t.Fatalf("InitConfig: %v", err)
-	}
+	dir := setupLoadedConfig(t)
 
 	profilePath := filepath.Join(dir, "norepo.raid.yaml")
 	if err := os.WriteFile(profilePath, []byte("name: norepo\n"), 0644); err != nil {
@@ -429,23 +380,12 @@ func TestRunDoctor_noReposWarning(t *testing.T) {
 		t.Fatalf("ForceLoad: %v", err)
 	}
 
-	r, w, pipeErr := os.Pipe()
-	if pipeErr != nil {
-		t.Fatal(pipeErr)
-	}
-	oldStdout := os.Stdout
-	os.Stdout = w
-
+	var buf bytes.Buffer
 	cmd := newDoctorCmd(false)
+	cmd.SetOut(&buf)
 	if err := runDoctor(cmd, nil); err != nil {
 		t.Errorf("runDoctor noReposWarning returned unexpected error: %v", err)
 	}
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
 	got := buf.String()
 
 	if !strings.Contains(got, "[warn]") {
@@ -453,6 +393,36 @@ func TestRunDoctor_noReposWarning(t *testing.T) {
 	}
 	if !strings.Contains(got, "none configured") {
 		t.Errorf("runDoctor no repos: expected 'none configured' in output, got %q", got)
+	}
+}
+
+// TestRunDoctor_lockFailure covers the mutation-lock acquisition failure
+// path: doctor runs verify sequences under raid.WithMutationLock, and a
+// lock error must propagate as a structured LOCK_FAILED error instead of
+// running unserialized.
+func TestRunDoctor_lockFailure(t *testing.T) {
+	setupConfig(t)
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// A regular file as the lock path's parent makes MkdirAll fail.
+	lib.LockPathOverride = filepath.Join(blocker, "sub", ".lock")
+
+	cmd := newDoctorCmd(false)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	err := runDoctor(cmd, nil)
+	if err == nil {
+		t.Fatal("expected lock acquisition error")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeLockFailed {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeLockFailed)
 	}
 }
 

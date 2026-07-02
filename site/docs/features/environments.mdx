@@ -42,7 +42,9 @@ repositories:
     path: "~/dev/api"
 ```
 
-Individual repositories can also define their own environments in their `raid.yaml`. These are merged with the profile-level environments when applied.
+Individual repositories can also define their own environments in their `raid.yaml`. These are merged with the profile-level environments when applied: the repo's `variables` are written to that repo's `.env`, and the repo's `tasks` run with the repo directory as their default working directory (after any profile-level tasks for the same environment). An environment declared only in a repo's `raid.yaml` is switchable with `raid env <name>` like any profile-level environment.
+
+Repositories that haven't been cloned yet are skipped with a notice — run `raid install` first, then re-run `raid env <name>` to write their `.env` files.
 
 ```yaml title="~/dev/api/raid.yaml"
 name: "api"

@@ -149,7 +149,9 @@ func loadRaidVars() {
 	}
 	m, err := godotenv.Read(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "raid: failed to load persisted vars from %s: %v\n", path, err)
+		if !suppressLoadWarnings.Load() {
+			fmt.Fprintf(os.Stderr, "raid: failed to load persisted vars from %s: %v\n", path, err)
+		}
 		return
 	}
 	raidVarsMu.Lock()
@@ -350,6 +352,12 @@ func expandRaidForShell(s string) string {
 // or loading fails. Intended for info-command paths (--help, --version) where
 // user-command registration is opportunistic and side effects are undesirable.
 func QuietLoad() []Command {
+	// Suppress the load-time stderr warnings (corrupt vars file,
+	// repo-name sanitization collisions) for the duration of the load —
+	// `raid --help` shouldn't print diagnostics the real invocation
+	// will print again anyway.
+	suppressLoadWarnings.Store(true)
+	defer suppressLoadWarnings.Store(false)
 	if !initConfigReadOnly() {
 		return nil
 	}
@@ -358,6 +366,10 @@ func QuietLoad() []Command {
 	}
 	return GetCommands()
 }
+
+// suppressLoadWarnings gates the advisory stderr warnings emitted during
+// profile loading. Set only by QuietLoad, whose contract is "no warnings".
+var suppressLoadWarnings atomic.Bool
 
 // ResetContext clears the cached load context, forcing the next Load or ForceLoad to
 // rebuild from the current viper configuration.
@@ -460,9 +472,11 @@ func setRepoVars(repos []Repo) {
 			continue
 		}
 		if prev, ok := seen[key]; ok && prev != repo.Name {
-			fmt.Fprintf(os.Stderr,
-				"raid: warning: repos %q and %q both map to RAID_REPO_%s_*; %q wins\n",
-				prev, repo.Name, key, repo.Name)
+			if !suppressLoadWarnings.Load() {
+				fmt.Fprintf(os.Stderr,
+					"raid: warning: repos %q and %q both map to RAID_REPO_%s_*; %q wins\n",
+					prev, repo.Name, key, repo.Name)
+			}
 		}
 		seen[key] = repo.Name
 		raidVars["RAID_REPO_"+key+"_URL"] = ScrubURL(repo.URL)
@@ -738,6 +752,14 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 				}
 				return err
 			}
+			// Skip explicitly-empty documents (a trailing `---`, or a
+			// document holding only comments) instead of validating nil
+			// against the schema — extractProfilesFromYAML skips them
+			// too, and the two paths must agree or a file that extracts
+			// cleanly would refuse to validate.
+			if raw == nil {
+				continue
+			}
 			count++
 			jsonBytes, err := json.Marshal(raw)
 			if err != nil {
@@ -764,9 +786,19 @@ func validateFile(path string, sch *jsonschema.Schema) error {
 
 	// Detect a top-level JSON array and validate each element individually,
 	// mirroring how extractProfilesFromJSON supports both single-object and
-	// array-of-objects JSON profile files.
-	var arr []any
-	if json.Unmarshal(data, &arr) == nil {
+	// array-of-objects JSON profile files. The array branch is taken only
+	// when the document *syntactically* starts with '[' — `null` also
+	// unmarshals into a nil slice, and treating it as a zero-element array
+	// would skip schema validation entirely and report the file as valid.
+	trimmed := bytes.TrimLeft(data, " \t\r\n")
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var arr []any
+		if err := json.Unmarshal(data, &arr); err != nil {
+			return err
+		}
+		if len(arr) == 0 {
+			return liberrs.Newf(liberrs.CodeSchemaValidationFailed, liberrs.CategoryConfig, "invalid format: file contains no JSON documents")
+		}
 		for _, elem := range arr {
 			jsonBytes, err := json.Marshal(elem)
 			if err != nil {

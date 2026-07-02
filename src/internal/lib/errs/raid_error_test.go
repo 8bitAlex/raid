@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -346,5 +348,32 @@ func TestEveryConstructor_isWellFormed(t *testing.T) {
 				t.Errorf("Category %d outside documented 1-5 range", c)
 			}
 		})
+	}
+}
+
+// failingWriter always errors, forcing EmitJSON's fallback path.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("sink closed")
+}
+
+func TestEmitJSON_encodeFailureFallsBackToStderr(t *testing.T) {
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	EmitJSON(failingWriter{}, Unknown(errors.New("boom")))
+	w.Close()
+	os.Stderr = origStderr
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "boom") || !strings.Contains(string(data), "failed to emit JSON error") {
+		t.Errorf("stderr fallback = %q, want original error + diagnostic", string(data))
 	}
 }

@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1432,5 +1433,43 @@ func TestValidateFile_invalidJSONSingleObject(t *testing.T) {
 	err := ValidateProfile(path)
 	if err == nil {
 		t.Fatal("validateFile() with invalid JSON (unknown field) should return error")
+	}
+}
+
+func TestLoadRaidVars_warningGatedBySuppressLoadWarnings(t *testing.T) {
+	dir := t.TempDir()
+	prev := raidVarsOverridePath
+	raidVarsOverridePath = filepath.Join(dir, "vars")
+	defer func() { raidVarsOverridePath = prev }()
+	// Content godotenv can't parse — triggers the corrupt-vars warning.
+	if err := os.WriteFile(raidVarsOverridePath, []byte("not a dotenv line !!!"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	capture := func() string {
+		origStderr := os.Stderr
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Stderr = w
+		loadRaidVars()
+		w.Close()
+		os.Stderr = origStderr
+		data, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	if out := capture(); !strings.Contains(out, "failed to load persisted vars") {
+		t.Errorf("expected warning by default, got %q", out)
+	}
+
+	suppressLoadWarnings.Store(true)
+	defer suppressLoadWarnings.Store(false)
+	if out := capture(); out != "" {
+		t.Errorf("QuietLoad-suppressed load still warned: %q", out)
 	}
 }

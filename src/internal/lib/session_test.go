@@ -35,17 +35,94 @@ func TestParseEnvLines_valueContainsEquals(t *testing.T) {
 func TestParseEnvLines_emptyAndMalformedLines(t *testing.T) {
 	input := "\nFOO=bar\nno-equals-sign\n=emptykey\n"
 	got := parseEnvLines(input)
-	// Valid line.
-	if got["FOO"] != "bar" {
-		t.Errorf("FOO = %q, want %q", got["FOO"], "bar")
+	// Lines without a valid KEY= prefix are continuations of the
+	// previous value (multi-line values in the plain-`env` fallback),
+	// so FOO absorbs both trailing lines.
+	if got["FOO"] != "bar\nno-equals-sign\n=emptykey" {
+		t.Errorf("FOO = %q, want continuation-joined value", got["FOO"])
 	}
-	// Line with no '=' should be skipped.
 	if _, ok := got["no-equals-sign"]; ok {
 		t.Error("malformed line should not produce a key")
 	}
-	// Line starting with '=' has empty key — should be skipped.
 	if _, ok := got[""]; ok {
 		t.Error("empty-key line should not be stored")
+	}
+}
+
+func TestParseEnvLines_nulSeparated(t *testing.T) {
+	// `env -0` output: entries separated by NUL, values may contain
+	// newlines and '=' freely.
+	input := "PEM=-----BEGIN-----\nabc==\n-----END-----\x00PATH=/usr/bin\x00"
+	got := parseEnvLines(input)
+	if got["PEM"] != "-----BEGIN-----\nabc==\n-----END-----" {
+		t.Errorf("PEM = %q, want multi-line value preserved", got["PEM"])
+	}
+	if got["PATH"] != "/usr/bin" {
+		t.Errorf("PATH = %q, want %q", got["PATH"], "/usr/bin")
+	}
+	if len(got) != 2 {
+		t.Errorf("expected 2 entries, got %v", got)
+	}
+}
+
+func TestParseEnvLines_newlineFallbackRejoinsMultilineValues(t *testing.T) {
+	// Plain-`env` fallback: continuation lines that aren't valid
+	// KEY= entries must rejoin the previous value, not become bogus
+	// keys that poison the session env (e.g. a value line containing
+	// "PATH=..." must not hijack PATH).
+	input := "KEY=first\n-----continuation-----\nOTHER=x\n"
+	got := parseEnvLines(input)
+	if got["KEY"] != "first\n-----continuation-----" {
+		t.Errorf("KEY = %q, want continuation joined", got["KEY"])
+	}
+	if got["OTHER"] != "x" {
+		t.Errorf("OTHER = %q, want %q", got["OTHER"], "x")
+	}
+	// An invalid identifier before the first '=' is NOT a new key.
+	input2 := "KEY=a\nnot a key=b\n"
+	got2 := parseEnvLines(input2)
+	if _, ok := got2["not a key"]; ok {
+		t.Error("invalid identifier must not start a new entry")
+	}
+	if got2["KEY"] != "a\nnot a key=b" {
+		t.Errorf("KEY = %q, want continuation joined", got2["KEY"])
+	}
+}
+
+func TestIsEnvName(t *testing.T) {
+	valid := []string{"A", "_", "FOO", "foo_bar", "_9", "A1"}
+	for _, s := range valid {
+		if !isEnvName(s) {
+			t.Errorf("isEnvName(%q) = false, want true", s)
+		}
+	}
+	invalid := []string{"", "9A", "A-B", "A B", "A.B", "dGVzdA=extra", "å"}
+	for _, s := range invalid {
+		if isEnvName(s) {
+			t.Errorf("isEnvName(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestShellSingleQuote(t *testing.T) {
+	if got := shellSingleQuote("/tmp/plain"); got != "/tmp/plain" {
+		t.Errorf("got %q", got)
+	}
+	if got := shellSingleQuote("/tmp/o'brien"); got != `/tmp/o'\''brien` {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestIsPOSIXShell(t *testing.T) {
+	for _, s := range []string{"bash", "sh", "zsh"} {
+		if !isPOSIXShell(s) {
+			t.Errorf("isPOSIXShell(%q) = false, want true", s)
+		}
+	}
+	for _, s := range []string{"pwsh", "powershell", "cmd", ""} {
+		if isPOSIXShell(s) {
+			t.Errorf("isPOSIXShell(%q) = true, want false", s)
+		}
 	}
 }
 

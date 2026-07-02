@@ -1037,6 +1037,212 @@ func TestRunAddProfile_setActiveSuccess(t *testing.T) {
 	}
 }
 
+// --- runCreateWizardE EOF handling ---
+
+// newOutCmd returns a bare cobra command with stdout/stderr captured in buf.
+func newOutCmd(buf *bytes.Buffer) *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	return cmd
+}
+
+// TestRunCreateWizardE_eofAtNamePrompt guards against the infinite
+// busy-loop: `raid profile create < /dev/null` used to re-prompt forever
+// because ReadLine swallowed io.EOF. The wizard must abort with a
+// structured error instead.
+func TestRunCreateWizardE_eofAtNamePrompt(t *testing.T) {
+	setupConfig(t)
+	var buf bytes.Buffer
+	err := runCreateWizardE(newOutCmd(&buf), feedStdin(t, ""))
+	if err == nil {
+		t.Fatal("expected error when stdin hits EOF at the name prompt")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeArgInvalid {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeArgInvalid)
+	}
+	if !strings.Contains(err.Error(), "profile name") {
+		t.Errorf("error %q should mention the missing profile name", err.Error())
+	}
+}
+
+// TestRunCreateWizardE_eofAfterInvalidName proves the validation loop
+// terminates: an invalid name followed by EOF must abort, not spin.
+func TestRunCreateWizardE_eofAfterInvalidName(t *testing.T) {
+	setupConfig(t)
+	var buf bytes.Buffer
+	err := runCreateWizardE(newOutCmd(&buf), feedStdin(t, "bad/name\n"))
+	if err == nil {
+		t.Fatal("expected error when EOF follows an invalid name")
+	}
+	if !strings.Contains(buf.String(), "Invalid name") {
+		t.Errorf("output %q should include the invalid-name diagnostic", buf.String())
+	}
+}
+
+// TestRunCreateWizardE_eofAtSavePathPrompt covers the second prompt: a
+// valid name followed by EOF aborts with a structured error.
+func TestRunCreateWizardE_eofAtSavePathPrompt(t *testing.T) {
+	setupConfig(t)
+	var buf bytes.Buffer
+	err := runCreateWizardE(newOutCmd(&buf), feedStdin(t, "eofpath-profile\n"))
+	if err == nil {
+		t.Fatal("expected error when stdin hits EOF at the save-path prompt")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeArgInvalid {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeArgInvalid)
+	}
+	if !strings.Contains(err.Error(), "save path") {
+		t.Errorf("error %q should mention the missing save path", err.Error())
+	}
+}
+
+// --- RemoveProfileCmd partial results on hard failure ---
+
+// TestRemoveProfileCmd_hardErrorReportsPartialRemovals_text guards that
+// profiles removed before a hard (non-"not found") failure are still
+// reported — the state mutation must not be invisible.
+func TestRemoveProfileCmd_hardErrorReportsPartialRemovals_text(t *testing.T) {
+	setupConfig(t)
+	origRemove := proRemove
+	t.Cleanup(func() { proRemove = origRemove })
+	proRemove = func(name string) error {
+		if name == "gone" {
+			return nil
+		}
+		return errMock
+	}
+
+	var buf bytes.Buffer
+	err := RemoveProfileCmd.RunE(newOutCmd(&buf), []string{"gone", "broken"})
+	if err == nil {
+		t.Fatal("expected the hard error to propagate")
+	}
+	if !strings.Contains(err.Error(), errMock.Error()) {
+		t.Errorf("error %q should carry the hard failure", err.Error())
+	}
+	if !strings.Contains(buf.String(), "Profile 'gone' has been removed.") {
+		t.Errorf("output %q should report the completed removal", buf.String())
+	}
+}
+
+// TestRemoveProfileCmd_hardErrorReportsPartialRemovals_json is the --json
+// twin: the removeResult envelope must still be emitted before the error.
+func TestRemoveProfileCmd_hardErrorReportsPartialRemovals_json(t *testing.T) {
+	setupConfig(t)
+	origRemove := proRemove
+	t.Cleanup(func() { proRemove = origRemove })
+	proRemove = func(name string) error {
+		if name == "gone" {
+			return nil
+		}
+		return errMock
+	}
+
+	var buf bytes.Buffer
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	cmd := newOutCmd(&buf)
+	root.AddCommand(cmd)
+
+	err := RemoveProfileCmd.RunE(cmd, []string{"gone", "broken"})
+	if err == nil {
+		t.Fatal("expected the hard error to propagate")
+	}
+	var got removeResult
+	if jsonErr := json.Unmarshal(buf.Bytes(), &got); jsonErr != nil {
+		t.Fatalf("json.Unmarshal(%q): %v", buf.String(), jsonErr)
+	}
+	if len(got.Removed) != 1 || got.Removed[0] != "gone" {
+		t.Errorf("Removed = %v, want [gone]", got.Removed)
+	}
+}
+
+// failingWriter always errors, used to force emitJSON failures.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("simulated write failure")
+}
+
+// TestRemoveProfileCmd_hardErrorJSONEmitFailure covers the emitJSON error
+// path inside the hard-error branch: the encode failure wins and propagates.
+func TestRemoveProfileCmd_hardErrorJSONEmitFailure(t *testing.T) {
+	setupConfig(t)
+	origRemove := proRemove
+	t.Cleanup(func() { proRemove = origRemove })
+	proRemove = func(string) error { return errMock }
+
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	cmd := &cobra.Command{}
+	cmd.SetOut(failingWriter{})
+	cmd.SetErr(&bytes.Buffer{})
+	root.AddCommand(cmd)
+
+	err := RemoveProfileCmd.RunE(cmd, []string{"broken"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "simulated write failure") {
+		t.Errorf("error %q should carry the encode failure", err.Error())
+	}
+}
+
+// TestRemoveProfileCmd_jsonEmitFailure covers the emitJSON error path on the
+// normal (no hard error) JSON branch.
+func TestRemoveProfileCmd_jsonEmitFailure(t *testing.T) {
+	setupConfig(t)
+
+	root := &cobra.Command{Use: "raid"}
+	root.PersistentFlags().Bool("json", true, "")
+	cmd := &cobra.Command{}
+	cmd.SetOut(failingWriter{})
+	cmd.SetErr(&bytes.Buffer{})
+	root.AddCommand(cmd)
+
+	err := RemoveProfileCmd.RunE(cmd, []string{"nope"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "simulated write failure") {
+		t.Errorf("error %q should carry the encode failure", err.Error())
+	}
+}
+
+// TestRemoveProfileCmd_lockFailure covers the mutation-lock acquisition
+// failure branch.
+func TestRemoveProfileCmd_lockFailure(t *testing.T) {
+	setupConfig(t)
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// A regular file as the lock path's parent makes MkdirAll fail.
+	lib.LockPathOverride = filepath.Join(blocker, "sub", ".lock")
+
+	var buf bytes.Buffer
+	err := RemoveProfileCmd.RunE(newOutCmd(&buf), []string{"whatever"})
+	if err == nil {
+		t.Fatal("expected lock acquisition error")
+	}
+	rErr, ok := errs.AsError(err)
+	if !ok {
+		t.Fatalf("error not structured: %v", err)
+	}
+	if rErr.Code() != errs.CodeLockFailed {
+		t.Errorf("code = %q, want %q", rErr.Code(), errs.CodeLockFailed)
+	}
+}
+
 // --- Mock-based tests for runAddProfile error paths ---
 
 // saveProMocks saves and returns a restore function for all pro* and fetch injectable vars.

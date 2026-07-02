@@ -91,6 +91,34 @@ func TestYAMLToJSON_multiDocRejected(t *testing.T) {
 	}
 }
 
+// TestYAMLToJSON_malformedSecondDocRejected pins the third branch of
+// the multi-doc guard: a parse error on the second document means a
+// trailing document exists but is broken — previously this was
+// conflated with io.EOF and the input passed as a clean single doc.
+func TestYAMLToJSON_malformedSecondDocRejected(t *testing.T) {
+	multi := strings.NewReader("a: 1\n---\n{malformed: [\n")
+	_, err := YAMLToJSON(multi)
+	if err == nil {
+		t.Fatal("YAMLToJSON(malformed second doc) expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "malformed") {
+		t.Errorf("error = %q, want mention of malformed trailing document", err.Error())
+	}
+}
+
+// TestYAMLToJSON_singleDocCleanEOF pins the io.EOF branch explicitly:
+// exactly one well-formed document converts with no error.
+func TestYAMLToJSON_singleDocCleanEOF(t *testing.T) {
+	single := strings.NewReader("a: 1\n")
+	got, err := YAMLToJSON(single)
+	if err != nil {
+		t.Fatalf("YAMLToJSON(single doc) error: %v", err)
+	}
+	if string(got) != `{"a":1}` {
+		t.Errorf("YAMLToJSON(single doc) = %q, want %q", got, `{"a":1}`)
+	}
+}
+
 func TestYAMLToJSON_emptyInput(t *testing.T) {
 	empty := strings.NewReader("")
 	_, err := YAMLToJSON(empty)

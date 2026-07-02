@@ -107,13 +107,13 @@ func writeTools(w io.Writer, tools []context.Tool) {
 	}
 	nameW := 0
 	for _, t := range tools {
-		if len(t.Name) > nameW {
-			nameW = len(t.Name)
+		if n := utf8.RuneCountInString(t.Name); n > nameW {
+			nameW = n
 		}
 	}
 	fmt.Fprintf(w, "\nTools (%d):\n", len(tools))
 	for _, t := range tools {
-		fmt.Fprintf(w, "  %-*s  %s\n", nameW, t.Name, t.Description)
+		fmt.Fprintf(w, "  %s%s  %s\n", t.Name, padRunes(t.Name, nameW), t.Description)
 	}
 }
 
@@ -145,23 +145,23 @@ func writeRepos(w io.Writer, repos []context.Repo) {
 
 	nameW, pathW, branchW := 0, 0, 0
 	for _, r := range repos {
-		if len(r.Name) > nameW {
-			nameW = len(r.Name)
+		if n := utf8.RuneCountInString(r.Name); n > nameW {
+			nameW = n
 		}
-		if len(r.Path) > pathW {
-			pathW = len(r.Path)
+		if n := utf8.RuneCountInString(r.Path); n > pathW {
+			pathW = n
 		}
-		if len(r.Branch) > branchW {
-			branchW = len(r.Branch)
+		if n := utf8.RuneCountInString(r.Branch); n > branchW {
+			branchW = n
 		}
 	}
 
 	fmt.Fprintf(w, "\nRepos (%d):\n", len(repos))
 	for _, r := range repos {
-		fmt.Fprintf(w, "  %-*s  %-*s  %-*s  %s\n",
-			nameW, r.Name,
-			pathW, r.Path,
-			branchW, r.Branch,
+		fmt.Fprintf(w, "  %s%s  %s%s  %s%s  %s\n",
+			r.Name, padRunes(r.Name, nameW),
+			r.Path, padRunes(r.Path, pathW),
+			r.Branch, padRunes(r.Branch, branchW),
 			repoStatus(r),
 		)
 	}
@@ -173,15 +173,15 @@ func writeCommands(w io.Writer, cmds []context.Command) {
 	}
 	nameW := 0
 	for _, c := range cmds {
-		if len(c.Name) > nameW {
-			nameW = len(c.Name)
+		if n := utf8.RuneCountInString(c.Name); n > nameW {
+			nameW = n
 		}
 	}
 	fmt.Fprintf(w, "\nCommands (%d):\n", len(cmds))
 	for _, c := range cmds {
-		fmt.Fprintf(w, "  %-*s  %s\n", nameW, c.Name, c.Description)
+		fmt.Fprintf(w, "  %s%s  %s\n", c.Name, padRunes(c.Name, nameW), c.Description)
 		for i, step := range c.Steps {
-			fmt.Fprintf(w, "  %-*s  %d. %s\n", nameW, "", i+1, step.Name)
+			fmt.Fprintf(w, "  %s  %d. %s\n", padRunes("", nameW), i+1, step.Name)
 		}
 	}
 }
@@ -198,8 +198,8 @@ func writeRecent(w io.Writer, entries []context.Recent, now time.Time) {
 	statuses := make([]string, len(entries))
 	durations := make([]string, len(entries))
 	for i, e := range entries {
-		if len(e.Command) > nameW {
-			nameW = len(e.Command)
+		if n := utf8.RuneCountInString(e.Command); n > nameW {
+			nameW = n
 		}
 		statuses[i] = recentStatusText(e)
 		if w := utf8.RuneCountInString(statuses[i]); w > statusW {
@@ -212,9 +212,9 @@ func writeRecent(w io.Writer, entries []context.Recent, now time.Time) {
 	}
 	fmt.Fprintf(w, "\nRecent (%d):\n", len(entries))
 	for i, e := range entries {
-		fmt.Fprintf(w, "  %s %-*s  %s%s  %s%s  %s\n",
+		fmt.Fprintf(w, "  %s %s%s  %s%s  %s%s  %s\n",
 			recentMark(e),
-			nameW, e.Command,
+			e.Command, padRunes(e.Command, nameW),
 			statuses[i], padRunes(statuses[i], statusW),
 			durations[i], padRunes(durations[i], durationW),
 			relativeTime(now, e.StartedAt),

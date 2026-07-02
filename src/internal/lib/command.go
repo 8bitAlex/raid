@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -219,15 +220,35 @@ func setCommandArgs(args []string, named map[string]string) func() {
 		oldValue string
 		hadValue bool
 	}
+	// Iterate in sorted-name order so that when two distinct names
+	// sanitize to the same key, which value wins during the run is
+	// deterministic rather than map-iteration luck. Only the FIRST
+	// snapshot per key is kept — it holds the true pre-command value;
+	// re-snapshotting on a collision would capture raid's own
+	// intermediate value and restore it at cleanup, leaking the binding
+	// into the parent process env after the command exits.
+	names := make([]string, 0, len(named))
+	for k := range named {
+		names = append(names, k)
+	}
+	sort.Strings(names)
 	snapshots := make([]prev, 0, len(named))
-	for k, v := range named {
+	firstName := make(map[string]string, len(named))
+	for _, k := range names {
 		key := sanitizeEnvName(k)
 		if key == "" {
 			continue
 		}
-		old, had := os.LookupEnv(key)
-		snapshots = append(snapshots, prev{key, old, had})
-		os.Setenv(key, v)
+		if prevName, collided := firstName[key]; collided {
+			fmt.Fprintf(commandStderr,
+				"raid: warning: arg/flag names %q and %q both map to env var %s; %q wins\n",
+				prevName, k, key, k)
+		} else {
+			firstName[key] = k
+			old, had := os.LookupEnv(key)
+			snapshots = append(snapshots, prev{key, old, had})
+		}
+		os.Setenv(key, named[k])
 	}
 	return func() {
 		clearRaidArgs()

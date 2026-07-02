@@ -7,7 +7,8 @@ sidebar_position: 2
 Clone all repositories in the active profile and run their install tasks.
 
 ```bash
-raid install [repo] [-t <threads>]
+raid install [-t <threads>]
+raid install [repo]
 ```
 
 ## What it does
@@ -23,7 +24,9 @@ If a repository already exists at its configured path, cloning is skipped.
 | Flag | Description |
 |---|---|
 | `[repo]` | Install only the named repository (profile-level tasks are skipped) |
-| `-t, --threads` | Max concurrent clone threads (default: unlimited) |
+| `-t, --threads` | Max concurrent clone threads for full profile installs (default: unlimited) |
+
+`--threads` only applies when installing the full profile; combining it with a `[repo]` argument (a single sequential clone) is rejected with an `ARG_INVALID` error.
 
 ## Examples
 

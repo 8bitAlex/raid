@@ -154,3 +154,53 @@ func TestWithMutationLock_releasesOnPanic(t *testing.T) {
 		t.Fatal("lock not released after panicking holder")
 	}
 }
+
+func TestAcquireMutationLock_skipsWhenInheritedFromParent(t *testing.T) {
+	dir := t.TempDir()
+	prev := LockPathOverride
+	LockPathOverride = filepath.Join(dir, ".lock")
+	defer func() { LockPathOverride = prev }()
+
+	t.Setenv(MutationLockEnvVar, "1")
+
+	// Hold the lock via a separate handle to prove acquisition is
+	// skipped: if the child path tried to flock, it would block.
+	release, err := func() (func(), error) {
+		t.Setenv(MutationLockEnvVar, "")
+		return AcquireMutationLock()
+	}()
+	if err != nil {
+		t.Fatalf("outer acquire: %v", err)
+	}
+	defer release()
+
+	t.Setenv(MutationLockEnvVar, "1")
+	done := make(chan struct{})
+	go func() {
+		r, err := AcquireMutationLock()
+		if err == nil {
+			r()
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("inherited-lock acquisition blocked; expected immediate no-op")
+	}
+}
+
+func TestMutationLockInherited_truthyValues(t *testing.T) {
+	for _, v := range []string{"1", "true", "YES", " on "} {
+		t.Setenv(MutationLockEnvVar, v)
+		if !mutationLockInherited() {
+			t.Errorf("value %q should mark the lock inherited", v)
+		}
+	}
+	for _, v := range []string{"", "0", "false", "off", "banana"} {
+		t.Setenv(MutationLockEnvVar, v)
+		if mutationLockInherited() {
+			t.Errorf("value %q should NOT mark the lock inherited", v)
+		}
+	}
+}

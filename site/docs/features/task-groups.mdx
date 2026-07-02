@@ -87,6 +87,10 @@ Groups support automatic retries for flaky steps. Use `attempts` to set the maxi
 
 If the group fails after all attempts are exhausted, the error is returned and task execution stops.
 
+## Nesting and cycles
+
+Groups can reference other groups, nesting to any depth. Reference cycles (a group that — directly or through intermediate groups — references itself) are detected at execution time and reported as a `TASK_FAILED` error naming the cycle chain, rather than recursing forever.
+
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `ref` | string | Yes | Name of the task group to execute |

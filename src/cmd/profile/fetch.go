@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	sys "github.com/8bitalex/raid/src/internal/sys"
 	"github.com/8bitalex/raid/src/raid"
@@ -21,7 +22,11 @@ import (
 // Injectable for testing.
 var (
 	gitCloneFunc = func(repoURL, dir string) error {
-		return exec.Command("git", "clone", "--depth", "1", repoURL, dir).Run()
+		out, err := exec.Command("git", "clone", "--depth", "1", repoURL, dir).CombinedOutput()
+		if err != nil {
+			return cloneError(err, out)
+		}
+		return nil
 	}
 	httpGetFunc = func(rawURL string) ([]byte, error) {
 		client := &http.Client{Timeout: 30 * time.Second}
@@ -47,6 +52,27 @@ var (
 	detectGitURL = isGitURL
 	getHomeDir   = sys.GetHomeDir
 )
+
+// cloneError shapes a failed `git clone` into an error that carries git's
+// own diagnostics instead of a bare "exit status 128". Output is trimmed and
+// truncated so a pathological clone (huge remote banner) can't flood the
+// error message.
+func cloneError(err error, output []byte) error {
+	const maxLen = 300
+	msg := strings.TrimSpace(string(output))
+	if len(msg) > maxLen {
+		cut := maxLen
+		// Back up to a rune boundary so the cut never splits a UTF-8 sequence.
+		for cut > 0 && !utf8.RuneStart(msg[cut]) {
+			cut--
+		}
+		msg = msg[:cut] + "…"
+	}
+	if msg == "" {
+		return err
+	}
+	return fmt.Errorf("%w: %s", err, msg)
+}
 
 // isURL reports whether s is an HTTP, HTTPS, or git SSH URL.
 func isURL(s string) bool {
@@ -208,6 +234,20 @@ func processProfileFilesE(cmd *cobra.Command, source string, paths []string) err
 
 	// Copy each profile to a stable home-dir path before registering.
 	home := getHomeDir()
+
+	// Refuse to clobber an existing file that isn't in the registry (a
+	// registered profile with the same name was already skipped above).
+	// Checked before any copy so a multi-profile add never leaves earlier
+	// copies behind after aborting.
+	for _, q := range queued {
+		destPath := filepath.Join(home, q.p.Name+".raid.yaml")
+		if sys.FileExists(destPath) {
+			return errs.Newf(errs.CodeProfileAlreadyExists, errs.CategoryConfig,
+				"a file already exists at %s but is not a registered profile; remove or rename it, or register it directly with `raid profile add %s`",
+				destPath, destPath)
+		}
+	}
+
 	var toRegister []pro.Profile
 	var destPaths []string
 	for _, q := range queued {

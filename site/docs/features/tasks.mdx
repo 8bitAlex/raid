@@ -211,6 +211,8 @@ Prompt the user for input and store the result in a variable.
 
 The `message` and `default` fields are optional. If `message` is omitted, the user is prompted with the variable name.
 
+`message` and `default` support `$VAR` expansion like other task fields (set `literal: true` to opt out). The prompt banner is printed to **stderr**, so redirecting a command's stdout (or setting `out: {stdout: false}`) never hides the prompt while raid waits for input.
+
 ---
 
 ## Confirm
@@ -222,7 +224,7 @@ Ask the user to confirm before continuing. If the user answers no, remaining tas
   message: "This will reset your database. Continue?"
 ```
 
-The `message` field is optional. If omitted, a generic confirmation prompt is shown.
+The `message` field is optional. If omitted, a generic confirmation prompt is shown. Like `Prompt`, the message supports `$VAR` expansion (unless `literal: true`) and the banner is printed to stderr.
 
 ---
 

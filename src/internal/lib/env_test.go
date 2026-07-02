@@ -1,8 +1,10 @@
 package lib
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -432,5 +434,165 @@ func TestExecuteEnv_nilContext(t *testing.T) {
 	err := ExecuteEnv("dev")
 	if err == nil {
 		t.Fatal("ExecuteEnv() expected error with nil context, got nil")
+	}
+}
+
+func TestListEnvs_includesRepoDeclaredEnvs(t *testing.T) {
+	storeContext(&Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/test",
+			Environments: []Env{
+				{Name: "dev"},
+			},
+			Repositories: []Repo{
+				{Name: "repo1", Path: "/tmp/repo1", Environments: []Env{
+					{Name: "dev"},        // duplicate — folded
+					{Name: "production"}, // repo-only — must appear
+				}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	got := ListEnvs()
+	want := []string{"dev", "production"}
+	if len(got) != len(want) {
+		t.Fatalf("ListEnvs() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ListEnvs()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if !ContainsEnv("production") {
+		t.Error("ContainsEnv(production) = false, want true for repo-declared env")
+	}
+}
+
+func TestExecuteEnv_runsRepoDeclaredEnvTasks(t *testing.T) {
+	setupTestConfig(t)
+
+	repoDir := t.TempDir()
+	marker := "repo-env-task-ran"
+
+	storeContext(&Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/test/profile.yaml",
+			Repositories: []Repo{
+				{Name: "repo1", Path: repoDir, URL: "http://x.com", Environments: []Env{
+					{
+						Name: "dev",
+						// No explicit path: must default to the repo dir.
+						Tasks: []Task{{Type: Shell, Cmd: "echo done > " + marker}},
+					},
+				}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	if err := ExecuteEnv("dev"); err != nil {
+		t.Fatalf("ExecuteEnv() error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, marker)); err != nil {
+		t.Error("repo-declared env task did not run in the repo directory")
+	}
+}
+
+func TestExecuteEnv_repoEnvTaskFailurePropagates(t *testing.T) {
+	setupTestConfig(t)
+
+	repoDir := t.TempDir()
+	storeContext(&Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/test/profile.yaml",
+			Repositories: []Repo{
+				{Name: "repo1", Path: repoDir, URL: "http://x.com", Environments: []Env{
+					{Name: "dev", Tasks: []Task{{Type: Shell, Cmd: "exit 1"}}},
+				}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	if err := ExecuteEnv("dev"); err == nil {
+		t.Fatal("expected error from failing repo env task")
+	}
+}
+
+func TestExecuteEnv_skipsUninstalledRepos(t *testing.T) {
+	setupTestConfig(t)
+
+	missing := filepath.Join(t.TempDir(), "not-cloned-yet")
+	var outBuf, errBuf bytes.Buffer
+	restore := SetCommandOutput(&outBuf, &errBuf)
+	defer restore()
+
+	storeContext(&Context{
+		Profile: Profile{
+			Name: "test",
+			Path: "/test/profile.yaml",
+			Repositories: []Repo{
+				{Name: "repo1", Path: missing, URL: "http://x.com"},
+			},
+			Environments: []Env{
+				{Name: "dev", Variables: []EnvVar{{Name: "A", Value: "1"}}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	if err := ExecuteEnv("dev"); err != nil {
+		t.Fatalf("ExecuteEnv() error: %v", err)
+	}
+	// The repo dir must NOT have been created — a pre-created dir would
+	// make the eventual `git clone` fail.
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Error("uninstalled repo dir was created by raid env")
+	}
+	if !strings.Contains(errBuf.String(), "Skipping repo repo1") {
+		t.Errorf("expected skip notice on stderr, got %q", errBuf.String())
+	}
+}
+
+func TestRunTasksForEnv_singleRepoRunsOnceInRepoDir(t *testing.T) {
+	setupTestConfig(t)
+
+	repoDir := t.TempDir()
+	raidPath := filepath.Join(repoDir, RaidConfigFileName)
+	if err := os.WriteFile(raidPath, []byte("name: solo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	env := Env{
+		Name:  "dev",
+		Tasks: []Task{{Type: Shell, Cmd: "echo run >> single-repo-count"}},
+	}
+	// Mirror ForceLoad's single-repo hoist: env present at BOTH the
+	// profile level and the repo level. It must run exactly once.
+	storeContext(&Context{
+		Profile: Profile{
+			Name:         "solo",
+			Path:         raidPath, // basename raid.yaml → IsSingleRepo
+			Environments: []Env{env},
+			Repositories: []Repo{
+				{Name: "solo", Path: repoDir, Environments: []Env{env}},
+			},
+		},
+	})
+	defer func() { storeContext(nil) }()
+
+	if err := ExecuteEnv("dev"); err != nil {
+		t.Fatalf("ExecuteEnv() error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(repoDir, "single-repo-count"))
+	if err != nil {
+		t.Fatalf("marker not written in repo dir: %v", err)
+	}
+	if got := strings.Count(string(data), "run"); got != 1 {
+		t.Errorf("env tasks ran %d times, want exactly once", got)
 	}
 }

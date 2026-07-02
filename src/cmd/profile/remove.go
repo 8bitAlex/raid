@@ -9,11 +9,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// proRemove is injectable so tests can force a hard (non-"not found")
+// removal failure mid-loop.
+var proRemove = pro.Remove
+
 // removeResult is the stable JSON shape for `raid profile remove --json`.
 // Fields are part of the public CLI contract; new fields ship additively.
 type removeResult struct {
-	Removed []string             `json:"removed"`
-	Errors  []removeResultErr    `json:"errors,omitempty"`
+	Removed []string          `json:"removed"`
+	Errors  []removeResultErr `json:"errors,omitempty"`
 }
 
 type removeResultErr struct {
@@ -37,7 +41,7 @@ var RemoveProfileCmd = &cobra.Command{
 		var hardErr error
 		lockErr := raid.WithMutationLock(func() error {
 			for _, name := range args {
-				err := pro.Remove(name)
+				err := proRemove(name)
 				if err == nil {
 					removed = append(removed, name)
 					continue
@@ -59,6 +63,19 @@ var RemoveProfileCmd = &cobra.Command{
 			return errs.Wrap(lockErr)
 		}
 		if hardErr != nil {
+			// The loop already mutated state for the profiles it got
+			// through — report the partial results before surfacing the
+			// hard failure so the removals aren't invisible.
+			if jsonMode(cmd) {
+				if err := emitJSON(cmd, removeResult{Removed: removed, Errors: failures}); err != nil {
+					return err
+				}
+			} else {
+				out := cmd.OutOrStdout()
+				for _, name := range removed {
+					fmt.Fprintf(out, "Profile '%s' has been removed.\n", name)
+				}
+			}
 			return errs.Wrap(hardErr)
 		}
 

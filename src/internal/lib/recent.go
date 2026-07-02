@@ -187,13 +187,20 @@ func writeRecent(entries []RecentEntry) {
 	}
 
 	// POSIX: rename atomically replaces. Windows: rename fails if destination
-	// exists, so fall back to remove+rename. Either way, any failure leaves
-	// the previous file intact.
+	// exists, so fall back to moving the old file aside and swapping. The
+	// aside file (not a bare os.Remove) means a failure of the second
+	// rename can restore the previous history instead of losing it.
 	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(path)
-		if err := os.Rename(tmpPath, path); err != nil {
+		bak := path + ".bak"
+		_ = os.Remove(bak)
+		if err := os.Rename(path, bak); err != nil {
 			return
 		}
+		if err := os.Rename(tmpPath, path); err != nil {
+			_ = os.Rename(bak, path)
+			return
+		}
+		_ = os.Remove(bak)
 	}
 	swapped = true
 }

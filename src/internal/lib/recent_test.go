@@ -190,9 +190,9 @@ func TestRecordRecentEnd_distinguishesSubSecondStarts(t *testing.T) {
 	// then two Ends a moment later.
 	calls := 0
 	timeline := []time.Time{
-		now,                                         // start A
-		now.Add(200 * time.Millisecond),             // start B (same second, different ns)
-		now.Add(time.Second),                        // end A
+		now,                             // start A
+		now.Add(200 * time.Millisecond), // start B (same second, different ns)
+		now.Add(time.Second),            // end A
 		now.Add(time.Second + 100*time.Millisecond), // end B
 	}
 	recentNowFn = func() time.Time {

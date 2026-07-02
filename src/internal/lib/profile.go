@@ -92,9 +92,21 @@ func AddProfile(profile Profile) error {
 	return Set(allProfilesKey, profiles)
 }
 
-// AddProfiles registers multiple profiles in the config store.
+// AddProfiles registers multiple profiles in the config store. Because
+// viper lowercases registry keys, two profiles in the same batch whose
+// names differ only by case silently collapse to one registration —
+// last one wins. That collision is surfaced as a warning (mirroring the
+// setRepoVars sanitized-name warning) so the loss isn't invisible.
 func AddProfiles(profiles []Profile) error {
+	seen := make(map[string]string, len(profiles))
 	for _, profile := range profiles {
+		key := strings.ToLower(profile.Name)
+		if prev, collided := seen[key]; collided && prev != profile.Name {
+			fmt.Fprintf(os.Stderr,
+				"raid: warning: profiles %q and %q differ only by case and share one registration; %q wins\n",
+				prev, profile.Name, profile.Name)
+		}
+		seen[key] = profile.Name
 		if err := AddProfile(profile); err != nil {
 			return err
 		}
@@ -208,8 +220,18 @@ func extractProfilesFromYAML(data []byte, path string) ([]Profile, error) {
 }
 
 func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
+	// Only accept the single-object form when it produced a named
+	// profile. A top-level `null` (or an object missing `name`)
+	// unmarshals "successfully" into a zero Profile, which would slip
+	// past the "no profiles found" guard and surface later as a
+	// confusing not-found error instead of a validation error here.
+	// A nameless object/null returns zero profiles (not the array-parse
+	// error) so ExtractProfiles reports "no profiles found".
 	var profile Profile
 	if err := json.Unmarshal(data, &profile); err == nil {
+		if profile.Name == "" {
+			return nil, nil
+		}
 		profile.Path = path
 		return []Profile{profile}, nil
 	}
@@ -221,6 +243,11 @@ func extractProfilesFromJSON(data []byte, path string) ([]Profile, error) {
 
 	results := make([]Profile, 0, len(profiles))
 	for _, p := range profiles {
+		// Skip unnamed entries, mirroring the YAML path's handling of
+		// explicitly-empty documents.
+		if p.Name == "" {
+			continue
+		}
 		p.Path = path
 		results = append(results, p)
 	}
@@ -344,8 +371,11 @@ func buildProfile(profile Profile) (Profile, error) {
 		// `raid profile <name>` and active-profile detection. If the
 		// raid.yaml's name field has drifted since registration, refuse
 		// to load rather than silently returning a profile whose Name
-		// differs from the registered key.
-		if profile.Name != "" && built.Name != profile.Name {
+		// differs from the registered key. Case-insensitive to match
+		// registration and activation: viper lowercases stored keys, so
+		// a raid.yaml declaring `MyRepo` is registered (and activated)
+		// as `myrepo` — that's not drift.
+		if profile.Name != "" && !strings.EqualFold(built.Name, profile.Name) {
 			return Profile{}, liberrs.Newf(liberrs.CodeProfileInvalid, liberrs.CategoryConfig,
 				"raid.yaml at %s now declares name %q but was registered as %q; re-run `raid profile add %s` to update",
 				profile.Path, built.Name, profile.Name, profile.Path,

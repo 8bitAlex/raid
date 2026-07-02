@@ -44,16 +44,33 @@ func GetEnv() string {
 	return viper.GetString(activeEnvKey)
 }
 
-// ListEnvs returns the names of all environments in the active profile.
+// ListEnvs returns the names of all environments in the active profile,
+// including environments declared only in a repository's raid.yaml. The
+// env command's contract is that names are "searched for in the active
+// profile and all repository configurations" — without the repo sweep, an
+// env declared only in a repo raid.yaml would fail ContainsEnv and be
+// unswitchable. Profile-level names come first; duplicates are folded.
 func ListEnvs() []string {
 	ctx := loadContext()
-	if ctx == nil || len(ctx.Profile.Environments) == 0 {
+	if ctx == nil {
 		return []string{}
 	}
 
+	seen := make(map[string]bool, len(ctx.Profile.Environments))
 	names := make([]string, 0, len(ctx.Profile.Environments))
 	for _, env := range ctx.Profile.Environments {
-		names = append(names, env.Name)
+		if !seen[env.Name] {
+			seen[env.Name] = true
+			names = append(names, env.Name)
+		}
+	}
+	for _, repo := range ctx.Profile.Repositories {
+		for _, env := range repo.Environments {
+			if !seen[env.Name] {
+				seen[env.Name] = true
+				names = append(names, env.Name)
+			}
+		}
 	}
 	return names
 }
@@ -85,6 +102,15 @@ func ExecuteEnv(name string) error {
 
 func setEnvVariablesForRepos(ctx *Context, name string) error {
 	for _, repo := range ctx.Profile.Repositories {
+		// Skip repos that haven't been installed yet. buildEnvPath would
+		// MkdirAll the repo directory just to hold the .env file, and a
+		// pre-created non-empty directory then makes the eventual
+		// `raid install` clone fail ("destination path already exists").
+		if !sys.FileExists(sys.ExpandPath(repo.Path)) {
+			fmt.Fprintf(commandStderr, "Skipping repo %s: not found at %s (run 'raid install' to clone it, then re-run 'raid env')\n", repo.Name, sys.ExpandPath(repo.Path))
+			continue
+		}
+
 		fmt.Fprintf(commandStdout, "Setting up environment for repo: %s\n", repo.Name)
 
 		path, err := buildEnvPath(repo.Path)
@@ -126,11 +152,35 @@ func setEnvVariables(profVars []EnvVar, repoVars []EnvVar, path string) error {
 }
 
 func runTasksForEnv(ctx *Context, name string) error {
-	env := ctx.Profile.getEnv(name)
-	if env.IsZero() || len(env.Tasks) == 0 {
-		return nil
+	// Profile-level env tasks run with the home dir as the default
+	// working directory. In single-repo mode the profile's environments
+	// are hoisted copies of the repo's (ForceLoad's merge), so the
+	// profile-level pass is skipped there — the repo loop below runs the
+	// same tasks once, with the repo dir as the default, which is where
+	// tasks declared in a raid.yaml expect to execute.
+	if !ctx.Profile.IsSingleRepo() {
+		if env := ctx.Profile.getEnv(name); !env.IsZero() && len(env.Tasks) > 0 {
+			if err := ExecuteTasks(withDefaultDir(env.Tasks, sys.GetHomeDir())); err != nil {
+				return err
+			}
+		}
 	}
-	return ExecuteTasks(withDefaultDir(env.Tasks, sys.GetHomeDir()))
+
+	// Repo-level env tasks run per repo with that repo's directory as
+	// the default. Without this loop, tasks declared on an environment
+	// in a repo's raid.yaml were silently skipped in multi-repo
+	// profiles — the docs promise repo envs "are merged with the
+	// profile-level environments when applied".
+	for _, repo := range ctx.Profile.Repositories {
+		env := repo.getEnv(name)
+		if env.IsZero() || len(env.Tasks) == 0 {
+			continue
+		}
+		if err := ExecuteTasks(withDefaultDir(env.Tasks, sys.ExpandPath(repo.Path))); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // mergeEnvironments merges additional into base by Name. On name conflicts

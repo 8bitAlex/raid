@@ -48,6 +48,8 @@ The `value` field supports `$VAR` references, so you can compose variables from 
   value: "postgres://$DB_HOST:$DB_PORT/$DB_NAME"
 ```
 
+Variable names are uppercased when stored (`db_url` becomes `DB_URL`). Names containing `=`, whitespace, quotes, or `#` are rejected with an `ARG_INVALID` error — those characters would corrupt the persisted vars file or be dropped from subprocess environments.
+
 ### With `Shell` exports
 
 Use `export` inside a Shell task to capture dynamic values and make them available to subsequent tasks:

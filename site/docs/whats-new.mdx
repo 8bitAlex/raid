@@ -9,6 +9,40 @@ description: Feature-by-feature release notes for Raid.
 
 User-visible changes per release, latest first. For full commit history see the [GitHub releases page](https://github.com/8bitalex/raid/releases).
 
+## 0.18.0 — upcoming
+
+A comprehensive code-review pass over the whole CLI. No new task types or commands; the changes below fix real bugs (crashes, deadlocks, silently skipped work, corrupted state) surfaced by the review.
+
+**Repo-declared environment tasks now run.** In multi-repo profiles, `tasks:` on an environment declared in a repo's `raid.yaml` were silently skipped — only the repo's `variables` applied. `raid env <name>` now runs them per repo, with the repo directory as the default working directory (profile-level tasks still run first, from home). Environments declared *only* in a repo `raid.yaml` are now also visible to `raid env` / `raid env list`, matching the command's documented contract. In single-repo mode, env tasks now default to the repo directory instead of home.
+
+**`raid env` before `raid install` no longer breaks the eventual clone.** Repos that aren't cloned yet are skipped with a stderr notice instead of having their directory pre-created to hold a lone `.env` file — which made the subsequent `git clone` fail with "destination path already exists".
+
+**Task-group reference cycles error instead of crashing.** A group that (directly or transitively) referenced itself recursed until Go stack exhaustion — a crash that took down the whole process, including the MCP stdio server. Cycles are now detected and reported as a `TASK_FAILED` error naming the chain (`a -> b -> a`).
+
+**Nested raid invocations no longer deadlock on the mutation lock.** A Shell task that itself runs a mutating raid command (e.g. a custom command whose script calls `raid env dev`) used to deadlock permanently: the parent held the cross-process lock while waiting on a child that blocked acquiring it. Children spawned under the lock now inherit `RAID_MUTATION_LOCK_HELD` and run as part of the parent's already-serialized operation.
+
+**Multi-line environment values survive session capture.** The between-task env snapshot truncated multi-line values (a PEM key, say) to their first line and misparsed continuation lines as new variables — potentially hijacking `PATH` for later tasks. The capture now uses NUL-separated `env -0` where available, and the newline fallback rejoins continuation lines instead of inventing keys.
+
+**`shell: pwsh` tasks work inside commands on Linux/macOS.** The session-capture wrapper injected POSIX `trap` syntax based on the platform, not the resolved shell, so every PowerShell task inside a command failed before the user's command ran. The wrapper is now gated on the actual shell (bash/sh/zsh), and the temp-file path is quote-escaped.
+
+**`Prompt`/`Confirm` banners go to stderr and expand variables.** Previously the banner went to stdout — so `out: {stdout: false}` or a shell redirect made raid block on stdin with nothing on screen — and `message:`/`default:` were the only task fields that didn't expand `$VAR` references. Both fixed (set `literal: true` to opt out of expansion, as with other task types).
+
+**`Set` task names are validated.** A `var:` containing `=`, whitespace, quotes, or `#` used to write a corrupted entry into `~/.raid/vars` that silently re-parsed as a different key on the next run. Such names are now rejected with `ARG_INVALID`.
+
+**`raid doctor` runs verify tasks in the right directory, under the lock.** Verify `tasks:`/`onFail:` without an explicit `path:` now default to the repo directory (repo-level entries) or home (profile-level), so relative checks behave the same regardless of the invocation directory. Doctor also acquires the cross-process mutation lock, since `onFail:` remediation can mutate files.
+
+**Command arg/flag env-binding collisions are deterministic and clean.** Two names that sanitize to the same env var (`my-flag` and `my.flag` → `MY_FLAG`) now resolve deterministically (sorted order, warning on stderr), and the post-command cleanup restores the true pre-command value instead of leaking raid's own intermediate binding into the parent environment.
+
+**Profile edge cases.** Single-repo name-drift detection is now case-insensitive (a `raid.yaml` declaring `MyRepo` registered as `myrepo` no longer refuses to load); registering two profiles whose names differ only by case warns about the collision; a JSON profile file containing `null` (or an empty array) now fails validation instead of passing vacuously; and a trailing `---` in a profile YAML no longer fails validation that extraction would have accepted.
+
+**Telemetry hardening.** Consent persistence now serializes through the cross-process mutation lock against a fresh config snapshot, so a first-run consent decision and a concurrent `raid env` switch can't overwrite each other's config writes. An empty telemetry-id file (crash mid-create) now self-heals instead of silently disabling telemetry forever. If a consent choice can't be persisted, raid says so and honors the answer for the current run.
+
+**CLI edge cases.** `raid profile create` aborts cleanly (`ARG_INVALID`) when stdin closes at a prompt instead of spinning forever re-prompting; `raid profile add <url>` refuses (`PROFILE_ALREADY_EXISTS`) to overwrite an existing `~/<name>.raid.yaml` it didn't create; clone failures from `raid profile add <git-url>` now include git's actual stderr instead of a bare "exit status 128"; `raid install <repo> --threads N` is now an `ARG_INVALID` error instead of silently ignoring the flag (it only applies to full profile installs); and the glued `-c<path>` config shorthand now loads the config before user-command registration, so `raid -c/path/cfg.yaml deploy` finds `deploy` just like the long form.
+
+**MCP / context polish.** After a `raid_install` or `raid_run_task` mutation, a failed workspace reload is logged to stderr instead of silently serving a stale snapshot; `raid context` tables align correctly for non-ASCII repo/command names.
+
+**Quieter, safer plumbing.** `raid --help`/`--version` no longer print load-time warnings (corrupt vars file, repo-name collisions) — the real invocation still does; a concurrent `Print` task can no longer interleave mid-line with a peer task's prefixed output; the recent-runs history file can no longer be lost on the Windows rename fallback; a `--json` error envelope that fails to encode falls back to plain stderr instead of exiting silently; a malformed second document in a YAML file is now reported instead of ignored; and `~user/...` paths that can't be resolved no longer silently collapse to the current directory.
+
 ## 0.17.4 — upcoming
 
 **The `install.sh` script now installs on Windows.** Run it from a Git Bash (MSYS2 / Cygwin) shell and the installer detects the `MINGW*` / `MSYS*` / `CYGWIN*` platform, downloads the `windows_amd64` `.zip` release, verifies its checksum, and unzips `raid.exe` into `~/bin` (created if missing). If `~/bin` is not on your `PATH`, the script prints the `export PATH` line to add. WSL is unchanged — it reports `linux` from `uname`, so it follows the existing Linux path and installs the Linux binary. Windows is published for `amd64` only; `arm64` is rejected with a clear message, and the script errors early if `unzip` is missing.

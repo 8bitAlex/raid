@@ -14,6 +14,7 @@ import (
 	"github.com/8bitalex/raid/src/internal/lib"
 	"github.com/8bitalex/raid/src/raid"
 	"github.com/8bitalex/raid/src/raid/errs"
+	"github.com/8bitalex/raid/src/raid/profile"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/viper"
@@ -465,27 +466,64 @@ func TestCaptureCommandOutput_capturesWritesToInstalledWriter(t *testing.T) {
 	_ = output
 }
 
-// TestNotImplementedHandler_returnsToolError confirms the stub handler
-// surfaces as a tool execution error (isError=true) rather than a protocol
-// error. The MCP spec treats these differently: tool errors flow back to the
-// model for self-correction; protocol errors don't.
-func TestNotImplementedHandler_returnsToolError(t *testing.T) {
-	h := notImplemented("raid_demo")
-	res, err := h(stdctx.Background(), mcp.CallToolRequest{})
+// TestReloadWorkspace_logsFailureToStderr covers the post-mutation reload
+// diagnostic path shared by handleInstall and handleRunTask: when ForceLoad
+// fails after a successful mutation (e.g. the profile file was corrupted by
+// the task that just ran), the failure must be surfaced on os.Stderr — never
+// on os.Stdout, which is reserved for JSON-RPC framing — instead of being
+// silently discarded.
+func TestReloadWorkspace_logsFailureToStderr(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	// Corrupt the registered profile file so ForceLoad fails.
+	active := profile.Get()
+	if err := os.WriteFile(active.Path, []byte("{ invalid\n"), 0644); err != nil {
+		t.Fatalf("corrupt profile: %v", err)
+	}
+
+	r, w, err := os.Pipe()
 	if err != nil {
-		t.Fatalf("handler returned protocol error: %v (should be a tool error instead)", err)
+		t.Fatal(err)
 	}
-	if res == nil || !res.IsError {
-		t.Fatalf("expected isError=true tool result, got: %+v", res)
+	oldStderr := os.Stderr
+	os.Stderr = w
+
+	reloadWorkspace("raid_run_task")
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
 	}
-	// Verify the body mentions the tool by name + the tracking issue, so a
-	// model picking up the error has somewhere to follow up.
-	body := toolResultText(res)
-	if !strings.Contains(body, "raid_demo") {
-		t.Errorf("error body should name the tool, got: %q", body)
+	got := buf.String()
+	if !strings.Contains(got, "raid_run_task") || !strings.Contains(got, "workspace reload failed") {
+		t.Errorf("stderr = %q, want reload-failure diagnostic naming the tool", got)
 	}
-	if !strings.Contains(body, "issues/45") {
-		t.Errorf("error body should reference the tracking issue, got: %q", body)
+}
+
+// TestReloadWorkspace_quietOnSuccess guards the happy path: a clean reload
+// writes nothing to stderr.
+func TestReloadWorkspace_quietOnSuccess(t *testing.T) {
+	loadTestProfile(t, minimalTestProfileBody)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = w
+
+	reloadWorkspace("raid_install")
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("stderr = %q, want empty on successful reload", buf.String())
 	}
 }
 
@@ -788,11 +826,11 @@ func TestMcpStructuredError_plainErrorWrappedAsUnknown(t *testing.T) {
 // the marshal-failure fallback in mcpStructuredError.
 type unmarshalableError struct{ msg string }
 
-func (e unmarshalableError) Error() string             { return e.msg }
-func (e unmarshalableError) Code() string              { return "TEST" }
-func (e unmarshalableError) Category() errs.Category   { return errs.CategoryGeneric }
-func (e unmarshalableError) Hint() string              { return "" }
-func (e unmarshalableError) Details() map[string]any   { return map[string]any{"chan": make(chan int)} }
+func (e unmarshalableError) Error() string           { return e.msg }
+func (e unmarshalableError) Code() string            { return "TEST" }
+func (e unmarshalableError) Category() errs.Category { return errs.CategoryGeneric }
+func (e unmarshalableError) Hint() string            { return "" }
+func (e unmarshalableError) Details() map[string]any { return map[string]any{"chan": make(chan int)} }
 
 // TestMcpStructuredError_marshalFallback covers the json.Marshal-failure
 // path. The structured payload normally always serializes, but a buggy

@@ -71,7 +71,13 @@ func runCreateWizardE(cmd *cobra.Command, input *os.File) error {
 
 	var name string
 	for {
-		name = sys.ReadLine(reader, "Profile name: ")
+		var readErr error
+		name, readErr = sys.ReadLineErr(reader, "Profile name: ")
+		if readErr != nil {
+			// EOF (e.g. `raid profile create < /dev/null`) or a read
+			// failure: abort instead of re-prompting forever.
+			return errs.ArgInvalid(fmt.Sprintf("profile create aborted: input closed before a profile name was provided (%v)", readErr))
+		}
 		if err := sys.ValidateFileName(name); err != nil {
 			fmt.Fprintf(out, "Invalid name: %v\n", err)
 			continue
@@ -80,7 +86,10 @@ func runCreateWizardE(cmd *cobra.Command, input *os.File) error {
 	}
 
 	defaultPath := filepath.Join(sys.GetHomeDir(), name+".raid.yaml")
-	rawPath := sys.ReadLine(reader, fmt.Sprintf("Save path [%s]: ", defaultPath))
+	rawPath, readErr := sys.ReadLineErr(reader, fmt.Sprintf("Save path [%s]: ", defaultPath))
+	if readErr != nil {
+		return errs.ArgInvalid(fmt.Sprintf("profile create aborted: input closed before a save path was provided (%v)", readErr))
+	}
 	savePath := defaultPath
 	if rawPath != "" {
 		savePath = sys.ExpandPath(rawPath)

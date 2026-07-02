@@ -339,7 +339,7 @@ func TestCheckVerify_passingEntryProducesOKFinding(t *testing.T) {
 			Tasks: []Task{{Type: Shell, Cmd: "exit 0"}},
 		},
 	}
-	findings := checkVerify("verify", entries)
+	findings := checkVerify("verify", entries, "")
 	if len(findings) != 1 {
 		t.Fatalf("checkVerify: got %d findings, want 1", len(findings))
 	}
@@ -361,7 +361,7 @@ func TestCheckVerify_remediatedEntryProducesWarnFinding(t *testing.T) {
 			OnFail: []Task{{Type: Shell, Cmd: "touch " + marker}},
 		},
 	}
-	findings := checkVerify("verify", entries)
+	findings := checkVerify("verify", entries, "")
 	if len(findings) != 1 {
 		t.Fatalf("checkVerify: got %d findings, want 1", len(findings))
 	}
@@ -381,7 +381,7 @@ func TestCheckVerify_failedEntryProducesErrorFinding(t *testing.T) {
 			Tasks: []Task{{Type: Shell, Cmd: "exit 1"}},
 		},
 	}
-	findings := checkVerify("verify", entries)
+	findings := checkVerify("verify", entries, "")
 	if len(findings) != 1 {
 		t.Fatalf("checkVerify: got %d findings, want 1", len(findings))
 	}
@@ -397,7 +397,7 @@ func TestCheckVerify_failedEntryProducesErrorFinding(t *testing.T) {
 func TestCheckVerify_skipsZeroEntries(t *testing.T) {
 	// Zero-value verify (from a stray YAML list item) should be ignored
 	// rather than producing a "passed" finding for an empty check.
-	findings := checkVerify("verify", []Verify{{}, {Name: "real", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}})
+	findings := checkVerify("verify", []Verify{{}, {Name: "real", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}}}, "")
 	if len(findings) != 1 {
 		t.Fatalf("checkVerify: got %d findings, want 1 (zero entry skipped)", len(findings))
 	}
@@ -413,7 +413,7 @@ func TestCheckVerify_failureDoesNotShortCircuitSubsequent(t *testing.T) {
 		{Name: "first-fails", Tasks: []Task{{Type: Shell, Cmd: "exit 1"}}},
 		{Name: "second-passes", Tasks: []Task{{Type: Shell, Cmd: "exit 0"}}},
 	}
-	findings := checkVerify("verify", entries)
+	findings := checkVerify("verify", entries, "")
 	if len(findings) != 2 {
 		t.Fatalf("checkVerify: got %d findings, want 2", len(findings))
 	}
@@ -426,7 +426,7 @@ func TestCheckVerify_failureDoesNotShortCircuitSubsequent(t *testing.T) {
 }
 
 func TestCheckVerify_emptyEntriesIsNoOp(t *testing.T) {
-	findings := checkVerify("verify", nil)
+	findings := checkVerify("verify", nil, "")
 	if len(findings) != 0 {
 		t.Errorf("expected 0 findings, got %d", len(findings))
 	}
@@ -565,4 +565,45 @@ func severitySet(findings []Finding) map[Severity]bool {
 		out[f.Severity] = true
 	}
 	return out
+}
+
+func TestCheckVerify_appliesDefaultDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "marker.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The task has no explicit path; it must run with defaultDir as its
+	// working directory or the relative `test -f` fails.
+	entries := []Verify{{
+		Name:  "deps",
+		Tasks: []Task{{Type: Shell, Cmd: "test -f marker.txt"}},
+	}}
+	findings := checkVerify("repo/x verify", entries, dir)
+	if len(findings) != 1 || findings[0].Severity != SeverityOK {
+		t.Fatalf("findings = %+v, want single OK finding (task should run in defaultDir)", findings)
+	}
+
+	// Sanity: without the default dir the same verify fails (the raid
+	// process CWD doesn't contain marker.txt).
+	findings = checkVerify("repo/x verify", entries, t.TempDir())
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("findings = %+v, want error finding outside defaultDir", findings)
+	}
+}
+
+func TestCheckVerify_appliesDefaultDirToOnFail(t *testing.T) {
+	dir := t.TempDir()
+	entries := []Verify{{
+		Name:   "self-heal",
+		Tasks:  []Task{{Type: Shell, Cmd: "test -f healed.txt"}},
+		OnFail: []Task{{Type: Shell, Cmd: "touch healed.txt"}},
+	}}
+	findings := checkVerify("verify", entries, dir)
+	if len(findings) != 1 || findings[0].Severity != SeverityWarn {
+		t.Fatalf("findings = %+v, want single remediated (warn) finding", findings)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "healed.txt")); err != nil {
+		t.Error("onFail remediation did not run in defaultDir")
+	}
 }
