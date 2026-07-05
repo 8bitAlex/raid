@@ -828,13 +828,14 @@ func TestExecute_unknownCommand_subprocess(t *testing.T) {
 	proc := exec.Command(os.Args[0], "-test.run=^TestExecute_unknownCommand_subprocess$", "-test.v")
 	proc.Env = append(os.Environ(), subprocExecUnknown+"=1")
 	out, err := proc.CombinedOutput()
-	// With no Run/RunE on the root, cobra shows help for unknown subcommands
-	// and exits cleanly (code 0).
-	if err != nil {
-		t.Fatalf("Execute unknown-cmd: unexpected error: %v\noutput: %s", err, out)
+	if err == nil {
+		t.Fatalf("Execute unknown-cmd: expected non-zero exit\noutput: %s", out)
 	}
-	if !strings.Contains(string(out), "raid") {
-		t.Errorf("Execute unknown-cmd: expected help output containing 'raid'\n%s", out)
+	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 5 {
+		t.Fatalf("Execute unknown-cmd: exit = %v, want code 5\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "command 'nonexistent-cmd' not found") {
+		t.Errorf("Execute unknown-cmd: expected command-not-found message\n%s", out)
 	}
 }
 
@@ -987,6 +988,60 @@ func TestExecute_unknownCommandReturnsError(t *testing.T) {
 	code := executeRoot([]string{"raid", "--unknown-flag-xyz"})
 	if code != 1 {
 		t.Errorf("executeRoot unknown flag: code = %d, want 1", code)
+	}
+}
+
+func TestExecute_unknownCommandUsesStructuredError(t *testing.T) {
+	oldCfg := lib.CfgPath
+	t.Cleanup(func() {
+		lib.CfgPath = oldCfg
+		lib.ResetContext()
+		viper.Reset()
+		if f := rootCmd.PersistentFlags().Lookup("json"); f != nil {
+			_ = f.Value.Set("false")
+			f.Changed = false
+		}
+	})
+
+	dir := t.TempDir()
+	lib.CfgPath = filepath.Join(dir, "config.toml")
+	lib.ResetContext()
+	if err := lib.InitConfig(); err != nil {
+		t.Fatalf("InitConfig: %v", err)
+	}
+
+	oldFn := latestReleaseFn
+	latestReleaseFn = func(string) string { return "" }
+	t.Cleanup(func() { latestReleaseFn = oldFn })
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"text mode", []string{"raid", "notacommand"}, "command 'notacommand' not found"},
+		{"json mode", []string{"raid", "--json", "notacommand"}, `"code":"COMMAND_NOT_FOUND"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, w, _ := os.Pipe()
+			oldStderr := os.Stderr
+			os.Stderr = w
+			t.Cleanup(func() { os.Stderr = oldStderr })
+
+			code := executeRoot(tc.args)
+			w.Close()
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(r)
+
+			if code != 5 {
+				t.Errorf("executeRoot %v: code = %d, want 5", tc.args, code)
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Errorf("stderr %q missing %q", buf.String(), tc.want)
+			}
+		})
 	}
 }
 

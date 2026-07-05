@@ -39,7 +39,15 @@ var reservedNames = map[string]bool{
 var rootCmd = &cobra.Command{
 	Use:   "raid",
 	Short: "Raid is a tool for orchestrating common tasks across your development environment(s).",
-	Args:  cobra.NoArgs,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return errs.CommandNotFound(args[0])
+		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Help()
+	},
 }
 
 func init() {
@@ -214,6 +222,9 @@ func executeRoot(args []string) int {
 	rootCmd.SilenceUsage = true
 	registerUserCommands(rootCmd, cmds)
 	registerRepoCommands(rootCmd, raid.GetRepos())
+	if name := firstRootPositional(args); name != "" && !isRegisteredRootCommand(rootCmd, name) {
+		return handleRootError(args, errs.CommandNotFound(name))
+	}
 
 	// Reset args so cobra parses from our slice rather than os.Args when the
 	// caller is providing a different args list (e.g. during tests).
@@ -251,36 +262,73 @@ func executeRoot(args []string) int {
 	defer telemetry.Flush(1500 * time.Millisecond)
 
 	if err := rootCmd.Execute(); err != nil {
-		rErr, isStructured := errs.AsError(err)
-		var exitErr *exec.ExitError
-		hasExit := errors.As(err, &exitErr)
-
-		// A plain exec.ExitError (no structured wrapping) means the
-		// subprocess already printed its own stderr — don't double-report,
-		// just propagate the subprocess exit status so $? matches.
-		if hasExit && !isStructured {
-			return exitErr.ExitCode()
-		}
-
-		// Structured errors (including ones that wrap exec.ExitError, e.g.
-		// TASK_SHELL_FAILED) should still surface their code/hint/JSON so
-		// --json consumers see the error shape. After emitting, preserve
-		// the subprocess exit code when one is available so shell pipelines
-		// keep working.
-		if jsonModeFromArgs(args) {
-			errs.EmitJSON(os.Stderr, err)
-		} else {
-			fmt.Fprintln(os.Stderr, "raid:", err)
-			if isStructured && rErr.Hint() != "" {
-				fmt.Fprintln(os.Stderr, "hint:", rErr.Hint())
-			}
-		}
-		if hasExit {
-			return exitErr.ExitCode()
-		}
-		return errs.ExitCode(err)
+		return handleRootError(args, err)
 	}
 	return 0
+}
+
+func handleRootError(args []string, err error) int {
+	rErr, isStructured := errs.AsError(err)
+	var exitErr *exec.ExitError
+	hasExit := errors.As(err, &exitErr)
+
+	// A plain exec.ExitError (no structured wrapping) means the
+	// subprocess already printed its own stderr — don't double-report,
+	// just propagate the subprocess exit status so $? matches.
+	if hasExit && !isStructured {
+		return exitErr.ExitCode()
+	}
+
+	// Structured errors (including ones that wrap exec.ExitError, e.g.
+	// TASK_SHELL_FAILED) should still surface their code/hint/JSON so
+	// --json consumers see the error shape. After emitting, preserve
+	// the subprocess exit code when one is available so shell pipelines
+	// keep working.
+	if jsonModeFromArgs(args) {
+		errs.EmitJSON(os.Stderr, err)
+	} else {
+		fmt.Fprintln(os.Stderr, "raid:", err)
+		if isStructured && rErr.Hint() != "" {
+			fmt.Fprintln(os.Stderr, "hint:", rErr.Hint())
+		}
+	}
+	if hasExit {
+		return exitErr.ExitCode()
+	}
+	return errs.ExitCode(err)
+}
+
+func firstRootPositional(args []string) string {
+	skipNext := false
+	for _, arg := range args[1:] {
+		if arg == "--" {
+			return ""
+		}
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if arg == "--config" || arg == "-c" {
+				skipNext = true
+			}
+			continue
+		}
+		return arg
+	}
+	return ""
+}
+
+func isRegisteredRootCommand(root *cobra.Command, name string) bool {
+	if name == "version" {
+		return true
+	}
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == name || cmd.HasAlias(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyPersistentEnvFlags is rootCmd's PersistentPreRunE. It runs
