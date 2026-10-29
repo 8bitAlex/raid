@@ -1,0 +1,3 @@
+# The automation scripts are run by bash on Linux runners: always LF, even in
+# a Windows checkout (a CRLF breaks `set -euo pipefail` and here-documents).
+scripts/** text eol=lf

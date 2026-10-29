@@ -1,0 +1,54 @@
+# Tests the scripts behind the Claude triage and the security-update
+# workflows (.github/scripts, docs/AUTOMATION.md). They are bash and node with
+# a fake `gh`, `curl`, `npm`, `go` and `govulncheck`: no network, no
+# credentials, nothing is written to GitHub. Runs only when something under
+# .github/ changes, so it does not slow the main build matrix.
+
+name: Automation tests
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '.github/**'
+  push:
+    branches: [ "main", "ci/**" ]
+    paths:
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    name: Scripts and workflow files
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Syntax of the scripts
+        run: |
+          for f in .github/scripts/*.sh; do bash -n "$f"; done
+          for f in .github/scripts/*.mjs; do node --check "$f"; done
+
+      - name: The workflow files are valid YAML
+        run: |
+          ruby -ryaml -e 'ARGV.each { |f| YAML.load_file(f); puts "ok #{f}" }' .github/workflows/*.yml
+
+      - name: Issue triage
+        run: bash .github/scripts/test-triage.sh
+
+      - name: Claude's credentials check
+        run: bash .github/scripts/test-claude-auth.sh
+
+      - name: Security updates, the decisions
+        run: bash .github/scripts/test-security-policy.sh
+
+      - name: Security updates, the scripts
+        run: bash .github/scripts/test-security.sh
