@@ -1,0 +1,181 @@
+# Lane 3 of the automatic security updates: known vulnerabilities that
+# Dependabot opened no PR for (for example transitive npm packages in
+# site/package-lock.json), found by `npm audit` and `govulncheck`, fixed
+# without a breaking change, in ONE PR per run. A best-effort complement to
+# Dependabot, not a replacement: docs/AUTOMATION.md, "Security updates", lists
+# what it skips (fixes that are semver-major, vulnerabilities with no fix, the
+# Go toolchain itself, anything an open Dependabot PR already covers).
+#
+# OFF BY DEFAULT: the schedule does nothing until the repository variable
+# SECURITY_AUTOMERGE is `true`. By hand it always runs, and with
+# `open_pr: false` (the default) it only scans and fixes on the runner and
+# shows what it found in the run summary: a safe first look.
+#   gh workflow run security-scan.yml                    # look only
+#   gh workflow run security-scan.yml -f open_pr=true    # open the PR (merged
+#                                                        # only if the switch is on)
+#
+# Three jobs, each with the permissions it needs:
+#   1. scan (read-only): `npm audit --package-lock-only`, `npm audit fix`
+#      limited to the vulnerable packages, `govulncheck` (pinned version),
+#      `go get module@fixed` + `go mod tidy`; the docs site must still build
+#      (`npm ci && npm run build`) and Go must build and pass its tests, else
+#      the change is thrown away and a problem is recorded. It leaves a patch.
+#   2. open (write): treats the patch as data, checks it again (only the four
+#      manifests, size, no new direct dependency, no major jumps), opens
+#      `security/DATE` as `chore(deps): fix security advisories (N)`, starts CI
+#      on the branch (the workflow's push starts none), waits for it, and
+#      squash-merges when the required checks pass. If the Go update needs a
+#      code change and SECURITY_CLAUDE_FIX is `true`, security-fix.yml (Lane 2)
+#      takes over; otherwise a person is told.
+#   3. report: ONE issue labelled `security` when something needs a person
+#      (the docs build broke, a PR could not be created, CI failed, ...).
+#
+# "Allow GitHub Actions to create and approve pull requests" (Settings >
+# Actions > General) must be on for this lane to open a PR; it is off in this
+# repository today. Until it is, the lane reports that in an issue.
+
+name: Security scan
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      open_pr:
+        description: Open the PR (merged only if SECURITY_AUTOMERGE is true); otherwise only scan
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: security-scan
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  GOVULNCHECK_VERSION: v1.1.4
+
+jobs:
+  scan:
+    name: "Security: scan and fix on the runner"
+    if: github.event_name == 'workflow_dispatch' || vars.SECURITY_AUTOMERGE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read # Dependabot's open PRs
+    outputs:
+      changed: ${{ steps.scan.outputs.changed }}
+      needs_fix: ${{ steps.scan.outputs.needs_fix }}
+      problems: ${{ steps.scan.outputs.problems }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6.3.0
+        with:
+          go-version: '1.25.5'
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install govulncheck (pinned)
+        run: go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+
+      - name: Scan and fix
+        id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SECURITY_CLAUDE_FIX: ${{ vars.SECURITY_CLAUDE_FIX }}
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          bash .github/scripts/security-scan.sh
+
+      - name: Keep the result
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-scan
+          path: scan-output
+          if-no-files-found: ignore
+          retention-days: 7
+
+  open:
+    name: "Security: open the PR, wait for CI, merge"
+    needs: scan
+    if: >
+      needs.scan.outputs.changed == 'true' &&
+      (github.event_name == 'schedule' || inputs.open_pr)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # push the branch, merge
+      pull-requests: write
+      issues: write
+      actions: write # start CI on the branch and the default branch, and Lane 2
+      checks: read
+      statuses: read
+    outputs:
+      result: ${{ steps.open.outputs.result }}
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Take the patch
+        uses: actions/download-artifact@v7
+        with:
+          name: security-scan
+          path: scan-output
+
+      - name: Open the PR, wait for CI, merge
+        id: open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Optional: a token whose pushes and PRs start workflows (docs/AUTOMATION.md).
+          PUSH_TOKEN: ${{ secrets.SECURITY_BOT_TOKEN }}
+          NEEDS_FIX: ${{ needs.scan.outputs.needs_fix }}
+          SECURITY_AUTOMERGE: ${{ vars.SECURITY_AUTOMERGE }}
+          SECURITY_CLAUDE_FIX: ${{ vars.SECURITY_CLAUDE_FIX }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/security-open-pr.sh
+
+  report:
+    name: "Security: report"
+    needs: [scan, open]
+    # Something a person should look at: problems the scan recorded (the docs
+    # build broke after a fix, a Go update needs code changes, ...), when this
+    # run was meant to act on them. (security-open-pr.sh reports its own.)
+    if: always() && needs.scan.result == 'success' && needs.scan.outputs.problems != '0' && (github.event_name == 'schedule' || inputs.open_pr)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Take the problems
+        uses: actions/download-artifact@v7
+        with:
+          name: security-scan
+          path: scan-output
+
+      - name: Open one issue, or add to it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          REASON="The security scan found things a person should look at: $(paste -sd ' ' scan-output/problems.txt)" \
+            bash .github/scripts/security-report.sh
