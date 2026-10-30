@@ -1,0 +1,173 @@
+# Lane 1 of the automatic security updates: merges a Dependabot PR that
+# fixes a security vulnerability once the repository's CI is green.
+# (Lane 2, security-fix.yml, lets Claude adapt the code when the new version
+# breaks CI; Lane 3, security-scan.yml, covers alerts Dependabot opened no PR
+# for. docs/AUTOMATION.md, "Security updates", explains all three.)
+#
+# OFF BY DEFAULT: nothing merges until the repository variable
+# SECURITY_AUTOMERGE is `true` (Settings > Secrets and variables > Actions >
+# Variables, or `gh variable set SECURITY_AUTOMERGE --body true`). While it
+# is anything else every job of this workflow is skipped. Setting it to
+# `false` or deleting it stops the merging again at once.
+#
+# Why `pull_request_target`, and why that is safe here. The workflow has to
+# write (merge, comment) on a PR that Dependabot opened, and a `pull_request`
+# run started by Dependabot gets a read-only token and no secrets, and no
+# OIDC token. `pull_request_target` runs the workflow file and scripts of the
+# DEFAULT BRANCH with a normal token, which the PR cannot change. The danger
+# of that event is running the PR's code with that token; this workflow never
+# does: it checks out only the default branch (no `ref:` on the checkout), and
+# reads the PR through the API: its commits, its file list, and the contents
+# of four manifests, which are parsed, never executed (security-assess.sh and
+# security-policy.mjs). The alternative, `workflow_run` after CI, would run
+# once per CI workflow (there are two) with extra plumbing to find the PR, and
+# gains nothing: the CI result is read through the API either way.
+#
+# What it merges, and only this (the rest is a person's):
+#   - the PR is Dependabot's, from this repository, into the default branch;
+#   - a security update: Dependabot's alert for it is OPEN (needs the
+#     optional secret SECURITY_ALERTS_TOKEN, see the docs), or a known
+#     advisory (OSV) of the old version is gone in the new one;
+#   - no semver-major bump of a direct dependency;
+#   - only go.mod, go.sum, site/package.json and site/package-lock.json
+#     change (nothing under .github/), within size limits, and no new direct
+#     dependency, few new indirect ones, nothing off the npm registry;
+#   - the required CI checks pass on that exact commit (then it squash-merges
+#     with `--match-head-commit`, as the workflow). A version bump in
+#     src/resources/app.properties is not needed: CI's version-check job only
+#     runs for PRs that touch src/.
+# If CI fails and the change touches Go, and SECURITY_CLAUDE_FIX is `true`,
+# security-fix.yml is started for Claude to try once; otherwise a comment on
+# the PR and one `security` issue say why a person is needed.
+#
+# GitHub only runs pull_request_target from the default branch's copy of
+# this file, so it does nothing until it is on main.
+
+name: Security update (Dependabot)
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main]
+
+# One run per PR; a new commit on the PR cancels the run for the old one.
+concurrency:
+  group: security-update-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  assess:
+    name: "Security: assess"
+    if: >
+      vars.SECURITY_AUTOMERGE == 'true' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.assess.outputs.eligible }}
+      reason: ${{ steps.assess.outputs.reason }}
+      head_sha: ${{ steps.assess.outputs.head_sha }}
+      required: ${{ steps.assess.outputs.required }}
+      touches_go: ${{ steps.assess.outputs.touches_go }}
+      touches_site: ${{ steps.assess.outputs.touches_site }}
+    steps:
+      # On pull_request_target the default checkout is the BASE branch. Do
+      # not add `ref:` here: nothing of the PR may be checked out.
+      - name: Check out the default branch (the scripts)
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Read what Dependabot says about the update
+        id: metadata
+        # Pinned to a commit: this action sees a write-capable event.
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          # Dependabot's alert state needs a token that can read Dependabot
+          # alerts, which the job token cannot. With the optional secret it
+          # is used; without it `alert-lookup` stays empty (the action reads
+          # any non-empty value as true) and OSV decides in security-assess.sh.
+          github-token: ${{ secrets.SECURITY_ALERTS_TOKEN || github.token }}
+          alert-lookup: ${{ secrets.SECURITY_ALERTS_TOKEN != '' && 'true' || '' }}
+
+      - name: Decide whether it may be merged
+        id: assess
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          EXPECT_SHA: ${{ github.event.pull_request.head.sha }}
+          UPDATED_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          SECURITY_AUTOMERGE: ${{ vars.SECURITY_AUTOMERGE }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: bash .github/scripts/security-assess.sh
+
+  merge:
+    name: "Security: wait for CI, then merge"
+    needs: assess
+    if: needs.assess.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # merge the PR
+      pull-requests: write # merge, and comment
+      issues: write # the `security` issue when a person is needed
+      actions: write # start CI on the default branch after the merge, and Lane 2
+      checks: read
+      statuses: read
+    steps:
+      - name: Check out the default branch (the scripts)
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Wait for CI on the assessed commit
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ needs.assess.outputs.head_sha }}
+          REQUIRED: ${{ needs.assess.outputs.required }}
+        run: bash .github/scripts/security-wait-ci.sh
+
+      - name: Merge it
+        id: merge
+        if: steps.ci.outputs.ci == 'green'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ needs.assess.outputs.head_sha }}
+          TOUCHES_SITE: ${{ needs.assess.outputs.touches_site }}
+          SECURITY_AUTOMERGE: ${{ vars.SECURITY_AUTOMERGE }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: bash .github/scripts/security-merge.sh
+
+      - name: Ask Claude once, or call a person
+        if: steps.ci.outputs.ci != 'green'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ needs.assess.outputs.head_sha }}
+          CI_STATE: ${{ steps.ci.outputs.ci }}
+          CI_REASON: ${{ steps.ci.outputs.reason }}
+          TOUCHES_GO: ${{ needs.assess.outputs.touches_go }}
+          CLAUDE_FIX: ${{ vars.SECURITY_CLAUDE_FIX }}
+          SECURITY_AUTOMERGE: ${{ vars.SECURITY_AUTOMERGE }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/security-escalate.sh
+
+      - name: Say why it was not merged
+        if: steps.ci.outputs.ci == 'green' && steps.merge.outputs.merged == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REASON: ${{ steps.merge.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/security-report.sh
